@@ -1,4 +1,3 @@
-const WS_URL = 'https://ws.finnhub.io';
 const MAX_TOTAL_BUDGET = 50;
 const WATCHLIST_BUDGET = 45;
 const ACTIVE_VIEW_BUDGET = 5;
@@ -80,9 +79,6 @@ class FinnhubWebSocketManager {
                 const sym = trade.s.toUpperCase();
                 const price = trade.p;
                 const volume = trade.v;
-                const timeStr = trade.t ? new Date(trade.t).toLocaleTimeString() : 'now';
-
-                // Log every single incoming price update
                 // console.log(
                 //   `[Finnhub WS Tick] ⚡ ${sym} -> $${price.toFixed(2)} (Vol: ${volume || 0} | Time: ${timeStr})`
                 // );

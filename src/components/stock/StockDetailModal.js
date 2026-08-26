@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Modal,
   View,
@@ -14,6 +14,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import { getMarketSessionStatus } from '../../utils/marketHours';
 import { formatTimeAgo } from '../../utils/formatTimeAgo';
+import { storageService } from '../../services/storageService';
 import AppText from '../common/AppText';
 import Sparkline from '../home/Sparkline';
 
@@ -28,15 +29,28 @@ const TIMEFRAME_SUFFIXES = {
   'ALL': 'since start',
 };
 
+// Global in-memory cache for per-stock timeframe memory
+const memoryStockTimeframes = {};
+
+// Load persisted stock timeframes once on module load
+storageService.getStockTimeframes().then((saved) => {
+  if (saved && typeof saved === 'object') {
+    Object.assign(memoryStockTimeframes, saved);
+  }
+});
+
 export default function StockDetailModal({ visible, stock, onClose }) {
   const { theme, isDark } = useTheme();
-  const { fetchHistoricalChart } = useMarketData();
+  const { fetchHistoricalChart, quotes } = useMarketData();
   const [isFavorite, setIsFavorite] = useState(false);
-  const [selectedTimeframe, setSelectedTimeframe] = useState('3M');
+  const [selectedTimeframe, setSelectedTimeframe] = useState('1D');
   const [chartData, setChartData] = useState(null);
   const [marketStatus, setMarketStatus] = useState(getMarketSessionStatus());
   const [imageError, setImageError] = useState(false);
-  const [timeAgoText, setTimeAgoText] = useState('0 secs ago');
+  const [timeAgoText, setTimeAgoText] = useState('just now');
+
+  // Track the latest known after-hours price across timeframe switches
+  const latestExtendedPriceRef = useRef(null);
 
   // Periodically refresh market status
   useEffect(() => {
@@ -47,10 +61,27 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     return () => clearInterval(timer);
   }, []);
 
-  // Reset image error on stock change
+  // Initialize or restore per-stock timeframe when active stock changes
   useEffect(() => {
     setImageError(false);
+    latestExtendedPriceRef.current = null;
+
+    if (stock?.symbol) {
+      const sym = stock.symbol.toUpperCase();
+      const savedTf = memoryStockTimeframes[sym] || '1D';
+      setSelectedTimeframe(savedTf);
+    }
   }, [stock?.symbol]);
+
+  // Handle user timeframe selection & persist preference
+  const handleSelectTimeframe = (tf) => {
+    setSelectedTimeframe(tf);
+    if (stock?.symbol) {
+      const sym = stock.symbol.toUpperCase();
+      memoryStockTimeframes[sym] = tf;
+      storageService.setStockTimeframe(sym, tf);
+    }
+  };
 
   // Fetch real historical chart data from Yahoo Finance on modal open or timeframe switch
   useEffect(() => {
@@ -59,6 +90,9 @@ export default function StockDetailModal({ visible, stock, onClose }) {
       fetchHistoricalChart(stock.symbol, selectedTimeframe).then((data) => {
         if (isMounted && data) {
           setChartData(data);
+          if (typeof data.postMarketPrice === 'number' && Math.abs(data.postMarketPrice - data.regularMarketPrice) > 0.001) {
+            latestExtendedPriceRef.current = data.postMarketPrice;
+          }
         }
       });
     }
@@ -72,14 +106,16 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     if (!visible) return;
 
     const updateFreshness = () => {
-      const ts = stock?.lastUpdated || chartData?.lastUpdated;
+      const cleanSym = stock?.symbol?.toUpperCase();
+      const wsQuote = quotes[cleanSym] || quotes[stock?.symbol];
+      const ts = wsQuote?.lastTickTime || wsQuote?.timestamp || stock?.lastUpdated || chartData?.lastUpdated;
       setTimeAgoText(formatTimeAgo(ts));
     };
 
     updateFreshness();
     const interval = setInterval(updateFreshness, 1000);
     return () => clearInterval(interval);
-  }, [visible, stock?.lastUpdated, chartData?.lastUpdated]);
+  }, [visible, stock?.lastUpdated, stock?.symbol, quotes, chartData?.lastUpdated]);
 
   // Calculate stock trading age to disable unsupported timeframe buttons (e.g. recent IPOs)
   const isTimeframeDisabled = useMemo(() => {
@@ -103,7 +139,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   // Auto-switch to ALL if current selected timeframe is disabled for this stock
   useEffect(() => {
     if (isTimeframeDisabled(selectedTimeframe)) {
-      setSelectedTimeframe('ALL');
+      handleSelectTimeframe('ALL');
     }
   }, [selectedTimeframe, isTimeframeDisabled]);
 
@@ -112,8 +148,25 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   // The displayed timeframe is strictly tied to chartData.timeframe to eliminate text-before-data mismatch
   const activeDisplayedTimeframe = chartData?.timeframe || selectedTimeframe;
 
-  // Compute dynamic price & change for the currently displayed timeframe
-  const effectivePrice = stock.price ?? chartData?.currentPrice ?? 0;
+  // Live WebSocket trade tick price (ONLY if genuine isLiveWs is true)
+  const cleanSymbol = stock.symbol?.toUpperCase();
+  const wsQuote = quotes[cleanSymbol] || quotes[stock.symbol];
+  const liveWsPrice = (wsQuote?.isLiveWs && typeof wsQuote?.price === 'number') ? wsQuote.price : null;
+
+  if (liveWsPrice) {
+    latestExtendedPriceRef.current = liveWsPrice;
+  }
+
+  // 1. LEFT SIDE: Regular Market Hours Price & Return
+  // When market is OPEN: Uses live trading price.
+  // When market is CLOSED / OUT-OF-HOURS: Uses official Regular Market Close price (e.g. $345.82 for TSLA).
+  const regularClosePrice =
+    chartData?.regularMarketPrice || stock.regularMarketPrice || stock.price || chartData?.currentPrice || 0;
+
+  const leftPrice = marketStatus.isOpen
+    ? (liveWsPrice ?? stock.price ?? chartData?.currentPrice ?? regularClosePrice)
+    : regularClosePrice;
+
   const effectiveChange = chartData?.priceChange ?? stock.change ?? 0;
   const effectiveChangePercent = chartData?.priceChangePercent ?? stock.changePercent ?? 0;
 
@@ -126,32 +179,17 @@ export default function StockDetailModal({ visible, stock, onClose }) {
       ? marketStatus.suffix
       : TIMEFRAME_SUFFIXES[activeDisplayedTimeframe] || 'since start';
 
-  // Real or fallback sparkline series
-  const sparklineData =
-    chartData?.sparkline ||
-    stock.sparkline || [210, 208, 209, 206, 207, 205, 208, 207, 209, 208, 210, 209, 212.18];
-
-  // Dynamic Y-Axis scale calculation based on real chart prices
-  const minP = chartData ? chartData.minPrice : Math.min(...sparklineData);
-  const maxP = chartData ? chartData.maxPrice : Math.max(...sparklineData);
-  const step = (maxP - minP) / 7 || 5;
-  const yLabels = Array.from({ length: 8 }, (_, i) => (maxP - i * step).toFixed(2));
-
-  // Extended / Out-of-hours calculation
+  // 2. RIGHT SIDE: Always preserves the highest-fidelity after-hours price across all timeframes
   const outOfHoursPriceVal =
-    chartData?.postMarketPrice ||
-    chartData?.preMarketPrice ||
-    (stock.price ? stock.price - 1.0 : 211.18);
+    liveWsPrice ??
+    latestExtendedPriceRef.current ??
+    (chartData?.postMarketPrice && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.001 ? chartData.postMarketPrice : null) ??
+    (typeof stock.postMarketPrice === 'number' ? stock.postMarketPrice : null) ??
+    regularClosePrice;
 
-  const outOfHoursChangeVal =
-    chartData?.postMarketChange ||
-    chartData?.preMarketChange ||
-    -1.0;
-
+  const outOfHoursChangeVal = outOfHoursPriceVal - regularClosePrice;
   const outOfHoursChangePercentVal =
-    chartData?.postMarketChangePercent ||
-    chartData?.preMarketChangePercent ||
-    -0.43;
+    regularClosePrice !== 0 ? (outOfHoursChangeVal / regularClosePrice) * 100 : 0;
 
   const isOutOfHoursPositive = outOfHoursChangeVal >= 0;
   const outOfHoursTrendColor = isOutOfHoursPositive ? '#00D084' : '#FF4D4F';
@@ -164,6 +202,25 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   const afterHoursChangeStr = `${isOutOfHoursPositive ? '+' : '-'}$${Math.abs(
     outOfHoursChangeVal
   ).toFixed(2)} (${Math.abs(outOfHoursChangePercentVal).toFixed(2)}%) since close`;
+
+  // 3. Dynamic Sparkline: Always overlays the live active price onto the endmost point
+  const baseSparklineData = chartData?.sparkline || stock.sparkline || [];
+  const activeEndPrice = marketStatus.isOpen ? leftPrice : outOfHoursPriceVal;
+
+  const sparklineData =
+    typeof activeEndPrice === 'number' && baseSparklineData.length > 0
+      ? [...baseSparklineData.slice(0, -1), activeEndPrice]
+      : baseSparklineData;
+
+  // Dynamic Y-Axis scale calculation based on real chart prices including live tick
+  const minP = chartData && sparklineData.length > 0
+    ? Math.min(chartData.minPrice ?? activeEndPrice, ...sparklineData)
+    : 0;
+  const maxP = chartData && sparklineData.length > 0
+    ? Math.max(chartData.maxPrice ?? activeEndPrice, ...sparklineData)
+    : 100;
+  const step = (maxP - minP) / 7 || 5;
+  const yLabels = Array.from({ length: 8 }, (_, i) => (maxP - i * step).toFixed(2));
 
   const placeholderLogoUri = `https://placehold.co/128x128/FFFFFF/000000.png?text=${encodeURIComponent(
     stock.symbol || 'ST'
@@ -258,7 +315,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
 
               {/* 2. Price & Market Status Row (Adaptive Dual Column) */}
               <View style={styles.priceRow}>
-                {/* Left: Main Trading Session with Timeframe Return */}
+                {/* Left: Official Regular Session Price (Fixed when Market Closed) */}
                 <View
                   style={
                     marketStatus.isOpen
@@ -268,7 +325,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 >
                   <AppText style={styles.mainPriceText}>
                     {stock.currency || '$'}
-                    {effectivePrice.toLocaleString(undefined, {
+                    {leftPrice.toLocaleString(undefined, {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
@@ -284,7 +341,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                   </AppText>
                 </View>
 
-                {/* Right: Extended Session or Market Open Indicator */}
+                {/* Right: Extended Session (Pre/After-Hours) or Market Open Indicator */}
                 <View
                   style={
                     marketStatus.isOpen
@@ -332,7 +389,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                   <View style={[styles.referenceLine, { borderColor: '#00A3FF' }]}>
                     <View style={styles.priceTagBadge}>
                       <AppText bold style={styles.priceTagText}>
-                        {effectivePrice.toLocaleString(undefined, {
+                        {activeEndPrice.toLocaleString(undefined, {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
@@ -372,7 +429,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                           ? { backgroundColor: isDark ? '#4A4A4A' : '#D0D5DD' }
                           : { backgroundColor: isDark ? '#14171E' : '#E8ECF2' },
                       ]}
-                      onPress={() => setSelectedTimeframe(tf)}
+                      onPress={() => handleSelectTimeframe(tf)}
                       activeOpacity={disabled ? 1 : 0.7}
                     >
                       <AppText

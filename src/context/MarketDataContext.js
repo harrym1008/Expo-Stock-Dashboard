@@ -3,6 +3,7 @@ import { storageService } from '../services/storageService';
 import { finnhubRestService } from '../services/finnhubRestService';
 import { finnhubWebSocketService } from '../services/finnhubWebSocketService';
 import { yahooFinanceService } from '../services/yahooFinanceService';
+import { getMarketSessionStatus } from '../utils/marketHours';
 
 const MarketDataContext = createContext(null);
 
@@ -46,6 +47,8 @@ export function MarketDataProvider({ children }) {
     const unsubscribe = finnhubWebSocketService.addListener((ticks) => {
       if (!Array.isArray(ticks) || ticks.length === 0) return;
 
+      const sessionStatus = getMarketSessionStatus();
+
       setQuotes((prev) => {
         const next = { ...prev };
         let hasChanges = false;
@@ -53,18 +56,26 @@ export function MarketDataProvider({ children }) {
         for (const tick of ticks) {
           const sym = tick.symbol;
           const current = next[sym] || {};
-          const prevClose = current.previousClose || tick.price;
           const newPrice = tick.price;
-          const change = newPrice - prevClose;
-          const changePercent = prevClose !== 0 ? (change / prevClose) * 100 : 0;
+
+          // Out-of-hours return must be relative to the MOST RECENT close (regularMarketPrice)
+          // Intraday return during market open is relative to previous day close
+          const refClose = sessionStatus.isOpen
+            ? (current.previousClose || newPrice)
+            : (current.regularMarketPrice || current.previousClose || newPrice);
+
+          const change = newPrice - refClose;
+          const changePercent = refClose !== 0 ? (change / refClose) * 100 : 0;
 
           next[sym] = {
             ...current,
             symbol: sym,
             price: newPrice,
+            isLiveWs: true, // Mark verified real-time live WebSocket tick
             change,
             changePercent,
-            previousClose: prevClose,
+            previousClose: current.previousClose || refClose,
+            regularMarketPrice: current.regularMarketPrice || refClose,
             lastTickTime: tick.timestamp,
             sparkline: current.sparkline
               ? [...current.sparkline.slice(-30), newPrice]
@@ -80,7 +91,7 @@ export function MarketDataProvider({ children }) {
     return unsubscribe;
   }, []);
 
-  // 4. Fetch Stock Quote via REST
+  // 4. Fetch Stock Quote via REST (does not override real WebSocket live ticks)
   const fetchQuote = useCallback(
     async (symbol) => {
       if (!symbol || !apiKey) return null;
@@ -90,13 +101,19 @@ export function MarketDataProvider({ children }) {
       try {
         const quote = await finnhubRestService.fetchQuote(sym, apiKey);
         if (quote) {
-          setQuotes((prev) => ({
-            ...prev,
-            [sym]: {
-              ...(prev[sym] || {}),
-              ...quote,
-            },
-          }));
+          setQuotes((prev) => {
+            const existing = prev[sym] || {};
+            // If already receiving live WebSocket ticks, do not downgrade to static REST quote price
+            return {
+              ...prev,
+              [sym]: {
+                ...quote,
+                ...existing,
+                previousClose: quote.previousClose || existing.previousClose,
+                regularMarketPrice: quote.price || existing.regularMarketPrice,
+              },
+            };
+          });
         }
         return quote;
       } finally {
@@ -131,11 +148,13 @@ export function MarketDataProvider({ children }) {
     [apiKey]
   );
 
-  // 6. Fetch Historical Chart via Yahoo Finance with latest live WebSocket tick overlay
+  // 6. Fetch Historical Chart via Yahoo Finance with verified live WebSocket tick overlay only
   const fetchHistoricalChart = useCallback(async (symbol, timeframe = '3M') => {
     if (!symbol) return null;
     const sym = symbol.toUpperCase();
-    const livePrice = quotesRef.current[sym]?.price || null;
+    const wsQuote = quotesRef.current[sym];
+    // ONLY pass livePrice if it is an authentic real-time live WebSocket tick
+    const livePrice = wsQuote?.isLiveWs ? wsQuote.price : null;
     return await yahooFinanceService.fetchHistoricalData(sym, timeframe, livePrice);
   }, []);
 

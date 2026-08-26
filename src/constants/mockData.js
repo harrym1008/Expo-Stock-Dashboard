@@ -1,6 +1,22 @@
 export const mockWatchlists = [
   {
     id: 'watchlist-1',
+    title: 'Tesla',
+    items: [
+      {
+        id: 'tsla-1',
+        symbol: 'TSLA',
+        name: 'Tesla, Inc.',
+        price: 177.46,
+        changePercent: 2.97,
+        change: 5.12,
+        currency: '$',
+        sparkline: [170, 172, 171, 174, 173, 175, 176, 177.46],
+      },
+    ],
+  },
+  {
+    id: 'watchlist-2',
     title: 'My watchlist',
     items: [
       {
@@ -11,7 +27,6 @@ export const mockWatchlists = [
         changePercent: 0.54,
         change: 1.14,
         currency: '$',
-        logoBg: '#76B900',
         sparkline: [210, 208, 209, 206, 207, 205, 208, 207, 209, 208, 210, 209, 212.18],
       },
       {
@@ -22,7 +37,6 @@ export const mockWatchlists = [
         changePercent: 1.25,
         change: 2.34,
         currency: '$',
-        logoBg: '#A2AAAD',
         sparkline: [186, 187, 185, 186, 188, 187, 189, 188.5, 189.84],
       },
       {
@@ -33,7 +47,6 @@ export const mockWatchlists = [
         changePercent: -0.42,
         change: -1.78,
         currency: '$',
-        logoBg: '#00A4EF',
         sparkline: [424, 423, 422, 423.5, 421, 422, 419, 420.55],
       },
       {
@@ -44,7 +57,6 @@ export const mockWatchlists = [
         changePercent: 2.97,
         change: 5.12,
         currency: '$',
-        logoBg: '#E82127',
         sparkline: [170, 172, 171, 174, 173, 175, 176, 177.46],
       },
       {
@@ -55,7 +67,6 @@ export const mockWatchlists = [
         changePercent: 0.88,
         change: 1.54,
         currency: '$',
-        logoBg: '#4285F4',
         sparkline: [172, 173, 172.5, 174, 173.8, 175.98],
       },
       {
@@ -66,7 +77,6 @@ export const mockWatchlists = [
         changePercent: -0.35,
         change: -0.64,
         currency: '$',
-        logoBg: '#FF9900',
         sparkline: [184, 183.5, 184.2, 182, 181.8, 182.40],
       },
       {
@@ -77,7 +87,6 @@ export const mockWatchlists = [
         changePercent: 1.12,
         change: 3.67,
         currency: '$',
-        logoBg: '#1877F2',
         sparkline: [325, 327, 326, 328, 329, 330.12],
       },
       {
@@ -88,7 +97,6 @@ export const mockWatchlists = [
         changePercent: -0.78,
         change: -0.75,
         currency: '$',
-        logoBg: '#E60012',
         sparkline: [96, 95.5, 95.8, 95.2, 95.67],
       },
       {
@@ -99,13 +107,12 @@ export const mockWatchlists = [
         changePercent: 0.45,
         change: 0.47,
         currency: '$',
-        logoBg: '#ED1C24',
         sparkline: [104, 104.5, 105, 105.2, 105.34],
-      }
+      },
     ],
   },
   {
-    id: 'watchlist-2',
+    id: 'watchlist-3',
     title: '2nd watchlist',
     items: [
       {
@@ -116,7 +123,6 @@ export const mockWatchlists = [
         changePercent: 0.73,
         change: 2.16,
         currency: '$',
-        logoBg: '#117ACA',
         sparkline: [294, 296, 295, 297, 296.5, 298, 297.2, 298.42],
       },
       {
@@ -127,7 +133,6 @@ export const mockWatchlists = [
         changePercent: 0.31,
         change: 1.58,
         currency: '$',
-        logoBg: '#1C3F94',
         sparkline: [508, 509.5, 508.8, 510, 511.2, 510.6, 512.76],
       },
       {
@@ -138,7 +143,6 @@ export const mockWatchlists = [
         changePercent: -0.28,
         change: -0.96,
         currency: '$',
-        logoBg: '#1A1F71',
         sparkline: [344, 343.2, 342.8, 343.5, 341.9, 342.18],
       },
       {
@@ -149,7 +153,6 @@ export const mockWatchlists = [
         changePercent: 0.46,
         change: 0.86,
         currency: '$',
-        logoBg: '#D51920',
         sparkline: [185.5, 186.2, 185.8, 187, 186.6, 187.64],
       },
       {
@@ -160,7 +163,6 @@ export const mockWatchlists = [
         changePercent: 1.08,
         change: 1.11,
         currency: '$',
-        logoBg: '#0071CE',
         sparkline: [101.8, 102.5, 102.2, 103.4, 103.8, 104.27],
       },
       {
@@ -171,7 +173,6 @@ export const mockWatchlists = [
         changePercent: 2.14,
         change: 26.14,
         currency: '$',
-        logoBg: '#E50914',
         sparkline: [1210, 1224, 1218, 1235, 1229, 1241, 1248.36],
       },
       {
@@ -182,7 +183,6 @@ export const mockWatchlists = [
         changePercent: 1.67,
         change: 5.13,
         currency: '$',
-        logoBg: '#CC092F',
         sparkline: [303, 305, 304.5, 307, 306.2, 309, 311.84],
       },
       {
@@ -193,7 +193,6 @@ export const mockWatchlists = [
         changePercent: -0.41,
         change: -4.03,
         currency: '$',
-        logoBg: '#E31837',
         sparkline: [983, 981.5, 980, 982, 979.4, 977.8, 978.52],
       },
       {
@@ -204,13 +203,12 @@ export const mockWatchlists = [
         changePercent: 0.92,
         change: 2.32,
         currency: '$',
-        logoBg: '#F80000',
         sparkline: [250, 251.5, 250.8, 252.2, 253, 252.3, 254.63],
       },
     ],
   },
-    {
-    id: 'watchlist-3',
+  {
+    id: 'watchlist-4',
     title: '3rd watchlist',
     items: [
       {
@@ -221,7 +219,6 @@ export const mockWatchlists = [
         changePercent: 0.62,
         change: 0.50,
         currency: '$',
-        logoBg: '#F40009',
         sparkline: [80.4, 80.8, 80.6, 81.1, 80.9, 81.42],
       },
       {
@@ -232,7 +229,6 @@ export const mockWatchlists = [
         changePercent: -0.38,
         change: -0.58,
         currency: '$',
-        logoBg: '#004B93',
         sparkline: [152.8, 152.1, 151.9, 152.4, 151.6, 151.37],
       },
       {
@@ -243,7 +239,6 @@ export const mockWatchlists = [
         changePercent: 0.91,
         change: 2.90,
         currency: '$',
-        logoBg: '#FFC72C',
         sparkline: [317, 318.5, 319.2, 320.1, 320.8, 321.85],
       },
       {
@@ -254,7 +249,6 @@ export const mockWatchlists = [
         changePercent: 1.47,
         change: 1.72,
         currency: '$',
-        logoBg: '#113CCF',
         sparkline: [115.8, 116.4, 116.1, 117.2, 117.9, 118.64],
       },
       {
@@ -265,7 +259,6 @@ export const mockWatchlists = [
         changePercent: 2.08,
         change: 1.90,
         currency: '$',
-        logoBg: '#000000',
         sparkline: [90.4, 91.2, 90.8, 92.1, 92.6, 93.28],
       },
       {
@@ -276,7 +269,6 @@ export const mockWatchlists = [
         changePercent: -0.56,
         change: -1.55,
         currency: '$',
-        logoBg: '#1798C1',
         sparkline: [277, 276.2, 275.5, 276.1, 274.8, 274.16],
       },
       {
@@ -287,7 +279,6 @@ export const mockWatchlists = [
         changePercent: 1.32,
         change: 0.41,
         currency: '$',
-        logoBg: '#0071C5',
         sparkline: [30.8, 31.1, 30.9, 31.4, 31.5, 31.74],
       },
       {
@@ -298,7 +289,6 @@ export const mockWatchlists = [
         changePercent: -0.72,
         change: -1.22,
         currency: '$',
-        logoBg: '#3253DC',
         sparkline: [171, 170.2, 169.4, 170.1, 168.9, 168.52],
       },
       {
@@ -309,13 +299,12 @@ export const mockWatchlists = [
         changePercent: 0.84,
         change: 3.43,
         currency: '$',
-        logoBg: '#FF0000',
         sparkline: [406, 408.5, 407.8, 410.2, 411.4, 412.63],
       },
     ],
   },
   {
-    id: 'watchlist-4',
+    id: 'watchlist-5',
     title: '4th watchlist',
     items: [
       {
@@ -326,7 +315,6 @@ export const mockWatchlists = [
         changePercent: -1.14,
         change: -2.24,
         currency: '$',
-        logoBg: '#1D4594',
         sparkline: [197.2, 196.5, 195.8, 194.9, 194.2, 193.84],
       },
       {
@@ -337,7 +325,6 @@ export const mockWatchlists = [
         changePercent: 0.57,
         change: 0.69,
         currency: '$',
-        logoBg: '#F15A24',
         sparkline: [120.1, 120.8, 120.5, 121.2, 121.4, 121.76],
       },
       {
@@ -348,7 +335,6 @@ export const mockWatchlists = [
         changePercent: -0.34,
         change: -0.56,
         currency: '$',
-        logoBg: '#0066B3',
         sparkline: [166.2, 165.8, 165.4, 166, 165.1, 164.92],
       },
       {
@@ -359,7 +345,6 @@ export const mockWatchlists = [
         changePercent: 0.88,
         change: 0.25,
         currency: '$',
-        logoBg: '#0093D0',
         sparkline: [27.8, 28, 27.9, 28.2, 28.3, 28.47],
       },
       {
@@ -370,7 +355,6 @@ export const mockWatchlists = [
         changePercent: 0.42,
         change: 0.12,
         currency: '$',
-        logoBg: '#00A8E0',
         sparkline: [28.5, 28.7, 28.6, 28.8, 28.84, 28.93],
       },
       {
@@ -381,7 +365,6 @@ export const mockWatchlists = [
         changePercent: 1.26,
         change: 3.44,
         currency: '$',
-        logoBg: '#005CB9',
         sparkline: [270, 272.5, 271.8, 274, 275.2, 276.41],
       },
       {
@@ -392,7 +375,6 @@ export const mockWatchlists = [
         changePercent: 2.63,
         change: 4.13,
         currency: '$',
-        logoBg: '#101010',
         sparkline: [154, 156, 157.2, 158.8, 160, 161.28],
       },
       {
@@ -403,7 +385,6 @@ export const mockWatchlists = [
         changePercent: -0.67,
         change: -0.96,
         currency: '$',
-        logoBg: '#96BF48',
         sparkline: [144.8, 144.1, 143.5, 143.8, 142.9, 142.56],
       },
       {
@@ -414,7 +395,6 @@ export const mockWatchlists = [
         changePercent: 1.91,
         change: 3.46,
         currency: '$',
-        logoBg: '#29B5E8',
         sparkline: [179, 180.5, 181.8, 182.4, 183.6, 184.73],
       },
     ],

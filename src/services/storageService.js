@@ -4,6 +4,7 @@ import { persistentLruCache } from './persistentLruCache';
 const STORAGE_KEYS = {
   FINNHUB_API_KEY: '@stock_dashboard_finnhub_api_key',
   WATCHLISTS: '@stock_dashboard_watchlists',
+  STOCK_TIMEFRAMES: '@stock_dashboard_stock_timeframes',
 };
 
 // 30 Days (1 Month) TTL for company profiles and logos
@@ -76,6 +77,28 @@ export const storageService = {
       await AsyncStorage.setItem(STORAGE_KEYS.WATCHLISTS, JSON.stringify(watchlists));
     } catch (e) {
       console.warn('Failed to save watchlists to storage:', e);
+    }
+  },
+
+  // --- Per-Stock Timeframe Memory ---
+
+  async getStockTimeframes() {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEYS.STOCK_TIMEFRAMES);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  },
+
+  async setStockTimeframe(symbol, timeframe) {
+    if (!symbol || !timeframe) return;
+    try {
+      const current = await this.getStockTimeframes();
+      current[symbol.toUpperCase()] = timeframe;
+      await AsyncStorage.setItem(STORAGE_KEYS.STOCK_TIMEFRAMES, JSON.stringify(current));
+    } catch (e) {
+      console.warn('Failed to save stock timeframe:', e);
     }
   },
 };
