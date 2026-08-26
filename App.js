@@ -1,20 +1,65 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import React from 'react';
+import { StatusBar } from 'react-native';
+import { useFonts } from 'expo-font';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
+import TabNavigator from './src/navigation/TabNavigator';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
-export default function App() {
+function AppContent() {
+  const { theme, isDark } = useTheme();
+
+  const navigationTheme = isDark
+    ? {
+        ...DarkTheme,
+        colors: {
+          ...DarkTheme.colors,
+          primary: theme.primary,
+          background: theme.background,
+          card: theme.surface,
+          text: theme.textPrimary,
+          border: theme.border,
+          notification: theme.primary,
+        },
+      }
+    : {
+        ...DefaultTheme,
+        colors: {
+          ...DefaultTheme.colors,
+          primary: theme.primary,
+          background: theme.background,
+          card: theme.surface,
+          text: theme.textPrimary,
+          border: theme.border,
+          notification: theme.primary,
+        },
+      };
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <NavigationContainer theme={navigationTheme}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.background}
+        translucent={false}
+      />
+      <TabNavigator />
+    </NavigationContainer>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+export default function App() {
+  useFonts({
+    'TangoSans': require('./assets/fonts/TangoSans.ttf'),
+    'TangoSans-Bold': require('./assets/fonts/TangoSans_Bold.ttf'),
+    'TangoSans-Italic': require('./assets/fonts/TangoSans_Italic.ttf'),
+    'TangoSans-BoldItalic': require('./assets/fonts/TangoSans_BoldItalic.ttf'),
+  });
+
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AppContent />
+      </ThemeProvider>
+    </SafeAreaProvider>
+  );
+}
