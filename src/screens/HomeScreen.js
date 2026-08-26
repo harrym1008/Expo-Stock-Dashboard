@@ -78,6 +78,7 @@ export default function HomeScreen() {
                 price: chart.currentPrice,
                 change: chart.priceChange,
                 changePercent: chart.priceChangePercent,
+                lastUpdated: chart.lastUpdated,
               },
             }));
           }
@@ -141,6 +142,7 @@ export default function HomeScreen() {
         exchange: liveProfile?.exchange || item.exchange || 'NASDAQ',
         logo: liveProfile?.logo || item.logo || null,
         sparkline: y1D?.sparkline || liveQuote?.sparkline || item.sparkline,
+        lastUpdated: liveQuote?.lastTickTime || liveQuote?.timestamp || y1D?.lastUpdated || item.lastUpdated,
       };
     });
   }, [activeWatchlist, quotes, profiles, sparklines1D]);
@@ -191,6 +193,7 @@ export default function HomeScreen() {
                   exchange: profiles[selectedStock.symbol]?.exchange || selectedStock.exchange || 'NASDAQ',
                   logo: profiles[selectedStock.symbol]?.logo || selectedStock.logo || null,
                   sparkline: sparklines1D[selectedStock.symbol]?.sparkline || quotes[selectedStock.symbol]?.sparkline || selectedStock.sparkline,
+                  lastUpdated: quotes[selectedStock.symbol]?.lastTickTime || quotes[selectedStock.symbol]?.timestamp || sparklines1D[selectedStock.symbol]?.lastUpdated || selectedStock.lastUpdated,
                 }
               : null
           }

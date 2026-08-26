@@ -1,21 +1,58 @@
 import { yahooRateLimiter } from '../utils/rateLimiter';
 import { persistentLruCache } from './persistentLruCache';
 
-// Matching finest candle resolution to the cache TTL:
-// 1D: 2m candles -> 2 minutes TTL
-// 1W: 15m candles -> 15 minutes TTL
-// 3M: 1d candles -> 24 hours TTL
-// 1Y: 1d candles -> 24 hours TTL
-// 5Y: 1wk candles -> 7 days TTL
-// ALL: 1mo candles -> 30 days TTL
 const TIMEFRAME_CONFIG = {
-  '1D': { range: '1d', interval: '2m', ttl: 2 * 60 * 1000 },
-  '1W': { range: '5d', interval: '15m', ttl: 15 * 60 * 1000 },
-  '3M': { range: '3mo', interval: '1d', ttl: 24 * 60 * 60 * 1000 },
-  '1Y': { range: '1y', interval: '1d', ttl: 24 * 60 * 60 * 1000 },
-  '5Y': { range: '5y', interval: '1wk', ttl: 7 * 24 * 60 * 60 * 1000 },
-  'ALL': { range: 'max', interval: '1mo', ttl: 30 * 24 * 60 * 60 * 1000 },
+  '1D': { range: '1d', interval: '2m' },
+  '1W': { range: '5d', interval: '15m' },
+  '3M': { range: '3mo', interval: '1d' },
+  '1Y': { range: '1y', interval: '1d' },
+  '5Y': { range: '5y', interval: '1wk' },
+  'ALL': { range: 'max', interval: '1mo' },
 };
+
+/**
+ * Calculates cache TTL to expire exactly 3 seconds after the next candle boundary.
+ * e.g. For 1D (2m candles): at 2:29:15, expires at 2:30:03 (+48s TTL).
+ */
+export function getBoundaryAlignedTtl(timeframe) {
+  const now = Date.now();
+  const THREE_SECONDS = 3000;
+
+  switch (timeframe) {
+    case '1D': {
+      const intervalMs = 2 * 60 * 1000;
+      const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
+      const remaining = nextBoundary - now;
+      return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
+    }
+    case '1W': {
+      const intervalMs = 15 * 60 * 1000;
+      const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
+      const remaining = nextBoundary - now;
+      return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
+    }
+    case '3M':
+    case '1Y': {
+      const intervalMs = 24 * 60 * 60 * 1000;
+      const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
+      const remaining = nextBoundary - now;
+      return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
+    }
+    case '5Y': {
+      const intervalMs = 7 * 24 * 60 * 60 * 1000;
+      const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
+      const remaining = nextBoundary - now;
+      return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
+    }
+    case 'ALL':
+    default: {
+      const intervalMs = 30 * 24 * 60 * 60 * 1000;
+      const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
+      const remaining = nextBoundary - now;
+      return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
+    }
+  }
+}
 
 function applyLivePriceOverlay(chartData, latestLivePrice) {
   if (!chartData || !Array.isArray(chartData.sparkline) || chartData.sparkline.length === 0) {
@@ -51,6 +88,7 @@ function applyLivePriceOverlay(chartData, latestLivePrice) {
     currentPrice: latestLivePrice,
     priceChange,
     priceChangePercent,
+    lastUpdated: Date.now(),
     minPrice: Math.min(chartData.minPrice ?? latestLivePrice, latestLivePrice),
     maxPrice: Math.max(chartData.maxPrice ?? latestLivePrice, latestLivePrice),
   };
@@ -63,7 +101,7 @@ export const yahooFinanceService = {
     const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG['3M'];
     const cacheKey = `chart_${timeframe}_${cleanSymbol}`;
 
-    // 1. Check persistent 128MB LRU cache first (with resolution-matched TTL)
+    // 1. Check persistent 128MB LRU cache first (with boundary-aligned TTL)
     const cached = await persistentLruCache.getJson(cacheKey);
     if (cached && Array.isArray(cached.sparkline) && cached.sparkline.length > 0) {
       const withLiveOverlay = applyLivePriceOverlay(cached, latestLivePrice);
@@ -91,6 +129,7 @@ export const yahooFinanceService = {
         console.log(
           `[Yahoo Finance] 📈 Fetching fresh ${timeframe} candles (${config.interval} resolution) for: ${cleanSymbol} (API symbol: ${yahooSymbol})`
         );
+        const requestSentTime = Date.now();
         const res = await fetch(url, {
           headers: {
             'User-Agent':
@@ -136,6 +175,10 @@ export const yahooFinanceService = {
         const priceChange = currentPrice - baseComparison;
         const priceChangePercent = baseComparison !== 0 ? (priceChange / baseComparison) * 100 : 0;
 
+        // Use meta market timestamp or request sent timestamp
+        const lastUpdated = meta.regularMarketTime ? meta.regularMarketTime * 1000 : requestSentTime;
+        const firstTradeDate = meta.firstTradeDate ? meta.firstTradeDate * 1000 : (points[0]?.time || null);
+
         const chartData = {
           symbol: cleanSymbol,
           timeframe,
@@ -145,6 +188,8 @@ export const yahooFinanceService = {
           currentPrice,
           priceChange,
           priceChangePercent,
+          lastUpdated,
+          firstTradeDate,
           postMarketPrice: meta.postMarketPrice || null,
           postMarketChange: meta.postMarketChange || null,
           postMarketChangePercent: meta.postMarketChangePercent || null,
@@ -157,24 +202,13 @@ export const yahooFinanceService = {
           sparkline: prices,
         };
 
-        // 3. Save to persistent 128MB LRU cache with candle resolution TTL
-        await persistentLruCache.setJson(cacheKey, chartData, config.ttl);
+        // 3. Save to persistent 128MB LRU cache with boundary-aligned TTL (+3s after next candle)
+        const alignedTtl = getBoundaryAlignedTtl(timeframe);
+        await persistentLruCache.setJson(cacheKey, chartData, alignedTtl);
 
-        var ttlString = '';
-        if (config.ttl >= 24 * 60 * 60 * 1000) {
-          ttlString = `${config.ttl / (24 * 60 * 60 * 1000)} days`;
-        } else if (config.ttl >= 60 * 60 * 1000) {
-          ttlString = `${config.ttl / (60 * 60 * 1000)} hours`;
-        } else if (config.ttl >= 60 * 1000) {
-          ttlString = `${config.ttl / (60 * 1000)} minutes`;
-        } else if (config.ttl >= 1000) {
-          ttlString = `${config.ttl / 1000} seconds`;
-        } else {
-          ttlString = `${config.ttl} milliseconds`;
-        }
-
+        const ttlSecs = Math.round(alignedTtl / 1000);
         console.log(
-          `[Yahoo Finance] 💾 Cached ${points.length} candles for ${cleanSymbol} (${timeframe}) | TTL: ${ttlString}`
+          `[Yahoo Finance] 💾 Cached ${points.length} candles for ${cleanSymbol} (${timeframe}) | Aligned TTL: ${ttlSecs}s (Next candle boundary + 3s)`
         );
 
         // 4. Always apply live price overlay if available

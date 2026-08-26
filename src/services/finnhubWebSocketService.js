@@ -77,11 +77,21 @@ class FinnhubWebSocketManager {
           if (message.type === 'trade' && Array.isArray(message.data)) {
             for (const trade of message.data) {
               if (trade.s && typeof trade.p === 'number') {
-                this.tickBuffer.set(trade.s.toUpperCase(), {
-                  symbol: trade.s.toUpperCase(),
-                  price: trade.p,
-                  volume: trade.v,
-                  timestamp: trade.t,
+                const sym = trade.s.toUpperCase();
+                const price = trade.p;
+                const volume = trade.v;
+                const timeStr = trade.t ? new Date(trade.t).toLocaleTimeString() : 'now';
+
+                // Log every single incoming price update
+                // console.log(
+                //   `[Finnhub WS Tick] ⚡ ${sym} -> $${price.toFixed(2)} (Vol: ${volume || 0} | Time: ${timeStr})`
+                // );
+
+                this.tickBuffer.set(sym, {
+                  symbol: sym,
+                  price,
+                  volume,
+                  timestamp: trade.t || Date.now(),
                 });
               }
             }

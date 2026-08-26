@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal,
   View,
@@ -13,10 +13,20 @@ import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import { getMarketSessionStatus } from '../../utils/marketHours';
+import { formatTimeAgo } from '../../utils/formatTimeAgo';
 import AppText from '../common/AppText';
 import Sparkline from '../home/Sparkline';
 
 const TIMEFRAMES = ['1D', '1W', '3M', '1Y', '5Y', 'ALL'];
+
+const TIMEFRAME_SUFFIXES = {
+  '1D': null, // Dynamic: 'today' or 'at close'
+  '1W': 'last week',
+  '3M': 'last 3 months',
+  '1Y': 'last year',
+  '5Y': 'last 5 years',
+  'ALL': 'since start',
+};
 
 export default function StockDetailModal({ visible, stock, onClose }) {
   const { theme, isDark } = useTheme();
@@ -26,6 +36,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   const [chartData, setChartData] = useState(null);
   const [marketStatus, setMarketStatus] = useState(getMarketSessionStatus());
   const [imageError, setImageError] = useState(false);
+  const [timeAgoText, setTimeAgoText] = useState('0 secs ago');
 
   // Periodically refresh market status
   useEffect(() => {
@@ -56,10 +67,64 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     };
   }, [visible, stock?.symbol, selectedTimeframe, fetchHistoricalChart]);
 
+  // 1-second live ticking timer for price freshness indicator
+  useEffect(() => {
+    if (!visible) return;
+
+    const updateFreshness = () => {
+      const ts = stock?.lastUpdated || chartData?.lastUpdated;
+      setTimeAgoText(formatTimeAgo(ts));
+    };
+
+    updateFreshness();
+    const interval = setInterval(updateFreshness, 1000);
+    return () => clearInterval(interval);
+  }, [visible, stock?.lastUpdated, chartData?.lastUpdated]);
+
+  // Calculate stock trading age to disable unsupported timeframe buttons (e.g. recent IPOs)
+  const isTimeframeDisabled = useMemo(() => {
+    const firstTrade = chartData?.firstTradeDate || null;
+    if (!firstTrade) {
+      return () => false;
+    }
+
+    const stockAgeMs = Date.now() - firstTrade;
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    return (tf) => {
+      if (tf === '1W') return stockAgeMs < 5 * DAY_MS;
+      if (tf === '3M') return stockAgeMs < 60 * DAY_MS;
+      if (tf === '1Y') return stockAgeMs < 300 * DAY_MS;
+      if (tf === '5Y') return stockAgeMs < 4 * 365 * DAY_MS;
+      return false; // 1D and ALL are always enabled
+    };
+  }, [chartData?.firstTradeDate]);
+
+  // Auto-switch to ALL if current selected timeframe is disabled for this stock
+  useEffect(() => {
+    if (isTimeframeDisabled(selectedTimeframe)) {
+      setSelectedTimeframe('ALL');
+    }
+  }, [selectedTimeframe, isTimeframeDisabled]);
+
   if (!stock) return null;
 
-  const isPositive = (stock.changePercent ?? 0) >= 0;
-  const trendColor = isPositive ? '#00D084' : '#FF4D4F';
+  // The displayed timeframe is strictly tied to chartData.timeframe to eliminate text-before-data mismatch
+  const activeDisplayedTimeframe = chartData?.timeframe || selectedTimeframe;
+
+  // Compute dynamic price & change for the currently displayed timeframe
+  const effectivePrice = stock.price ?? chartData?.currentPrice ?? 0;
+  const effectiveChange = chartData?.priceChange ?? stock.change ?? 0;
+  const effectiveChangePercent = chartData?.priceChangePercent ?? stock.changePercent ?? 0;
+
+  const isTimeframePositive = (effectiveChange ?? 0) >= 0;
+  const timeframeTrendColor = isTimeframePositive ? '#00D084' : '#FF4D4F';
+
+  // Dynamic suffix matches the active displayed timeframe
+  const timeframeSuffix =
+    activeDisplayedTimeframe === '1D'
+      ? marketStatus.suffix
+      : TIMEFRAME_SUFFIXES[activeDisplayedTimeframe] || 'since start';
 
   // Real or fallback sparkline series
   const sparklineData =
@@ -132,7 +197,11 @@ export default function StockDetailModal({ visible, stock, onClose }) {
             style={[styles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={styles.scrollFlex}
+              contentContainerStyle={styles.scrollContent}
+            >
               {/* 1. Header Row */}
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
@@ -187,31 +256,42 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 </View>
               </View>
 
-              {/* 2. Price & Market Status Row (Dual Column) */}
+              {/* 2. Price & Market Status Row (Adaptive Dual Column) */}
               <View style={styles.priceRow}>
-                {/* Left: Main Trading Session */}
-                <View style={styles.mainPriceCol}>
+                {/* Left: Main Trading Session with Timeframe Return */}
+                <View
+                  style={
+                    marketStatus.isOpen
+                      ? styles.mainPriceColOpen
+                      : styles.mainPriceColClosed
+                  }
+                >
                   <AppText style={styles.mainPriceText}>
                     {stock.currency || '$'}
-                    {(stock.price ?? 0).toLocaleString(undefined, {
+                    {effectivePrice.toLocaleString(undefined, {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
                   </AppText>
-                  <AppText style={[styles.changeText, { color: trendColor }]}>
-                    {isPositive ? '+' : '-'}
+                  <AppText style={[styles.changeText, { color: timeframeTrendColor }]}>
+                    {isTimeframePositive ? '+' : '-'}
                     {stock.currency || '$'}
-                    {stock.change
-                      ? Math.abs(stock.change).toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
-                      : '?'} ({Math.abs(stock.changePercent ?? 0.54).toFixed(2)}%) {marketStatus.suffix}
+                    {Math.abs(effectiveChange).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    ({Math.abs(effectiveChangePercent).toFixed(2)}%) {timeframeSuffix}
                   </AppText>
                 </View>
 
                 {/* Right: Extended Session or Market Open Indicator */}
-                <View style={styles.afterHoursCol}>
+                <View
+                  style={
+                    marketStatus.isOpen
+                      ? styles.afterHoursColOpen
+                      : styles.afterHoursColClosed
+                  }
+                >
                   {marketStatus.isOpen ? (
                     <View style={styles.marketOpenBadgeContainer}>
                       <View style={[styles.statusDot, { backgroundColor: marketStatus.color }]} />
@@ -243,7 +323,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 <View style={styles.chartInner}>
                   <Sparkline
                     data={sparklineData}
-                    color={trendColor}
+                    color={timeframeTrendColor}
                     strokeWidth={2.5}
                     style={styles.chartSparkline}
                   />
@@ -252,7 +332,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                   <View style={[styles.referenceLine, { borderColor: '#00A3FF' }]}>
                     <View style={styles.priceTagBadge}>
                       <AppText bold style={styles.priceTagText}>
-                        {(stock.price ?? 0).toLocaleString(undefined, {
+                        {effectivePrice.toLocaleString(undefined, {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
@@ -275,24 +355,36 @@ export default function StockDetailModal({ visible, stock, onClose }) {
               <View style={styles.timeframeRow}>
                 {TIMEFRAMES.map((tf) => {
                   const isActive = tf === selectedTimeframe;
+                  const disabled = isTimeframeDisabled(tf);
+
                   return (
                     <TouchableOpacity
                       key={tf}
+                      disabled={disabled}
                       style={[
                         styles.timeframePill,
-                        isActive
+                        disabled
+                          ? {
+                              backgroundColor: isDark ? '#101318' : '#ECEFF4',
+                              opacity: 0.35,
+                            }
+                          : isActive
                           ? { backgroundColor: isDark ? '#4A4A4A' : '#D0D5DD' }
                           : { backgroundColor: isDark ? '#14171E' : '#E8ECF2' },
                       ]}
                       onPress={() => setSelectedTimeframe(tf)}
-                      activeOpacity={0.7}
+                      activeOpacity={disabled ? 1 : 0.7}
                     >
                       <AppText
                         bold={isActive}
                         style={[
                           styles.timeframeText,
                           {
-                            color: isActive ? theme.textPrimary : theme.textSecondary,
+                            color: disabled
+                              ? theme.textMuted
+                              : isActive
+                              ? theme.textPrimary
+                              : theme.textSecondary,
                           },
                         ]}
                       >
@@ -303,6 +395,22 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 })}
               </View>
             </ScrollView>
+
+            {/* 5. Anchored Bottom Price Freshness Indicator */}
+            <View
+              style={[
+                styles.anchoredFooter,
+                {
+                  borderTopColor: isDark
+                    ? 'rgba(255, 255, 255, 0.05)'
+                    : 'rgba(0, 0, 0, 0.05)',
+                },
+              ]}
+            >
+              <AppText style={[styles.lastUpdatedText, { color: theme.textMuted }]}>
+                Latest price updated {timeAgoText}
+              </AppText>
+            </View>
           </SafeAreaView>
         </View>
       </View>
@@ -328,10 +436,13 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
+  scrollFlex: {
+    flex: 1,
+  },
   scrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.lg,
   },
   header: {
     flexDirection: 'row',
@@ -390,10 +501,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginVertical: spacing.md,
-    gap: spacing.sm,
+    gap: spacing.md,
   },
-  mainPriceCol: {
-    flex: 1.1,
+  mainPriceColOpen: {
+    flex: 1,
+  },
+  mainPriceColClosed: {
+    flex: 1.4,
   },
   mainPriceText: {
     fontSize: 32,
@@ -403,8 +517,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 4,
   },
-  afterHoursCol: {
-    flex: 1.3,
+  afterHoursColOpen: {
+    flexShrink: 0,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    paddingTop: 6,
+  },
+  afterHoursColClosed: {
+    flex: 1,
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
@@ -412,7 +532,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingTop: spacing.xs,
   },
   statusDot: {
     width: 8,
@@ -499,5 +618,15 @@ const styles = StyleSheet.create({
   },
   timeframeText: {
     fontSize: 14,
+  },
+  anchoredFooter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderTopWidth: 1,
+  },
+  lastUpdatedText: {
+    fontSize: 12,
+    letterSpacing: 0.2,
   },
 });
