@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
@@ -8,32 +8,57 @@ export default function Sparkline({
   height: customHeight,
   color = '#00D084',
   strokeWidth = 2,
+  smoothing = 0,
   style,
 }) {
   const [layout, setLayout] = useState({ width: 0, height: 0 });
 
   const handleLayout = (event) => {
     const { width, height } = event.nativeEvent.layout;
-    if (Math.round(width) !== Math.round(layout.width) || Math.round(height) !== Math.round(layout.height)) {
+    if (
+      Math.round(width) !== Math.round(layout.width) ||
+      Math.round(height) !== Math.round(layout.height)
+    ) {
       setLayout({ width, height });
     }
   };
 
-  if (!data || data.length < 2) {
+  // Mean average smoothing of X surrounding values (e.g. radius = smoothing)
+  const smoothedData = useMemo(() => {
+    if (!data || data.length < 2 || !smoothing || smoothing <= 0) {
+      return data;
+    }
+    const len = data.length;
+    const radius = Math.floor(smoothing);
+
+    return data.map((_, i) => {
+      const start = Math.max(0, i - radius);
+      const end = Math.min(len - 1, i + radius);
+      let sum = 0;
+      let count = 0;
+      for (let j = start; j <= end; j++) {
+        sum += data[j];
+        count++;
+      }
+      return sum / count;
+    });
+  }, [data, smoothing]);
+
+  if (!smoothedData || smoothedData.length < 2) {
     return <View style={[styles.container, style]} onLayout={handleLayout} />;
   }
 
   const effectiveWidth = customWidth || layout.width || 100;
   const effectiveHeight = customHeight || layout.height || 36;
 
-  const min = Math.min(...data);
-  const max = Math.max(...data);
+  const min = Math.min(...smoothedData);
+  const max = Math.max(...smoothedData);
   const range = max - min === 0 ? 1 : max - min;
   const paddingY = 4;
   const usableHeight = Math.max(effectiveHeight - paddingY * 2, 2);
 
-  const points = data.map((val, index) => {
-    const x = (index / (data.length - 1)) * effectiveWidth;
+  const points = smoothedData.map((val, index) => {
+    const x = (index / (smoothedData.length - 1)) * effectiveWidth;
     const y = effectiveHeight - paddingY - ((val - min) / range) * usableHeight;
     return { x, y };
   });

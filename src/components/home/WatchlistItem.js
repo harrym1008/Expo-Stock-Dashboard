@@ -1,6 +1,5 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import AppText from '../common/AppText';
@@ -8,8 +7,16 @@ import Sparkline from './Sparkline';
 
 export default function WatchlistItem({ item, onPress }) {
   const { theme } = useTheme();
-  const isPositive = item.changePercent >= 0;
+  const [imageError, setImageError] = useState(false);
+
+  const isPositive = (item.changePercent ?? 0) >= 0;
   const trendColor = isPositive ? '#00D084' : '#FF4D4F';
+
+  const placeholderUri = `https://placehold.co/128x128/FFFFFF/000000.png?text=${encodeURIComponent(
+    item.symbol || 'ST'
+  )}`;
+
+  const logoUri = !imageError && item.logo ? item.logo : placeholderUri;
 
   return (
     <TouchableOpacity
@@ -21,19 +28,12 @@ export default function WatchlistItem({ item, onPress }) {
       {/* Left: Logo & Company Info */}
       <View style={styles.leftSection}>
         <View style={[styles.logoContainer, { backgroundColor: '#FFFFFF' }]}>
-          {item.symbol === 'NVDA' ? (
-            <Ionicons name="hardware-chip" size={22} color="#76B900" />
-          ) : item.symbol === 'AAPL' ? (
-            <Ionicons name="logo-apple" size={22} color="#000000" />
-          ) : item.symbol === 'MSFT' ? (
-            <Ionicons name="logo-windows" size={20} color="#00A4EF" />
-          ) : item.symbol === 'TSLA' ? (
-            <Ionicons name="car-sport" size={20} color="#E82127" />
-          ) : (
-            <AppText bold style={[styles.logoFallbackText, { color: '#000000' }]}>
-              {item.symbol.substring(0, 2)}
-            </AppText>
-          )}
+          <Image
+            source={{ uri: logoUri }}
+            style={styles.logoImage}
+            resizeMode="cover"
+            onError={() => setImageError(true)}
+          />
         </View>
 
         <View style={styles.titleWrapper}>
@@ -49,23 +49,28 @@ export default function WatchlistItem({ item, onPress }) {
         </View>
       </View>
 
-      {/* Middle: Sparkline Chart */}
+      {/* Middle: Sparkline Chart with smoothing 4 */}
       <View style={styles.chartSection}>
         <Sparkline
           data={item.sparkline}
           color={trendColor}
           strokeWidth={2}
+          smoothing={4}
         />
       </View>
 
       {/* Right: Price & Percent Change */}
       <View style={styles.rightSection}>
-        <AppText bold style={styles.priceText}>
-          {item.currency || '$'}{item.price.toFixed(2)}
+        <AppText style={styles.priceText}>
+          {item.currency || '$'}
+          {(item.price ?? 0).toLocaleString('en-GB', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
         </AppText>
-        <AppText bold style={[styles.changeText, { color: trendColor }]}>
+        <AppText style={[styles.changeText, { color: trendColor }]}>
           {isPositive ? '+' : '-'}
-          {Math.abs(item.changePercent).toFixed(2)}%
+          {Math.abs(item.changePercent ?? 0).toFixed(2)}%
         </AppText>
       </View>
     </TouchableOpacity>
@@ -92,9 +97,11 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm + 2,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
-  logoFallbackText: {
-    fontSize: 14,
+  logoImage: {
+    width: '100%',
+    height: '100%',
   },
   titleWrapper: {
     flex: 1,
@@ -122,10 +129,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   priceText: {
-    fontSize: 16,
+    fontSize: 17,
+    letterSpacing: 0.2,
   },
   changeText: {
     fontSize: 12,
-    marginTop: 2,
   },
 });

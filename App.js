@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import TabNavigator from './src/navigation/TabNavigator';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { MarketDataProvider } from './src/context/MarketDataContext';
 
 function AppContent() {
   const { theme, isDark } = useTheme();
@@ -58,7 +59,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AppContent />
+        <MarketDataProvider>
+          <AppContent />
+        </MarketDataProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );
