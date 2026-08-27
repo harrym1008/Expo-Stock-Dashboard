@@ -1,5 +1,6 @@
 import { storageService } from './storageService';
 import { finnhubRateLimiter } from '../utils/rateLimiter';
+import { logoService } from './logoService';
 
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
@@ -73,10 +74,11 @@ export const finnhubRestService = {
           return null;
         }
 
-        const remoteLogo = data.logo || `https://placehold.co/128x128/FFFFFF/000000.png?text=${encodeURIComponent(cleanSymbol)}`;
-
-        // 3. Cache logo image file locally in persistent LRU cache
-        const localLogoUri = await storageService.getCachedLogoUri(remoteLogo, cleanSymbol);
+        const rawLogo = data.logo;
+        let localLogoUri = null;
+        if (rawLogo && !rawLogo.includes('placehold.co')) {
+          localLogoUri = await logoService.overrideLogo(cleanSymbol, rawLogo);
+        }
 
         const rawEx = (data.exchange || '').toUpperCase();
         const exchange = rawEx.includes('NASDAQ') ? 'NASDAQ' : rawEx.includes('NEW YORK STOCK EXCHANGE') ? 'NYSE' : rawEx || 'Unknown';
@@ -85,7 +87,7 @@ export const finnhubRestService = {
           symbol: cleanSymbol,
           name: data.name,
           exchange,
-          logo: localLogoUri || remoteLogo,
+          logo: localLogoUri || rawLogo || logoService.getPlaceholderUri(cleanSymbol),
           currency: data.currency || 'USD',
           country: data.country || 'US',
           marketCap: data.marketCapitalization || 0,

@@ -202,29 +202,53 @@ class PersistentLruCache {
 
   // --- Image / Logo File Caching (128x128 Logos) ---
 
+  async getCachedLogo(symbol) {
+    if (!symbol) return null;
+    await this.init();
+
+    const cleanSym = symbol.toUpperCase();
+    const cacheKey = `logo_${cleanSym}`;
+    const item = this.manifest.items[cacheKey];
+    if (!item) return null;
+
+    const filePath = `${CACHE_DIR}${item.filename}`;
+    const now = Date.now();
+    if (now - item.timestamp < (item.ttl || DEFAULT_TTL_MS)) {
+      item.lastAccessed = now;
+      this.saveManifest();
+      return filePath;
+    } else {
+      await this.removeItem(cacheKey);
+      return null;
+    }
+  }
+
   async getOrCacheImage(remoteUrl, symbol) {
-    if (!remoteUrl) return null;
+    if (!remoteUrl || remoteUrl.includes('placehold.co')) return null;
     await this.init();
 
     const cleanSym = (symbol || '').toUpperCase();
-    const cacheKey = `logo_${cleanSym}_${encodeURIComponent(remoteUrl)}`;
-    const item = this.manifest.items[cacheKey];
+    const cacheKey = `logo_${cleanSym}`;
 
-    if (item) {
-      const filePath = `${CACHE_DIR}${item.filename}`;
-      const now = Date.now();
-
-      if (now - item.timestamp < (item.ttl || DEFAULT_TTL_MS)) {
-        item.lastAccessed = now;
-        this.saveManifest();
-        console.log(`[PersistentLRU] 🎯 Cache HIT (Logo): "${cleanSym}" -> Local Disk: ${item.filename}`);
-        return filePath;
-      } else {
-        await this.removeItem(cacheKey);
-      }
+    // 1. Check if already cached by symbol
+    const existing = await this.getCachedLogo(cleanSym);
+    if (existing) {
+      console.log(`[PersistentLRU] 🎯 Cache HIT (Logo): "${cleanSym}" -> Local Disk`);
+      return existing;
     }
 
-    // Cache miss: download to local disk
+    // 2. If remoteUrl is already a local file path, check and return
+    if (remoteUrl.startsWith('file://') || remoteUrl.startsWith('/')) {
+      try {
+        const info = await FileSystem.getInfoAsync(remoteUrl);
+        if (info.exists) {
+          return remoteUrl;
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    // 3. Download from remote URL
     try {
       console.log(`[PersistentLRU] 📥 Downloading logo: "${cleanSym}" from ${remoteUrl}`);
       const extMatch = remoteUrl.match(/\.(png|jpg|jpeg|svg|webp)/i);
@@ -235,8 +259,11 @@ class PersistentLruCache {
 
       const downloadResult = await FileSystem.downloadAsync(remoteUrl, targetPath);
       if (downloadResult.status !== 200) {
-        console.warn(`[PersistentLRU] Remote download returned HTTP ${downloadResult.status} for ${cleanSym}`);
-        return remoteUrl;
+        console.log(`[PersistentLRU] ℹ️ Remote logo returned HTTP ${downloadResult.status} for ${cleanSym} (Not cached)`);
+        try {
+          await FileSystem.deleteAsync(targetPath, { idempotent: true });
+        } catch (e) {}
+        return null;
       }
 
       const fileInfo = await FileSystem.getInfoAsync(targetPath);
@@ -260,8 +287,8 @@ class PersistentLruCache {
       console.log(`[PersistentLRU] 💾 Cached Logo: "${cleanSym}" (${kb} KB | Total Cache: ${totalMb} MB)`);
       return targetPath;
     } catch (err) {
-      console.warn(`[PersistentLRU] Image download fallback for ${symbol}:`, err.message || err);
-      return remoteUrl;
+      console.warn(`[PersistentLRU] Image download failed for ${symbol}:`, err.message || err);
+      return null;
     }
   }
 

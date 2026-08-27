@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import { storageService } from '../../services/storageService';
 import AppText from '../common/AppText';
 import Sparkline from '../home/Sparkline';
 import MarketCalendarModal from '../common/MarketCalendarModal';
+import CompanyLogo from '../common/CompanyLogo';
 
 const TIMEFRAMES = ['1H', '1D', '1W', '3M', '1Y', '5Y', 'ALL'];
 
@@ -46,6 +48,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   const [isFavorite, setIsFavorite] = useState(false);
   const [selectedTimeframe, setSelectedTimeframe] = useState('1D');
   const [chartData, setChartData] = useState(null);
+  const [isInitialStockLoading, setIsInitialStockLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
   const [timeAgoText, setTimeAgoText] = useState('just now');
   const [calendarVisible, setCalendarVisible] = useState(false);
@@ -53,10 +56,12 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   // Track the latest known after-hours price across timeframe switches
   const latestExtendedPriceRef = useRef(null);
 
-  // Initialize or restore per-stock timeframe when active stock changes
+  // Initialize or restore per-stock timeframe when active stock changes (first load for stock)
   useEffect(() => {
     setImageError(false);
     latestExtendedPriceRef.current = null;
+    setChartData(null);
+    setIsInitialStockLoading(true);
 
     if (stock?.symbol) {
       const sym = stock.symbol.toUpperCase();
@@ -65,8 +70,9 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     }
   }, [stock?.symbol]);
 
-  // Handle user timeframe selection & persist preference
+  // Handle user timeframe selection & persist preference without flashing full-screen loader
   const handleSelectTimeframe = (tf) => {
+    if (tf === selectedTimeframe) return;
     setSelectedTimeframe(tf);
     if (stock?.symbol) {
       const sym = stock.symbol.toUpperCase();
@@ -79,14 +85,23 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   useEffect(() => {
     let isMounted = true;
     if (visible && stock?.symbol) {
-      fetchHistoricalChart(stock.symbol, selectedTimeframe).then((data) => {
-        if (isMounted && data) {
-          setChartData(data);
-          if (typeof data.postMarketPrice === 'number' && Math.abs(data.postMarketPrice - data.regularMarketPrice) > 0.001) {
-            latestExtendedPriceRef.current = data.postMarketPrice;
+      fetchHistoricalChart(stock.symbol, selectedTimeframe)
+        .then((data) => {
+          if (isMounted) {
+            if (data) {
+              setChartData(data);
+              if (typeof data.postMarketPrice === 'number' && Math.abs(data.postMarketPrice - data.regularMarketPrice) > 0.001) {
+                latestExtendedPriceRef.current = data.postMarketPrice;
+              }
+            }
+            setIsInitialStockLoading(false);
           }
-        }
-      });
+        })
+        .catch(() => {
+          if (isMounted) setIsInitialStockLoading(false);
+        });
+    } else {
+      setIsInitialStockLoading(false);
     }
     return () => {
       isMounted = false;
@@ -252,14 +267,11 @@ export default function StockDetailModal({ visible, stock, onClose }) {
               {/* 1. Header Row */}
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
-                  <View style={[styles.logoContainer, { backgroundColor: '#FFFFFF' }]}>
-                    <Image
-                      source={{ uri: logoUri }}
-                      style={styles.logoImage}
-                      resizeMode="cover"
-                      onError={() => setImageError(true)}
-                    />
-                  </View>
+                  <CompanyLogo
+                    symbol={stock.symbol}
+                    logoUri={stock.logo}
+                    size={38}
+                  />
 
                   <View style={styles.titleInfo}>
                     <View style={styles.symbolRow}>
@@ -267,7 +279,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                         {stock.symbol}
                       </AppText>
                       <AppText style={[styles.exchangeText, { color: theme.textSecondary }]}>
-                        {' - '}{stock.exchange || 'NASDAQ'}
+                        {' - '}{stock.exchange || '...'}  
                       </AppText>
                     </View>
                     <AppText style={[styles.companyText, { color: theme.textSecondary }]} numberOfLines={1}>
@@ -371,35 +383,43 @@ export default function StockDetailModal({ visible, stock, onClose }) {
 
               {/* 3. Real Timeframe Chart Area */}
               <View style={[styles.chartContainer, { backgroundColor: isDark ? '#050608' : '#F9FAFC' }]}>
-                <View style={styles.chartInner}>
-                  <Sparkline
-                    data={sparklineData}
-                    color={timeframeTrendColor}
-                    strokeWidth={2.5}
-                    style={styles.chartSparkline}
-                  />
-
-                  {/* Horizontal Reference Line with Cyan Price Tag */}
-                  <View style={[styles.referenceLine, { borderColor: '#00A3FF' }]}>
-                    <View style={styles.priceTagBadge}>
-                      <AppText bold style={styles.priceTagText}>
-                        {activeEndPrice.toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </AppText>
-                    </View>
+                {isInitialStockLoading || !chartData || chartData.symbol !== cleanSymbol || !Array.isArray(sparklineData) || sparklineData.length === 0 ? (
+                  <View style={styles.chartLoadingContainer}>
+                    <ActivityIndicator size="large" color={theme.primary} />
                   </View>
-                </View>
+                ) : (
+                  <>
+                    <View style={styles.chartInner}>
+                      <Sparkline
+                        data={sparklineData}
+                        color={timeframeTrendColor}
+                        strokeWidth={2.5}
+                        style={styles.chartSparkline}
+                      />
 
-                {/* Right-hand Y-Axis Price Labels */}
-                <View style={styles.yAxisLabels}>
-                  {yLabels.map((priceStr, idx) => (
-                    <AppText key={idx} style={[styles.yAxisText, { color: theme.textMuted }]}>
-                      {priceStr}
-                    </AppText>
-                  ))}
-                </View>
+                      {/* Horizontal Reference Line with Cyan Price Tag */}
+                      <View style={[styles.referenceLine, { borderColor: '#00A3FF' }]}>
+                        <View style={styles.priceTagBadge}>
+                          <AppText bold style={styles.priceTagText}>
+                            {activeEndPrice.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </AppText>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Right-hand Y-Axis Price Labels */}
+                    <View style={styles.yAxisLabels}>
+                      {yLabels.map((priceStr, idx) => (
+                        <AppText key={idx} style={[styles.yAxisText, { color: theme.textMuted }]}>
+                          {priceStr}
+                        </AppText>
+                      ))}
+                    </View>
+                  </>
+                )}
               </View>
 
               {/* 4. Timeframe Selector Pills (includes 1H) */}
@@ -531,6 +551,7 @@ const styles = StyleSheet.create({
   symbolRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
+    width: '75%',
   },
   symbolText: {
     fontSize: 20,
@@ -538,6 +559,7 @@ const styles = StyleSheet.create({
   },
   exchangeText: {
     fontSize: 12,
+    overflowX: 'ellipsis'
   },
   companyText: {
     fontSize: 13,
@@ -621,6 +643,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  chartLoadingContainer: {
+    flex: 1,
+    height: 240,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chartInner: {
     flex: 1,

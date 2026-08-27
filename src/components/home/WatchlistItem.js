@@ -1,22 +1,16 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import AppText from '../common/AppText';
 import Sparkline from './Sparkline';
+import CompanyLogo from '../common/CompanyLogo';
 
 export default function WatchlistItem({ item, onPress }) {
   const { theme } = useTheme();
-  const [imageError, setImageError] = useState(false);
 
   const isPositive = (item.changePercent ?? 0) >= 0;
   const trendColor = isPositive ? '#00D084' : '#FF4D4F';
-
-  const placeholderUri = `https://placehold.co/128x128/FFFFFF/000000.png?text=${encodeURIComponent(
-    item.symbol || 'ST'
-  )}`;
-
-  const logoUri = !imageError && item.logo ? item.logo : placeholderUri;
 
   return (
     <TouchableOpacity
@@ -27,14 +21,11 @@ export default function WatchlistItem({ item, onPress }) {
     >
       {/* Left: Logo & Company Info */}
       <View style={styles.leftSection}>
-        <View style={[styles.logoContainer, { backgroundColor: '#FFFFFF' }]}>
-          <Image
-            source={{ uri: logoUri }}
-            style={styles.logoImage}
-            resizeMode="cover"
-            onError={() => setImageError(true)}
-          />
-        </View>
+        <CompanyLogo
+          symbol={item.symbol}
+          logoUri={item.logo}
+          size={32}
+        />
 
         <View style={styles.titleWrapper}>
           <AppText bold style={styles.symbolText}>

@@ -192,7 +192,7 @@ export default function HomeScreen() {
         change: displayChange,
         changePercent: displayChangePercent,
         name: liveProfile?.name || item.name,
-        exchange: liveProfile?.exchange || item.exchange || 'NASDAQ',
+        exchange: liveProfile?.exchange || item.exchange || '...',
         logo: liveProfile?.logo || item.logo || null,
         sparkline: dynamicSparkline,
         lastUpdated:
@@ -249,7 +249,7 @@ export default function HomeScreen() {
                   change: quotes[selectedStock.symbol]?.change ?? sparklines1D[selectedStock.symbol]?.change ?? selectedStock.change,
                   changePercent: quotes[selectedStock.symbol]?.changePercent ?? sparklines1D[selectedStock.symbol]?.changePercent ?? selectedStock.changePercent,
                   name: profiles[selectedStock.symbol]?.name || selectedStock.name,
-                  exchange: profiles[selectedStock.symbol]?.exchange || selectedStock.exchange || 'NASDAQ',
+                  exchange: profiles[selectedStock.symbol]?.exchange || selectedStock.exchange || '...',
                   logo: profiles[selectedStock.symbol]?.logo || selectedStock.logo || null,
                   sparkline: sparklines1D[selectedStock.symbol]?.sparkline || quotes[selectedStock.symbol]?.sparkline || selectedStock.sparkline,
                   lastUpdated: quotes[selectedStock.symbol]?.lastTickTime || quotes[selectedStock.symbol]?.timestamp || sparklines1D[selectedStock.symbol]?.lastUpdated || selectedStock.lastUpdated,
