@@ -12,15 +12,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
 import { spacing, borderRadius } from '../../constants/theme';
-import { getMarketSessionStatus } from '../../utils/marketHours';
 import { formatTimeAgo } from '../../utils/formatTimeAgo';
 import { storageService } from '../../services/storageService';
 import AppText from '../common/AppText';
 import Sparkline from '../home/Sparkline';
+import MarketCalendarModal from '../common/MarketCalendarModal';
 
-const TIMEFRAMES = ['1D', '1W', '3M', '1Y', '5Y', 'ALL'];
+const TIMEFRAMES = ['1H', '1D', '1W', '3M', '1Y', '5Y', 'ALL'];
 
 const TIMEFRAME_SUFFIXES = {
+  '1H': 'last hour',
   '1D': null, // Dynamic: 'today' or 'at close'
   '1W': 'last week',
   '3M': 'last 3 months',
@@ -41,25 +42,16 @@ storageService.getStockTimeframes().then((saved) => {
 
 export default function StockDetailModal({ visible, stock, onClose }) {
   const { theme, isDark } = useTheme();
-  const { fetchHistoricalChart, quotes } = useMarketData();
+  const { fetchHistoricalChart, quotes, marketStatus } = useMarketData();
   const [isFavorite, setIsFavorite] = useState(false);
   const [selectedTimeframe, setSelectedTimeframe] = useState('1D');
   const [chartData, setChartData] = useState(null);
-  const [marketStatus, setMarketStatus] = useState(getMarketSessionStatus());
   const [imageError, setImageError] = useState(false);
   const [timeAgoText, setTimeAgoText] = useState('just now');
+  const [calendarVisible, setCalendarVisible] = useState(false);
 
   // Track the latest known after-hours price across timeframe switches
   const latestExtendedPriceRef = useRef(null);
-
-  // Periodically refresh market status
-  useEffect(() => {
-    setMarketStatus(getMarketSessionStatus());
-    const timer = setInterval(() => {
-      setMarketStatus(getMarketSessionStatus());
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Initialize or restore per-stock timeframe when active stock changes
   useEffect(() => {
@@ -132,7 +124,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
       if (tf === '3M') return stockAgeMs < 60 * DAY_MS;
       if (tf === '1Y') return stockAgeMs < 300 * DAY_MS;
       if (tf === '5Y') return stockAgeMs < 4 * 365 * DAY_MS;
-      return false; // 1D and ALL are always enabled
+      return false; // 1H, 1D, and ALL are always enabled
     };
   }, [chartData?.firstTradeDate]);
 
@@ -158,8 +150,6 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   }
 
   // 1. LEFT SIDE: Regular Market Hours Price & Return
-  // When market is OPEN: Uses live trading price.
-  // When market is CLOSED / OUT-OF-HOURS: Uses official Regular Market Close price (e.g. $345.82 for TSLA).
   const regularClosePrice =
     chartData?.regularMarketPrice || stock.regularMarketPrice || stock.price || chartData?.currentPrice || 0;
 
@@ -341,13 +331,17 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                   </AppText>
                 </View>
 
-                {/* Right: Extended Session (Pre/After-Hours) or Market Open Indicator */}
-                <View
+                {/* Right: Extended Session or Market Open Indicator (Tap to open Market Calendar) */}
+                <TouchableOpacity
                   style={
                     marketStatus.isOpen
                       ? styles.afterHoursColOpen
                       : styles.afterHoursColClosed
                   }
+                  onPress={() => setCalendarVisible(true)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="View US Market Calendar & Holidays"
                 >
                   {marketStatus.isOpen ? (
                     <View style={styles.marketOpenBadgeContainer}>
@@ -372,7 +366,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                       </AppText>
                     </>
                   )}
-                </View>
+                </TouchableOpacity>
               </View>
 
               {/* 3. Real Timeframe Chart Area */}
@@ -408,7 +402,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 </View>
               </View>
 
-              {/* 4. Timeframe Selector Pills */}
+              {/* 4. Timeframe Selector Pills (includes 1H) */}
               <View style={styles.timeframeRow}>
                 {TIMEFRAMES.map((tf) => {
                   const isActive = tf === selectedTimeframe;
@@ -469,6 +463,12 @@ export default function StockDetailModal({ visible, stock, onClose }) {
               </AppText>
             </View>
           </SafeAreaView>
+
+          {/* Market Hours & Holiday Calendar Overlay */}
+          <MarketCalendarModal
+            visible={calendarVisible}
+            onClose={() => setCalendarVisible(false)}
+          />
         </View>
       </View>
     </Modal>
@@ -588,12 +588,17 @@ const styles = StyleSheet.create({
   marketOpenBadgeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   statusDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  statusLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   afterHoursPriceText: {
     fontSize: 22,
@@ -664,7 +669,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: spacing.md,
-    gap: spacing.xs * 1.5,
+    gap: spacing.xs,
   },
   timeframePill: {
     flex: 1,
@@ -674,7 +679,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   timeframeText: {
-    fontSize: 14,
+    fontSize: 13,
   },
   anchoredFooter: {
     alignItems: 'center',

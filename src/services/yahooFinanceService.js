@@ -3,6 +3,7 @@ import { persistentLruCache } from './persistentLruCache';
 import { getMarketSessionStatus } from '../utils/marketHours';
 
 const TIMEFRAME_CONFIG = {
+  '1H': { range: '1d', interval: '1m' },
   '1D': { range: '1d', interval: '2m' },
   '1W': { range: '5d', interval: '15m' },
   '3M': { range: '3mo', interval: '1d' },
@@ -16,6 +17,7 @@ const latestKnownAfterHoursPrices = {};
 
 /**
  * Calculates cache TTL to expire exactly 3 seconds after the next candle boundary.
+ * e.g. For 1H (1m candles): at 2:29:15, expires at 2:30:03 (+48s TTL).
  * e.g. For 1D (2m candles): at 2:29:15, expires at 2:30:03 (+48s TTL).
  */
 export function getBoundaryAlignedTtl(timeframe) {
@@ -23,6 +25,12 @@ export function getBoundaryAlignedTtl(timeframe) {
   const THREE_SECONDS = 3000;
 
   switch (timeframe) {
+    case '1H': {
+      const intervalMs = 1 * 60 * 1000;
+      const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
+      const remaining = nextBoundary - now;
+      return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
+    }
     case '1D': {
       const intervalMs = 2 * 60 * 1000;
       const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
@@ -104,8 +112,6 @@ function applyLivePriceOverlay(chartData, latestLivePrice) {
   }
 
   // 2. If Market is CLOSED / PRE-MARKET / AFTER-HOURS:
-  // The left value (regular close) remains FIXED at official close.
-  // The right value (out of hours price & delta since close) is updated with the live WebSocket price!
   const outOfHoursDiff = latestLivePrice - regClose;
   const outOfHoursDiffPercent = regClose !== 0 ? (outOfHoursDiff / regClose) * 100 : 0;
 
@@ -116,7 +122,6 @@ function applyLivePriceOverlay(chartData, latestLivePrice) {
     sparkline: updatedSparkline,
     lastUpdated: Date.now(),
     currentPrice: latestLivePrice,
-    // Update extended session price on the right side
     postMarketPrice: sessionStatus.isPreMarket ? chartData.postMarketPrice : latestLivePrice,
     postMarketChange: sessionStatus.isPreMarket ? chartData.postMarketChange : outOfHoursDiff,
     postMarketChangePercent: sessionStatus.isPreMarket ? chartData.postMarketChangePercent : outOfHoursDiffPercent,
@@ -127,16 +132,15 @@ function applyLivePriceOverlay(chartData, latestLivePrice) {
 }
 
 export const yahooFinanceService = {
-  async fetchHistoricalData(symbol, timeframe = '3M', latestLivePrice = null) {
+  async fetchHistoricalData(symbol, timeframe = '1D', latestLivePrice = null) {
     if (!symbol) return null;
     const cleanSymbol = symbol.trim().toUpperCase();
-    const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG['3M'];
+    const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG['1D'];
     const cacheKey = `chart_${timeframe}_${cleanSymbol}`;
 
     // 1. Check persistent 128MB LRU cache first (with boundary-aligned TTL)
     const cached = await persistentLruCache.getJson(cacheKey);
     if (cached && Array.isArray(cached.sparkline) && cached.sparkline.length > 0) {
-      // Ensure cached data has the globally preserved after-hours price
       if (latestKnownAfterHoursPrices[cleanSymbol] && (!cached.postMarketPrice || Math.abs(cached.postMarketPrice - cached.regularMarketPrice) < 0.001)) {
         cached.postMarketPrice = latestKnownAfterHoursPrices[cleanSymbol];
         cached.postMarketChange = cached.postMarketPrice - cached.regularMarketPrice;
@@ -190,7 +194,7 @@ export const yahooFinanceService = {
         const rawQuotes = result.indicators?.quote?.[0] || {};
         const rawCloses = rawQuotes.close || [];
 
-        const points = [];
+        let points = [];
         for (let i = 0; i < rawCloses.length; i++) {
           const val = rawCloses[i];
           if (typeof val === 'number' && !isNaN(val) && val > 0) {
@@ -203,6 +207,14 @@ export const yahooFinanceService = {
 
         if (points.length === 0) return null;
 
+        // For 1H timeframe: Slice to the last 60 minutes of trades
+        if (timeframe === '1H') {
+          const lastPointTime = points[points.length - 1]?.time || Date.now();
+          const oneHourAgo = lastPointTime - 60 * 60 * 1000;
+          const filtered = points.filter((p) => p.time >= oneHourAgo);
+          points = filtered.length >= 10 ? filtered : points.slice(-60);
+        }
+
         const prices = points.map((p) => p.price);
         const previousClose = meta.previousClose || meta.chartPreviousClose || prices[0];
         const startPrice = prices[0];
@@ -210,13 +222,13 @@ export const yahooFinanceService = {
         const minPrice = Math.min(...prices);
         const maxPrice = Math.max(...prices);
 
-        // Official regular session close price (e.g. 345.82 for TSLA, 209.66 for NVDA)
+        // Official regular session close price
         const regularMarketPrice = typeof meta.regularMarketPrice === 'number'
           ? meta.regularMarketPrice
           : endmostPrice;
 
         // Extract and globally preserve after-hours trade prices
-        if (timeframe === '1D' || timeframe === '1W') {
+        if (timeframe === '1D' || timeframe === '1W' || timeframe === '1H') {
           if (Math.abs(endmostPrice - regularMarketPrice) > 0.001) {
             latestKnownAfterHoursPrices[cleanSymbol] = endmostPrice;
           }
@@ -236,12 +248,11 @@ export const yahooFinanceService = {
         const preMarketChange = preMarketPrice - regularMarketPrice;
         const preMarketChangePercent = regularMarketPrice !== 0 ? (preMarketChange / regularMarketPrice) * 100 : 0;
 
-        // Regular session intraday priceChange relative to previousClose
+        // Price comparison base: 1D compares against previousClose, 1H/1W/3M/1Y/5Y/ALL compares against startPrice
         const baseComparison = timeframe === '1D' ? previousClose : startPrice;
         const priceChange = regularMarketPrice - baseComparison;
         const priceChangePercent = baseComparison !== 0 ? (priceChange / baseComparison) * 100 : 0;
 
-        // Use meta market timestamp or request sent timestamp
         const lastUpdated = meta.regularMarketTime ? meta.regularMarketTime * 1000 : requestSentTime;
         const firstTradeDate = meta.firstTradeDate ? meta.firstTradeDate * 1000 : (points[0]?.time || null);
 
@@ -269,13 +280,13 @@ export const yahooFinanceService = {
           sparkline: prices,
         };
 
-        // 3. Save to persistent 128MB LRU cache with boundary-aligned TTL (+3s after next candle)
+        // 3. Save to persistent LRU cache with boundary-aligned TTL
         const alignedTtl = getBoundaryAlignedTtl(timeframe);
         await persistentLruCache.setJson(cacheKey, chartData, alignedTtl);
 
         const ttlSecs = Math.round(alignedTtl / 1000);
         console.log(
-          `[Yahoo Finance] 💾 Cached ${points.length} candles for ${cleanSymbol} (${timeframe}) | RegClose: $${regularMarketPrice} | Post: $${postMarketPrice} (${postMarketChange >= 0 ? '+' : ''}${postMarketChange.toFixed(2)}) | Aligned TTL: ${ttlSecs}s`
+          `[Yahoo Finance] 💾 Cached ${points.length} candles for ${cleanSymbol} (${timeframe}) | RegClose: $${regularMarketPrice} | Post: $${postMarketPrice} | Aligned TTL: ${ttlSecs}s`
         );
 
         // 4. Always apply live price overlay if available

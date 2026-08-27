@@ -4,6 +4,7 @@ import { finnhubRestService } from '../services/finnhubRestService';
 import { finnhubWebSocketService } from '../services/finnhubWebSocketService';
 import { yahooFinanceService } from '../services/yahooFinanceService';
 import { getMarketSessionStatus } from '../utils/marketHours';
+import { ingestHolidayData } from '../utils/marketHolidays';
 
 const MarketDataContext = createContext(null);
 
@@ -13,6 +14,7 @@ export function MarketDataProvider({ children }) {
   const [profiles, setProfiles] = useState({});
   const [loadingQuotes, setLoadingQuotes] = useState({});
   const [loadingProfiles, setLoadingProfiles] = useState({});
+  const [marketStatus, setMarketStatus] = useState(getMarketSessionStatus());
 
   const profilesRef = useRef(profiles);
   profilesRef.current = profiles;
@@ -20,7 +22,30 @@ export function MarketDataProvider({ children }) {
   const quotesRef = useRef(quotes);
   quotesRef.current = quotes;
 
-  // 1. Initialize API Key on startup
+  // 1. High-precision 1-second timer for exact-second market session transitions (NY Time)
+  useEffect(() => {
+    const checkStatus = () => {
+      const current = getMarketSessionStatus();
+      setMarketStatus((prev) => {
+        if (
+          prev.session !== current.session ||
+          prev.isOpen !== current.isOpen ||
+          prev.label !== current.label ||
+          prev.sublabel !== current.sublabel
+        ) {
+          console.log(`[Market Status] ⏱️ Market session flipped to: ${current.label} (${current.session})`);
+          return current;
+        }
+        return prev;
+      });
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // 2. Initialize API Key on startup
   useEffect(() => {
     storageService.getApiKey().then((key) => {
       if (key) {
@@ -34,7 +59,7 @@ export function MarketDataProvider({ children }) {
     };
   }, []);
 
-  // 2. Handle API Key Updates
+  // 3. Handle API Key Updates
   const updateApiKey = useCallback(async (newKey) => {
     const cleanKey = (newKey || '').trim();
     setApiKey(cleanKey);
@@ -42,7 +67,20 @@ export function MarketDataProvider({ children }) {
     finnhubWebSocketService.setApiKey(cleanKey);
   }, []);
 
-  // 3. Listen to 2Hz Trade Ticks from WebSocket
+  // 4. Fetch live Finnhub market holidays if year >= 2028
+  useEffect(() => {
+    const currentYear = new Date().getFullYear();
+    if (currentYear >= 2028 && apiKey) {
+      finnhubRestService.fetchMarketHolidays(apiKey, 'US').then((res) => {
+        if (res && Array.isArray(res.data)) {
+          ingestHolidayData(res.data);
+          console.log(`[Finnhub Holidays] 📅 Ingested ${res.data.length} live market holidays from API for year >= 2028`);
+        }
+      });
+    }
+  }, [apiKey]);
+
+  // 5. Listen to 2Hz Trade Ticks from WebSocket
   useEffect(() => {
     const unsubscribe = finnhubWebSocketService.addListener((ticks) => {
       if (!Array.isArray(ticks) || ticks.length === 0) return;
@@ -91,7 +129,7 @@ export function MarketDataProvider({ children }) {
     return unsubscribe;
   }, []);
 
-  // 4. Fetch Stock Quote via REST (does not override real WebSocket live ticks)
+  // 6. Fetch Stock Quote via REST (does not override real WebSocket live ticks)
   const fetchQuote = useCallback(
     async (symbol) => {
       if (!symbol || !apiKey) return null;
@@ -103,7 +141,6 @@ export function MarketDataProvider({ children }) {
         if (quote) {
           setQuotes((prev) => {
             const existing = prev[sym] || {};
-            // If already receiving live WebSocket ticks, do not downgrade to static REST quote price
             return {
               ...prev,
               [sym]: {
@@ -123,7 +160,7 @@ export function MarketDataProvider({ children }) {
     [apiKey]
   );
 
-  // 5. Fetch Company Profile & Logo via REST (Cached) - Stable callback without profiles dependency
+  // 7. Fetch Company Profile & Logo via REST (Cached)
   const fetchProfile = useCallback(
     async (symbol) => {
       if (!symbol || !apiKey) return null;
@@ -148,17 +185,16 @@ export function MarketDataProvider({ children }) {
     [apiKey]
   );
 
-  // 6. Fetch Historical Chart via Yahoo Finance with verified live WebSocket tick overlay only
-  const fetchHistoricalChart = useCallback(async (symbol, timeframe = '3M') => {
+  // 8. Fetch Historical Chart via Yahoo Finance with verified live WebSocket tick overlay only
+  const fetchHistoricalChart = useCallback(async (symbol, timeframe = '1D') => {
     if (!symbol) return null;
     const sym = symbol.toUpperCase();
     const wsQuote = quotesRef.current[sym];
-    // ONLY pass livePrice if it is an authentic real-time live WebSocket tick
     const livePrice = wsQuote?.isLiveWs ? wsQuote.price : null;
     return await yahooFinanceService.fetchHistoricalData(sym, timeframe, livePrice);
   }, []);
 
-  // 7. Watchlist & Active Modal Symbol Subscriptions
+  // 9. Watchlist & Active Modal Symbol Subscriptions
   const setWatchlistSymbols = useCallback((symbols) => {
     finnhubWebSocketService.setWatchlistSymbols(symbols);
   }, []);
@@ -179,6 +215,7 @@ export function MarketDataProvider({ children }) {
     profiles,
     loadingQuotes,
     loadingProfiles,
+    marketStatus,
     fetchQuote,
     fetchProfile,
     fetchHistoricalChart,

@@ -131,4 +131,24 @@ export const finnhubRestService = {
       }
     });
   },
+
+  async fetchMarketHolidays(apiKey, exchange = 'US') {
+    if (!apiKey) return null;
+
+    return finnhubRateLimiter.schedule(async () => {
+      try {
+        console.log(`[Finnhub REST] 📅 Fetching market holidays for exchange: ${exchange}`);
+        const res = await fetch(
+          `${FINNHUB_BASE_URL}/stock/market-holiday?exchange=${encodeURIComponent(exchange)}&token=${encodeURIComponent(apiKey)}`
+        );
+
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data;
+      } catch (err) {
+        console.warn('[Finnhub REST] Failed to fetch market holidays:', err.message || err);
+        return null;
+      }
+    });
+  },
 };

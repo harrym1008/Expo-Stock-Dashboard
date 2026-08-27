@@ -8,7 +8,6 @@ import StockDetailModal from '../components/stock/StockDetailModal';
 import { mockWatchlists } from '../constants/mockData';
 import { useTheme } from '../context/ThemeContext';
 import { useMarketData } from '../context/MarketDataContext';
-import { getMarketSessionStatus } from '../utils/marketHours';
 import { spacing } from '../constants/theme';
 
 export default function HomeScreen() {
@@ -16,6 +15,7 @@ export default function HomeScreen() {
   const {
     quotes,
     profiles,
+    marketStatus,
     fetchQuote,
     fetchProfile,
     fetchHistoricalChart,
@@ -30,16 +30,6 @@ export default function HomeScreen() {
   );
   const [selectedStock, setSelectedStock] = useState(null);
   const [sparklines1D, setSparklines1D] = useState({});
-  const [marketStatus, setMarketStatus] = useState(getMarketSessionStatus());
-
-  // Periodically refresh market status
-  useEffect(() => {
-    setMarketStatus(getMarketSessionStatus());
-    const interval = setInterval(() => {
-      setMarketStatus(getMarketSessionStatus());
-    }, 10000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Track symbols already fetched in the current active watchlist
   const fetchedSparklinesRef = useRef(new Set());
