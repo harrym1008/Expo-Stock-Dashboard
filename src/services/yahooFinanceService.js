@@ -5,11 +5,11 @@ import { getMarketSessionStatus } from '../utils/marketHours';
 const TIMEFRAME_CONFIG = {
   '1H': { range: '1d', interval: '1m' },
   '1D': { range: '1d', interval: '2m' },
-  '1W': { range: '5d', interval: '15m' },
+  '1W': { range: '5d', interval: '1h' },
   '3M': { range: '3mo', interval: '1d' },
-  '1Y': { range: '1y', interval: '1d' },
-  '5Y': { range: '5y', interval: '1wk' },
-  'ALL': { range: 'max', interval: '1mo' },
+  '1Y': { range: '1y', interval: '1wk' },
+  '5Y': { range: '5y', interval: '1mo' },
+  'ALL': { range: '100y', interval: '1mo' },
 };
 
 // Global in-memory cache to preserve the latest 1D after-hours trade price across all timeframe queries
@@ -38,24 +38,24 @@ export function getBoundaryAlignedTtl(timeframe) {
       return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
     }
     case '1W': {
-      const intervalMs = 15 * 60 * 1000;
+      const intervalMs = 60 * 60 * 1000;
       const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
       const remaining = nextBoundary - now;
       return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
     }
-    case '3M':
-    case '1Y': {
+    case '3M': {
       const intervalMs = 24 * 60 * 60 * 1000;
       const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
       const remaining = nextBoundary - now;
       return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
     }
-    case '5Y': {
+    case '1Y': {
       const intervalMs = 7 * 24 * 60 * 60 * 1000;
       const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
       const remaining = nextBoundary - now;
       return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
     }
+    case '5Y':
     case 'ALL':
     default: {
       const intervalMs = 30 * 24 * 60 * 60 * 1000;
@@ -131,12 +131,53 @@ function applyLivePriceOverlay(chartData, latestLivePrice) {
   };
 }
 
+/**
+ * Normalizes split anomalies and applies forward/reverse stock split adjustments
+ * across all historical candles so every chart download is 100% split-adjusted.
+ */
+export function normalizeSplits(timestamps, rawPrices, rawSplits) {
+  if (!Array.isArray(rawPrices) || rawPrices.length === 0) return [];
+  const validIndices = [];
+  for (let i = 0; i < rawPrices.length; i++) {
+    const v = rawPrices[i];
+    if (typeof v === 'number' && !isNaN(v) && v > 0) validIndices.push(i);
+  }
+  if (validIndices.length === 0) return [];
+
+  const endIdx = validIndices[validIndices.length - 1];
+  const currentPrice = rawPrices[endIdx];
+
+  const splitList = (rawSplits ? Object.values(rawSplits) : []).filter(
+    (s) => s && s.numerator && s.denominator && s.date
+  );
+
+  // Chronological sort: earliest split to latest
+  splitList.sort((a, b) => (a.date || 0) - (b.date || 0));
+
+  const points = [];
+  for (const i of validIndices) {
+    const t = (timestamps[i] || 0) * 1000;
+    let price = rawPrices[i];
+
+    // For each split that occurred after this candle
+    for (const s of splitList) {
+      const splitTimeMs = s.date * 1000;
+      if (t < splitTimeMs) {
+        const ratio = s.denominator / s.numerator;
+        price = price * ratio;
+      }
+    }
+    points.push({ time: t, price: Number(price.toFixed(2)) });
+  }
+  return points;
+}
+
 export const yahooFinanceService = {
   async fetchHistoricalData(symbol, timeframe = '1D', latestLivePrice = null) {
     if (!symbol) return null;
     const cleanSymbol = symbol.trim().toUpperCase();
     const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG['1D'];
-    const cacheKey = `chart_${timeframe}_${cleanSymbol}`;
+    const cacheKey = `chart_v4_${timeframe}_${cleanSymbol}`;
 
     // 1. Check persistent 128MB LRU cache first (with boundary-aligned TTL)
     const cached = await persistentLruCache.getJson(cacheKey);
@@ -165,7 +206,7 @@ export const yahooFinanceService = {
 
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
       yahooSymbol
-    )}?interval=${config.interval}&range=${config.range}&includePrePost=true`;
+    )}?interval=${config.interval}&range=${config.range}&includePrePost=true&events=div%2Csplit`;
 
     return yahooRateLimiter.schedule(async () => {
       try {
@@ -194,16 +235,7 @@ export const yahooFinanceService = {
         const rawQuotes = result.indicators?.quote?.[0] || {};
         const rawCloses = rawQuotes.close || [];
 
-        let points = [];
-        for (let i = 0; i < rawCloses.length; i++) {
-          const val = rawCloses[i];
-          if (typeof val === 'number' && !isNaN(val) && val > 0) {
-            points.push({
-              time: (rawTimestamps[i] || 0) * 1000,
-              price: Number(val.toFixed(2)),
-            });
-          }
-        }
+        let points = normalizeSplits(rawTimestamps, rawCloses, result.events?.splits);
 
         if (points.length === 0) return null;
 

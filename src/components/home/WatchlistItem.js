@@ -1,70 +1,100 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  FadeInLeft,
+  FadeOutLeft,
+  LinearTransition,
+} from 'react-native-reanimated';
 import { useTheme } from '../../context/ThemeContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import AppText from '../common/AppText';
 import Sparkline from './Sparkline';
 import CompanyLogo from '../common/CompanyLogo';
 
-export default function WatchlistItem({ item, onPress }) {
+export default function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
   const { theme } = useTheme();
 
   const isPositive = (item.changePercent ?? 0) >= 0;
   const trendColor = isPositive ? '#00D084' : '#FF4D4F';
 
   return (
-    <TouchableOpacity
-      style={styles.container}
-      onPress={onPress}
-      activeOpacity={0.7}
-      accessibilityRole="button"
-    >
-      {/* Left: Logo & Company Info */}
-      <View style={styles.leftSection}>
-        <CompanyLogo
-          symbol={item.symbol}
-          logoUri={item.logo}
-          size={32}
-        />
-
-        <View style={styles.titleWrapper}>
-          <AppText bold style={styles.symbolText}>
-            {item.symbol}
-          </AppText>
-          <AppText
-            style={[styles.nameText, { color: theme.textSecondary }]}
-            numberOfLines={1}
+    <Animated.View layout={LinearTransition.duration(200)}>
+      <TouchableOpacity
+        style={styles.container}
+        onPress={onPress}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        disabled={isEditMode}
+      >
+        {/* Drag Handle (edit mode only) */}
+        {isEditMode && (
+          <Animated.View
+            entering={FadeInLeft.duration(200)}
+            exiting={FadeOutLeft.duration(150)}
+            layout={LinearTransition.duration(200)}
           >
-            {item.name}
+            <TouchableOpacity
+              onLongPress={drag}
+              delayLongPress={100}
+              style={styles.dragHandle}
+              accessibilityLabel="Drag to reorder"
+            >
+              <Ionicons name="reorder-three-outline" size={22} color={theme.textSecondary} />
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
+        {/* Left: Logo & Company Info */}
+        <Animated.View
+          layout={LinearTransition.duration(200)}
+          style={styles.leftSection}
+        >
+          <CompanyLogo
+            symbol={item.symbol}
+            logoUri={item.logo}
+            size={32}
+          />
+
+          <View style={styles.titleWrapper}>
+            <AppText bold style={styles.symbolText}>
+              {item.symbol}
+            </AppText>
+            <AppText
+              style={[styles.nameText, { color: theme.textSecondary }]}
+              numberOfLines={1}
+            >
+              {item.name}
+            </AppText>
+          </View>
+        </Animated.View>
+
+        {/* Middle: Sparkline Chart with smoothing 4 */}
+        <View style={styles.chartSection}>
+          <Sparkline
+            data={item.sparkline}
+            color={trendColor}
+            strokeWidth={2}
+            smoothing={4}
+          />
+        </View>
+
+        {/* Right: Price & Percent Change */}
+        <View style={styles.rightSection}>
+          <AppText style={styles.priceText}>
+            {item.currency || '$'}
+            {(item.price ?? 0).toLocaleString('en-GB', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </AppText>
+          <AppText style={[styles.changeText, { color: trendColor }]}>
+            {isPositive ? '+' : '-'}
+            {Math.abs(item.changePercent ?? 0).toFixed(2)}%
           </AppText>
         </View>
-      </View>
-
-      {/* Middle: Sparkline Chart with smoothing 4 */}
-      <View style={styles.chartSection}>
-        <Sparkline
-          data={item.sparkline}
-          color={trendColor}
-          strokeWidth={2}
-          smoothing={4}
-        />
-      </View>
-
-      {/* Right: Price & Percent Change */}
-      <View style={styles.rightSection}>
-        <AppText style={styles.priceText}>
-          {item.currency || '$'}
-          {(item.price ?? 0).toLocaleString('en-GB', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
-        </AppText>
-        <AppText style={[styles.changeText, { color: trendColor }]}>
-          {isPositive ? '+' : '-'}
-          {Math.abs(item.changePercent ?? 0).toFixed(2)}%
-        </AppText>
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
@@ -75,6 +105,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: spacing.md,
     minHeight: 64,
+  },
+  dragHandle: {
+    paddingRight: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   leftSection: {
     flexDirection: 'row',

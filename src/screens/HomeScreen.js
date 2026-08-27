@@ -1,11 +1,15 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { View, StyleSheet, FlatList } from 'react-native';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { View, StyleSheet, Alert } from 'react-native';
+import DraggableFlatList from 'react-native-draggable-flatlist';
 import ScreenContainer from '../components/common/ScreenContainer';
 import WatchlistTabSelector from '../components/home/WatchlistTabSelector';
 import WatchlistItem from '../components/home/WatchlistItem';
+import SwipeableStockItem from '../components/home/SwipeableStockItem';
 import AppText from '../components/common/AppText';
+import TextInputModal from '../components/common/TextInputModal';
 import StockDetailModal from '../components/stock/StockDetailModal';
 import { mockWatchlists } from '../constants/mockData';
+import { storageService } from '../services/storageService';
 import { useTheme } from '../context/ThemeContext';
 import { useMarketData } from '../context/MarketDataContext';
 import { spacing } from '../constants/theme';
@@ -30,9 +34,38 @@ export default function HomeScreen() {
   );
   const [selectedStock, setSelectedStock] = useState(null);
   const [sparklines1D, setSparklines1D] = useState({});
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  // Text input modal state
+  const [inputModalVisible, setInputModalVisible] = useState(false);
+  const [inputModalTitle, setInputModalTitle] = useState('');
+  const [inputModalInitialValue, setInputModalInitialValue] = useState('');
+  const [inputModalAction, setInputModalAction] = useState(null); // 'add' | 'rename'
+  const [renameTargetId, setRenameTargetId] = useState(null);
+
+  // Track whether initial load from storage is complete
+  const hasLoadedFromStorage = useRef(false);
 
   // Track symbols already fetched in the current active watchlist
   const fetchedSparklinesRef = useRef(new Set());
+
+  // --- Persistence: Load watchlists from AsyncStorage on mount ---
+  useEffect(() => {
+    storageService.getStoredWatchlists().then((stored) => {
+      if (stored && Array.isArray(stored) && stored.length > 0) {
+        setWatchlists(stored);
+        setActiveWatchlistId(stored[0]?.id || 'watchlist-1');
+      }
+      hasLoadedFromStorage.current = true;
+    });
+  }, []);
+
+  // --- Persistence: Save watchlists to AsyncStorage on every change ---
+  useEffect(() => {
+    if (hasLoadedFromStorage.current) {
+      storageService.setStoredWatchlists(watchlists);
+    }
+  }, [watchlists]);
 
   // 1. Gather all unique symbols across all watchlists to subscribe in WebSocket pool
   const allUniqueSymbols = useMemo(() => {
@@ -102,6 +135,7 @@ export default function HomeScreen() {
     }
   }, [activeWatchlistId, hasValidKey, fetchQuote, fetchProfile, fetchHistoricalChart, activeWatchlist?.items]);
 
+  // --- Stock detail modal ---
   const handleOpenStockDetail = (item) => {
     setSelectedStock(item);
     setActiveModalSymbol(item.symbol);
@@ -112,27 +146,94 @@ export default function HomeScreen() {
     setActiveModalSymbol(null);
   };
 
-  const handleAddWatchlist = () => {
-    const newId = `watchlist-${watchlists.length + 1}`;
-    const newWatchlist = {
-      id: newId,
-      title: `${watchlists.length + 1}th watchlist`,
-      items: [
-        {
-          id: `stock-${Date.now()}`,
-          symbol: 'AMZN',
-          name: 'Amazon.com, Inc.',
-          price: 182.40,
-          changePercent: 0.94,
-          change: 1.70,
-          currency: '$',
-          sparkline: [179, 180, 181.5, 180.8, 182, 181.2, 182.40],
-        },
-      ],
-    };
-    setWatchlists((prev) => [...prev, newWatchlist]);
-    setActiveWatchlistId(newId);
-  };
+  // --- Edit Mode ---
+  const handleToggleEditMode = useCallback(() => {
+    setIsEditMode((prev) => !prev);
+  }, []);
+
+  // --- Watchlist CRUD ---
+  const handleAddWatchlist = useCallback(() => {
+    setInputModalTitle('New Watchlist');
+    setInputModalInitialValue('');
+    setInputModalAction('add');
+    setRenameTargetId(null);
+    setInputModalVisible(true);
+  }, []);
+
+  const handleRenameWatchlist = useCallback((id) => {
+    const wl = watchlists.find((w) => w.id === id);
+    if (!wl) return;
+    setInputModalTitle('Rename Watchlist');
+    setInputModalInitialValue(wl.title);
+    setInputModalAction('rename');
+    setRenameTargetId(id);
+    setInputModalVisible(true);
+  }, [watchlists]);
+
+  const handleInputModalSubmit = useCallback((text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    if (inputModalAction === 'add') {
+      const newId = `watchlist-${Date.now()}`;
+      const newWatchlist = {
+        id: newId,
+        title: trimmed,
+        items: [],
+      };
+      setWatchlists((prev) => [...prev, newWatchlist]);
+      setActiveWatchlistId(newId);
+    } else if (inputModalAction === 'rename' && renameTargetId) {
+      setWatchlists((prev) =>
+        prev.map((wl) =>
+          wl.id === renameTargetId ? { ...wl, title: trimmed } : wl
+        )
+      );
+    }
+
+    setInputModalVisible(false);
+  }, [inputModalAction, renameTargetId]);
+
+  const handleInputModalCancel = useCallback(() => {
+    setInputModalVisible(false);
+  }, []);
+
+  const handleDeleteWatchlist = useCallback((id) => {
+    setWatchlists((prev) => {
+      if (prev.length <= 1) return prev;
+      const filtered = prev.filter((wl) => wl.id !== id);
+      // If deleting the active watchlist, select the nearest one
+      if (id === activeWatchlistId && filtered.length > 0) {
+        setActiveWatchlistId(filtered[0].id);
+      }
+      return filtered;
+    });
+  }, [activeWatchlistId]);
+
+  const handleReorderWatchlists = useCallback((reordered) => {
+    setWatchlists(reordered);
+  }, []);
+
+  // --- Stock CRUD ---
+  const handleDeleteStock = useCallback((stockId) => {
+    setWatchlists((prev) =>
+      prev.map((wl) =>
+        wl.id === activeWatchlistId
+          ? { ...wl, items: wl.items.filter((item) => item.id !== stockId) }
+          : wl
+      )
+    );
+  }, [activeWatchlistId]);
+
+  const handleReorderStocks = useCallback((reorderedItems) => {
+    setWatchlists((prev) =>
+      prev.map((wl) =>
+        wl.id === activeWatchlistId
+          ? { ...wl, items: reorderedItems }
+          : wl
+      )
+    );
+  }, [activeWatchlistId]);
 
   // Merge dynamic quotes, 1D historical candles, and profiles into items
   const displayItems = useMemo(() => {
@@ -204,8 +305,34 @@ export default function HomeScreen() {
     });
   }, [activeWatchlist, quotes, profiles, sparklines1D, marketStatus]);
 
+  const renderStockItem = useCallback(({ item, drag, isActive }) => {
+    const stockContent = (
+      <WatchlistItem
+        item={item}
+        onPress={() => handleOpenStockDetail(item)}
+        isEditMode={isEditMode}
+        drag={drag}
+      />
+    );
+
+    return (
+      <SwipeableStockItem
+        itemId={item.id}
+        onDelete={() => handleDeleteStock(item.id)}
+      >
+        {stockContent}
+      </SwipeableStockItem>
+    );
+  }, [isEditMode, handleDeleteStock]);
+
   return (
-    <ScreenContainer title="Home" showSettingsButton={true}>
+    <ScreenContainer
+      title="Home"
+      showSettingsButton={true}
+      showEditButton={true}
+      isEditMode={isEditMode}
+      onEditPress={handleToggleEditMode}
+    >
       <View style={styles.container}>
         {/* Watchlist Horizontal Drag Selector with Gradient Fades */}
         <WatchlistTabSelector
@@ -213,18 +340,19 @@ export default function HomeScreen() {
           activeWatchlistId={activeWatchlistId}
           onSelectWatchlist={setActiveWatchlistId}
           onAddWatchlist={handleAddWatchlist}
+          isEditMode={isEditMode}
+          onReorderWatchlists={handleReorderWatchlists}
+          onDeleteWatchlist={handleDeleteWatchlist}
+          onRenameWatchlist={handleRenameWatchlist}
         />
 
-        {/* Stock Items List */}
-        <FlatList
+        {/* Stock Items List (Draggable in edit mode) */}
+        <DraggableFlatList
           data={displayItems}
           keyExtractor={(item) => item.id || item.symbol}
-          renderItem={({ item }) => (
-            <WatchlistItem
-              item={item}
-              onPress={() => handleOpenStockDetail(item)}
-            />
-          )}
+          renderItem={renderStockItem}
+          onDragEnd={({ data }) => handleReorderStocks(data)}
+          activationDistance={isEditMode ? 0 : 999}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
@@ -257,6 +385,16 @@ export default function HomeScreen() {
               : null
           }
           onClose={handleCloseStockDetail}
+        />
+
+        {/* Text Input Modal for Add / Rename */}
+        <TextInputModal
+          visible={inputModalVisible}
+          title={inputModalTitle}
+          placeholder="Enter watchlist name"
+          initialValue={inputModalInitialValue}
+          onSubmit={handleInputModalSubmit}
+          onCancel={handleInputModalCancel}
         />
       </View>
     </ScreenContainer>

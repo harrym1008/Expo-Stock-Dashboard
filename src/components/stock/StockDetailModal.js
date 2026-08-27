@@ -16,7 +16,7 @@ import { spacing, borderRadius } from '../../constants/theme';
 import { formatTimeAgo } from '../../utils/formatTimeAgo';
 import { storageService } from '../../services/storageService';
 import AppText from '../common/AppText';
-import Sparkline from '../home/Sparkline';
+import StockInteractiveChart from './StockInteractiveChart';
 import MarketCalendarModal from '../common/MarketCalendarModal';
 import CompanyLogo from '../common/CompanyLogo';
 
@@ -48,6 +48,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   const [isFavorite, setIsFavorite] = useState(false);
   const [selectedTimeframe, setSelectedTimeframe] = useState('1D');
   const [chartData, setChartData] = useState(null);
+  const [scrubData, setScrubData] = useState(null);
   const [isInitialStockLoading, setIsInitialStockLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
   const [timeAgoText, setTimeAgoText] = useState('just now');
@@ -61,6 +62,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     setImageError(false);
     latestExtendedPriceRef.current = null;
     setChartData(null);
+    setScrubData(null);
     setIsInitialStockLoading(true);
 
     if (stock?.symbol) {
@@ -73,6 +75,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   // Handle user timeframe selection & persist preference without flashing full-screen loader
   const handleSelectTimeframe = (tf) => {
     if (tf === selectedTimeframe) return;
+    setScrubData(null);
     setSelectedTimeframe(tf);
     if (stock?.symbol) {
       const sym = stock.symbol.toUpperCase();
@@ -172,11 +175,37 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     ? (liveWsPrice ?? stock.price ?? chartData?.currentPrice ?? regularClosePrice)
     : regularClosePrice;
 
-  const effectiveChange = chartData?.priceChange ?? stock.change ?? 0;
-  const effectiveChangePercent = chartData?.priceChangePercent ?? stock.changePercent ?? 0;
+  // Base comparison for timeframe return calculation
+  const baseComparison =
+    activeDisplayedTimeframe === '1D'
+      ? (chartData?.previousClose || stock.previousClose || regularClosePrice)
+      : (chartData?.startPrice || chartData?.sparkline?.[0] || stock.sparkline?.[0] || regularClosePrice);
 
-  const isTimeframePositive = (effectiveChange ?? 0) >= 0;
-  const timeframeTrendColor = isTimeframePositive ? '#00D084' : '#FF4D4F';
+  const displayedMainPrice = scrubData ? scrubData.current.price : leftPrice;
+  const periodChange = chartData?.priceChange ?? stock.change ?? (leftPrice - baseComparison);
+  const periodChangePercent =
+    baseComparison !== 0
+      ? (periodChange / baseComparison) * 100
+      : (chartData?.priceChangePercent ?? stock.changePercent ?? 0);
+
+  // The overall timeframe trend color stays stable based on period return (does not recolor on scrub)
+  const isPeriodPositive = (periodChange ?? 0) >= 0;
+  const timeframeTrendColor = isPeriodPositive ? '#00D084' : '#FF4D4F';
+
+  // Immediate candle-over-candle change from previous point when scrubbing (no suffix)
+  let scrubDelta = 0;
+  let scrubDeltaPercent = 0;
+  let isScrubPositive = true;
+
+  if (scrubData) {
+    const currP = scrubData.current.price;
+    const prevP = scrubData.prev ? scrubData.prev.price : currP;
+    scrubDelta = currP - prevP;
+    scrubDeltaPercent = prevP !== 0 ? (scrubDelta / prevP) * 100 : 0;
+    isScrubPositive = scrubDelta >= 0;
+  }
+
+  const scrubTrendColor = isScrubPositive ? '#00D084' : '#FF4D4F';
 
   // Dynamic suffix matches the active displayed timeframe
   const timeframeSuffix =
@@ -208,7 +237,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     outOfHoursChangeVal
   ).toFixed(2)} (${Math.abs(outOfHoursChangePercentVal).toFixed(2)}%) since close`;
 
-  // 3. Dynamic Sparkline: Always overlays the live active price onto the endmost point
+  // 3. Dynamic Sparkline & Chart Points: Always overlays the live active price onto the endmost point
   const baseSparklineData = chartData?.sparkline || stock.sparkline || [];
   const activeEndPrice = marketStatus.isOpen ? leftPrice : outOfHoursPriceVal;
 
@@ -217,15 +246,16 @@ export default function StockDetailModal({ visible, stock, onClose }) {
       ? [...baseSparklineData.slice(0, -1), activeEndPrice]
       : baseSparklineData;
 
-  // Dynamic Y-Axis scale calculation based on real chart prices including live tick
-  const minP = chartData && sparklineData.length > 0
-    ? Math.min(chartData.minPrice ?? activeEndPrice, ...sparklineData)
-    : 0;
-  const maxP = chartData && sparklineData.length > 0
-    ? Math.max(chartData.maxPrice ?? activeEndPrice, ...sparklineData)
-    : 100;
-  const step = (maxP - minP) / 7 || 5;
-  const yLabels = Array.from({ length: 8 }, (_, i) => (maxP - i * step).toFixed(2));
+  const chartPointsWithLiveOverlay =
+    chartData?.points && chartData.points.length > 0 && typeof activeEndPrice === 'number'
+      ? [
+          ...chartData.points.slice(0, -1),
+          {
+            ...chartData.points[chartData.points.length - 1],
+            price: activeEndPrice,
+          },
+        ]
+      : chartData?.points || [];
 
   const placeholderLogoUri = `https://placehold.co/128x128/FFFFFF/000000.png?text=${encodeURIComponent(
     stock.symbol || 'ST'
@@ -317,7 +347,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
 
               {/* 2. Price & Market Status Row (Adaptive Dual Column) */}
               <View style={styles.priceRow}>
-                {/* Left: Official Regular Session Price (Fixed when Market Closed) */}
+                {/* Left: Official Regular Session Price (or Scrubbed Candle Price) */}
                 <View
                   style={
                     marketStatus.isOpen
@@ -327,20 +357,32 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 >
                   <AppText style={styles.mainPriceText}>
                     {stock.currency || '$'}
-                    {leftPrice.toLocaleString(undefined, {
+                    {displayedMainPrice.toLocaleString(undefined, {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
                   </AppText>
-                  <AppText style={[styles.changeText, { color: timeframeTrendColor }]}>
-                    {isTimeframePositive ? '+' : '-'}
-                    {stock.currency || '$'}
-                    {Math.abs(effectiveChange).toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}{' '}
-                    ({Math.abs(effectiveChangePercent).toFixed(2)}%) {timeframeSuffix}
-                  </AppText>
+                  {scrubData ? (
+                    <AppText style={[styles.changeText, { color: scrubTrendColor }]}>
+                      {isScrubPositive ? '+' : '-'}
+                      {stock.currency || '$'}
+                      {Math.abs(scrubDelta).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{' '}
+                      ({Math.abs(scrubDeltaPercent).toFixed(2)}%)
+                    </AppText>
+                  ) : (
+                    <AppText style={[styles.changeText, { color: timeframeTrendColor }]}>
+                      {isPeriodPositive ? '+' : '-'}
+                      {stock.currency || '$'}
+                      {Math.abs(periodChange).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}{' '}
+                      ({Math.abs(periodChangePercent).toFixed(2)}%) {timeframeSuffix}
+                    </AppText>
+                  )}
                 </View>
 
                 {/* Right: Extended Session or Market Open Indicator (Tap to open Market Calendar) */}
@@ -381,44 +423,22 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 </TouchableOpacity>
               </View>
 
-              {/* 3. Real Timeframe Chart Area */}
+              {/* 3. Real Timeframe Interactive Chart Area */}
               <View style={[styles.chartContainer, { backgroundColor: isDark ? '#050608' : '#F9FAFC' }]}>
                 {isInitialStockLoading || !chartData || chartData.symbol !== cleanSymbol || !Array.isArray(sparklineData) || sparklineData.length === 0 ? (
                   <View style={styles.chartLoadingContainer}>
                     <ActivityIndicator size="large" color={theme.primary} />
                   </View>
                 ) : (
-                  <>
-                    <View style={styles.chartInner}>
-                      <Sparkline
-                        data={sparklineData}
-                        color={timeframeTrendColor}
-                        strokeWidth={2.5}
-                        style={styles.chartSparkline}
-                      />
-
-                      {/* Horizontal Reference Line with Cyan Price Tag */}
-                      <View style={[styles.referenceLine, { borderColor: '#00A3FF' }]}>
-                        <View style={styles.priceTagBadge}>
-                          <AppText bold style={styles.priceTagText}>
-                            {activeEndPrice.toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </AppText>
-                        </View>
-                      </View>
-                    </View>
-
-                    {/* Right-hand Y-Axis Price Labels */}
-                    <View style={styles.yAxisLabels}>
-                      {yLabels.map((priceStr, idx) => (
-                        <AppText key={idx} style={[styles.yAxisText, { color: theme.textMuted }]}>
-                          {priceStr}
-                        </AppText>
-                      ))}
-                    </View>
-                  </>
+                  <StockInteractiveChart
+                    points={chartPointsWithLiveOverlay.length > 0 ? chartPointsWithLiveOverlay : chartData.points}
+                    sparkline={sparklineData}
+                    timeframe={activeDisplayedTimeframe}
+                    color={timeframeTrendColor}
+                    currency={stock.currency || '$'}
+                    onScrub={(curr, prev) => setScrubData({ current: curr, prev })}
+                    onScrubEnd={() => setScrubData(null)}
+                  />
                 )}
               </View>
 
@@ -639,7 +659,6 @@ const styles = StyleSheet.create({
   chartContainer: {
     height: 240,
     borderRadius: borderRadius.md,
-    flexDirection: 'row',
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.05)',
@@ -649,49 +668,6 @@ const styles = StyleSheet.create({
     height: 240,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  chartInner: {
-    flex: 1,
-    justifyContent: 'center',
-    position: 'relative',
-    paddingVertical: spacing.md,
-  },
-  chartSparkline: {
-    flex: 1,
-    width: '100%',
-  },
-  referenceLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: '55%',
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  priceTagBadge: {
-    backgroundColor: '#00A3FF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginTop: -10,
-    marginRight: 4,
-  },
-  priceTagText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-  },
-  yAxisLabels: {
-    width: 52,
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    paddingVertical: spacing.sm,
-    paddingRight: spacing.sm,
-    borderLeftWidth: 1,
-    borderLeftColor: 'rgba(255, 255, 255, 0.04)',
-  },
-  yAxisText: {
-    fontSize: 10,
   },
   timeframeRow: {
     flexDirection: 'row',

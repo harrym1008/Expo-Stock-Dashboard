@@ -1,4 +1,8 @@
 import { registerRootComponent } from 'expo';
+import { LogBox } from 'react-native';
+
+// Suppress deprecation warning from react-native-draggable-flatlist internals
+LogBox.ignoreLogs(['InteractionManager']);
 
 import App from './App';
 

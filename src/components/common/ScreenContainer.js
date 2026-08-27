@@ -12,6 +12,9 @@ export default function ScreenContainer({
   children,
   scrollable = false,
   showSettingsButton = false,
+  showEditButton = false,
+  isEditMode = false,
+  onEditPress,
 }) {
   const { theme } = useTheme();
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -23,17 +26,35 @@ export default function ScreenContainer({
           {title}
         </AppText>
 
-        {showSettingsButton && (
-          <TouchableOpacity
-            style={styles.settingsBtn}
-            onPress={() => setSettingsVisible(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Open Settings"
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="settings-outline" size={24} color={theme.textPrimary} />
-          </TouchableOpacity>
-        )}
+        <View style={styles.headerActions}>
+          {showEditButton && (
+            <TouchableOpacity
+              style={styles.headerBtn}
+              onPress={onEditPress}
+              accessibilityRole="button"
+              accessibilityLabel={isEditMode ? 'Exit edit mode' : 'Enter edit mode'}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons
+                name="create-outline"
+                size={24}
+                color={isEditMode ? theme.primary : theme.textPrimary}
+              />
+            </TouchableOpacity>
+          )}
+
+          {showSettingsButton && (
+            <TouchableOpacity
+              style={styles.headerBtn}
+              onPress={() => setSettingsVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Open Settings"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="settings-outline" size={24} color={theme.textPrimary} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <View style={styles.body}>{children}</View>
@@ -92,8 +113,14 @@ const styles = StyleSheet.create({
     fontSize: 24,
     letterSpacing: 0.9,
   },
-  settingsBtn: {
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  headerBtn: {
     padding: spacing.xs,
+    paddingLeft: spacing.xs * 3,
     alignItems: 'center',
     justifyContent: 'center',
   },
