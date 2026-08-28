@@ -4,7 +4,7 @@ const STATIC_LOGO_BASE = 'https://static9.finnhub.io/file/publicdatany/finnhubim
 
 class LogoService {
   constructor() {
-    this.memoryCache = new Map(); // Symbol -> localFilePath
+    this.memoryCache = new Map(); // Symbol -> data URI
     this.inFlight = new Map();
     this.listeners = new Map();
   }
@@ -70,13 +70,13 @@ class LogoService {
       return this.memoryCache.get(sym);
     }
 
-    // 2. Check Disk Cache (if no fresh profile override URL supplied)
+    // 2. Check the persisted single-file cache (if no fresh profile override URL supplied)
     if (!hasProfileUrl) {
-      const diskPath = await persistentLruCache.getCachedLogo(sym);
-      if (diskPath) {
-        this.memoryCache.set(sym, diskPath);
-        this.notify(sym, diskPath);
-        return diskPath;
+      const dataUri = await persistentLruCache.getCachedLogo(sym);
+      if (dataUri) {
+        this.memoryCache.set(sym, dataUri);
+        this.notify(sym, dataUri);
+        return dataUri;
       }
     }
 
@@ -91,22 +91,22 @@ class LogoService {
         // Priority 1: Profile URL if supplied
         if (hasProfileUrl) {
           console.log(`[LogoService] 🥇 Prioritising profile logo for ${sym}: ${overrideUrl}`);
-          const profileLocalPath = await persistentLruCache.getOrCacheImage(overrideUrl, sym);
-          if (profileLocalPath) {
-            this.memoryCache.set(sym, profileLocalPath);
-            this.notify(sym, profileLocalPath);
-            return profileLocalPath;
+          const profileDataUri = await persistentLruCache.getOrCacheImage(overrideUrl, sym);
+          if (profileDataUri) {
+            this.memoryCache.set(sym, profileDataUri);
+            this.notify(sym, profileDataUri);
+            return profileDataUri;
           }
         }
 
         // Priority 2: Common static Finnhub CDN URL
         const staticUrl = this.getStaticUrl(sym);
         console.log(`[LogoService] 🥈 Checking static CDN for ${sym}: ${staticUrl}`);
-        const staticLocalPath = await persistentLruCache.getOrCacheImage(staticUrl, sym);
-        if (staticLocalPath) {
-          this.memoryCache.set(sym, staticLocalPath);
-          this.notify(sym, staticLocalPath);
-          return staticLocalPath;
+        const staticDataUri = await persistentLruCache.getOrCacheImage(staticUrl, sym);
+        if (staticDataUri) {
+          this.memoryCache.set(sym, staticDataUri);
+          this.notify(sym, staticDataUri);
+          return staticDataUri;
         }
 
         // Priority 3: Fallback to placehold.co (do NOT cache)
@@ -130,11 +130,11 @@ class LogoService {
     const sym = symbol.trim().toUpperCase();
 
     console.log(`[LogoService] 👑 Profile logo override for ${sym}: ${profileUrl}`);
-    const localPath = await persistentLruCache.getOrCacheImage(profileUrl, sym);
-    if (localPath) {
-      this.memoryCache.set(sym, localPath);
-      this.notify(sym, localPath);
-      return localPath;
+    const dataUri = await persistentLruCache.getOrCacheImage(profileUrl, sym);
+    if (dataUri) {
+      this.memoryCache.set(sym, dataUri);
+      this.notify(sym, dataUri);
+      return dataUri;
     }
     return null;
   }

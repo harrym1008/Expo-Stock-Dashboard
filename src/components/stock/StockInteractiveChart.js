@@ -91,14 +91,7 @@ export function formatCandleDate(timestamp, timeframe = '1D') {
   const date = new Date(timestamp);
   if (isNaN(date.getTime())) return '';
 
-  if (timeframe === '1H') {
-    return date.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-  }
-  if (timeframe === '1D') {
+  if (timeframe === '1H' || timeframe === '1D') {
     return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
@@ -246,7 +239,6 @@ export default function StockInteractiveChart({
   sparkline = [],
   timeframe = '1D',
   color = '#00D084',
-  currency = '$',
   onScrub,
   onScrubEnd,
   style,

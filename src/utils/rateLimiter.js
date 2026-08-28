@@ -2,10 +2,9 @@
  * Sliding window async queue rate limiter supporting both per-second and per-minute constraints.
  */
 export class RateLimiter {
-  constructor({ maxPerSecond, maxPerMinute, name = 'RateLimiter' }) {
+  constructor({ maxPerSecond, maxPerMinute }) {
     this.maxPerSecond = maxPerSecond;
     this.maxPerMinute = maxPerMinute;
-    this.name = name;
     this.queue = [];
     this.secondTimestamps = [];
     this.minuteTimestamps = [];
@@ -72,12 +71,10 @@ export class RateLimiter {
 export const finnhubRateLimiter = new RateLimiter({
   maxPerSecond: 10,
   maxPerMinute: 60,
-  name: 'Finnhub',
 });
 
 // 2. Yahoo Finance: 100/min, 10/sec
 export const yahooRateLimiter = new RateLimiter({
   maxPerSecond: 10,
   maxPerMinute: 100,
-  name: 'YahooFinance',
 });

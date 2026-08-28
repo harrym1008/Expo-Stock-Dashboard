@@ -1,318 +1,304 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import * as SQLite from 'expo-sqlite';
+import * as ImageManipulator from 'expo-image-manipulator';
 
-const MAX_CACHE_BYTES = 128 * 1024 * 1024; // 128 Megabytes
-const DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 Days (1 Month)
+const MAX_CACHE_BYTES = 50 * 1024 * 1024;
+const CACHE_MAX_MB = MAX_CACHE_BYTES / (1024 * 1024);
+const DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const LOGO_SIZE = 128;
+const DATABASE_NAME = 'stock_cache.db';
 
-const CACHE_DIR = `${FileSystem.documentDirectory || ''}stock_lru_cache/`;
-const MANIFEST_FILE = `${CACHE_DIR}manifest.json`;
+const STORAGE_ROOT = FileSystem.documentDirectory || FileSystem.cacheDirectory || '';
+const LEGACY_CACHE_FILE = `${STORAGE_ROOT}stock_lru_cache.json`;
+const LEGACY_CACHE_DIR = `${STORAGE_ROOT}stock_lru_cache/`;
 
-function getByteSize(str) {
-  if (!str) return 0;
+function getByteSize(value) {
+  if (!value) return 0;
   try {
-    return encodeURI(str).split(/%..|./).length - 1;
+    return encodeURI(value).split(/%..|./).length - 1;
   } catch (e) {
-    return str.length * 2;
+    return value.length * 2;
   }
 }
 
 class PersistentLruCache {
   constructor() {
-    this.initialized = false;
-    this.manifest = {
-      totalBytes: 0,
-      items: {}, // key -> { filename, byteSize, lastAccessed, timestamp, ttl, type }
-    };
-    this.initPromise = null;
+    this.db = null;
+    this.dbPromise = null;
+    this.operationPromise = Promise.resolve();
+  }
+
+  run(operation) {
+    const next = this.operationPromise.then(operation, operation);
+    this.operationPromise = next.catch(() => {});
+    return next;
   }
 
   async init() {
-    if (this.initialized) return;
-    if (this.initPromise) return this.initPromise;
+    if (this.db) return this.db;
+    if (this.dbPromise) return this.dbPromise;
 
-    this.initPromise = (async () => {
-      try {
-        const dirInfo = await FileSystem.getInfoAsync(CACHE_DIR);
-        if (!dirInfo.exists) {
-          await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
-        }
+    this.dbPromise = (async () => {
+      const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS cache_entries (
+          key TEXT PRIMARY KEY NOT NULL,
+          value TEXT NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          last_accessed INTEGER NOT NULL,
+          created_at INTEGER NOT NULL,
+          ttl_ms INTEGER NOT NULL,
+          type TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS cache_entries_lru
+          ON cache_entries (last_accessed);
+      `);
 
-        const manifestInfo = await FileSystem.getInfoAsync(MANIFEST_FILE);
-        if (manifestInfo.exists) {
-          const raw = await FileSystem.readAsStringAsync(MANIFEST_FILE);
-          this.manifest = JSON.parse(raw);
-        } else {
-          this.manifest = { totalBytes: 0, items: {} };
-          await this.saveManifest();
-        }
+      await db.runAsync(
+        'DELETE FROM cache_entries WHERE created_at + ttl_ms <= ?',
+        Date.now()
+      );
 
-        // Clean up expired items on startup
-        await this.purgeExpired();
-
-        const count = Object.keys(this.manifest.items).length;
-        const mb = (this.manifest.totalBytes / (1024 * 1024)).toFixed(2);
-        console.log(`[PersistentLRU] 🚀 Ready | Usage: ${mb} MB / 128 MB (${count} items stored)`);
-      } catch (err) {
-        console.warn('[PersistentLRU] Initialization warning:', err.message || err);
-        this.manifest = { totalBytes: 0, items: {} };
-      } finally {
-        this.initialized = true;
-      }
+      this.db = db;
+      await this.removeLegacyCacheFiles();
+      return db;
     })();
 
-    return this.initPromise;
+    return this.dbPromise;
   }
 
-  async saveManifest() {
-    try {
-      await FileSystem.writeAsStringAsync(
-        MANIFEST_FILE,
-        JSON.stringify(this.manifest)
+  async removeLegacyCacheFiles() {
+    for (const path of [LEGACY_CACHE_FILE, LEGACY_CACHE_DIR]) {
+      try {
+        const info = await FileSystem.getInfoAsync(path);
+        if (info.exists) {
+          await FileSystem.deleteAsync(path, { idempotent: true });
+          console.log(`[PersistentLRU] Removed legacy cache path: ${path}`);
+        }
+      } catch (err) {
+        console.warn('[PersistentLRU] Failed to remove legacy cache path:', err.message || err);
+      }
+    }
+  }
+
+  async getTotalBytes(db) {
+    const row = await db.getFirstAsync(
+      'SELECT COALESCE(SUM(size_bytes), 0) AS total_bytes FROM cache_entries'
+    );
+    return row?.total_bytes || 0;
+  }
+
+  async evictToFit(db, requiredBytes) {
+    let totalBytes = await this.getTotalBytes(db);
+    while (totalBytes + requiredBytes > MAX_CACHE_BYTES) {
+      const oldest = await db.getFirstAsync(
+        'SELECT key, size_bytes FROM cache_entries ORDER BY last_accessed ASC LIMIT 1'
       );
-    } catch (err) {
-      console.warn('[PersistentLRU] Failed to write manifest:', err.message || err);
+      if (!oldest) break;
+
+      await db.runAsync('DELETE FROM cache_entries WHERE key = ?', oldest.key);
+      totalBytes = Math.max(0, totalBytes - oldest.size_bytes);
     }
   }
-
-  async purgeExpired() {
-    const now = Date.now();
-    const keys = Object.keys(this.manifest.items);
-    let changed = false;
-
-    for (const key of keys) {
-      const item = this.manifest.items[key];
-      if (item && now - item.timestamp > (item.ttl || DEFAULT_TTL_MS)) {
-        console.log(`[PersistentLRU] 🧹 Purged expired item: "${key}" (exceeded 30-day TTL)`);
-        await this.removeItem(key, false);
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      await this.saveManifest();
-    }
-  }
-
-  async removeItem(key, save = true) {
-    const item = this.manifest.items[key];
-    if (!item) return;
-
-    try {
-      const filePath = `${CACHE_DIR}${item.filename}`;
-      const info = await FileSystem.getInfoAsync(filePath);
-      if (info.exists) {
-        await FileSystem.deleteAsync(filePath, { idempotent: true });
-      }
-    } catch (e) {}
-
-    this.manifest.totalBytes = Math.max(0, this.manifest.totalBytes - (item.byteSize || 0));
-    delete this.manifest.items[key];
-
-    if (save) {
-      await this.saveManifest();
-    }
-  }
-
-  async evictToFit(requiredBytes) {
-    if (this.manifest.totalBytes + requiredBytes <= MAX_CACHE_BYTES) {
-      return;
-    }
-
-    // Sort items by lastAccessed ascending (LRU first)
-    const sortedKeys = Object.keys(this.manifest.items).sort((a, b) => {
-      const itemA = this.manifest.items[a];
-      const itemB = this.manifest.items[b];
-      return (itemA.lastAccessed || 0) - (itemB.lastAccessed || 0);
-    });
-
-    for (const key of sortedKeys) {
-      if (this.manifest.totalBytes + requiredBytes <= MAX_CACHE_BYTES) {
-        break;
-      }
-      console.log(`[PersistentLRU] ⚠️ LRU Evicting: "${key}" to preserve 128MB budget`);
-      await this.removeItem(key, false);
-    }
-
-    await this.saveManifest();
-  }
-
-  // --- JSON Data Caching (e.g. Company Profiles, Candle Charts) ---
 
   async getJson(key) {
-    await this.init();
-    const item = this.manifest.items[key];
-    if (!item) {
-      console.log(`[PersistentLRU] 💨 Cache MISS (JSON): "${key}"`);
-      return null;
-    }
+    return this.run(async () => {
+      const db = await this.init();
+      const item = await db.getFirstAsync(
+        'SELECT value, created_at, ttl_ms, type FROM cache_entries WHERE key = ?',
+        key
+      );
+      if (!item || item.type !== 'json') return null;
 
-    const now = Date.now();
-    if (now - item.timestamp > (item.ttl || DEFAULT_TTL_MS)) {
-      console.log(`[PersistentLRU] ⌛ Cache EXPIRED (JSON): "${key}"`);
-      await this.removeItem(key);
-      return null;
-    }
+      const now = Date.now();
+      if (now - item.created_at > (item.ttl_ms || DEFAULT_TTL_MS)) {
+        await db.runAsync('DELETE FROM cache_entries WHERE key = ?', key);
+        return null;
+      }
 
-    try {
-      item.lastAccessed = now;
-      this.saveManifest();
-
-      const filePath = `${CACHE_DIR}${item.filename}`;
-      const raw = await FileSystem.readAsStringAsync(filePath);
-      console.log(`[PersistentLRU] 🎯 Cache HIT (JSON): "${key}" (Saved external network query)`);
-      return JSON.parse(raw);
-    } catch (err) {
-      await this.removeItem(key);
-      return null;
-    }
+      try {
+        await db.runAsync(
+          'UPDATE cache_entries SET last_accessed = ? WHERE key = ?',
+          now,
+          key
+        );
+        return JSON.parse(item.value);
+      } catch (err) {
+        await db.runAsync('DELETE FROM cache_entries WHERE key = ?', key);
+        return null;
+      }
+    });
   }
 
   async setJson(key, data, ttl = DEFAULT_TTL_MS) {
-    await this.init();
-    try {
-      const content = JSON.stringify(data);
-      const byteSize = getByteSize(content);
-      const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const filename = `json_${safeKey}_${Date.now()}.json`;
-      const filePath = `${CACHE_DIR}${filename}`;
+    return this.run(async () => {
+      const db = await this.init();
+      const value = JSON.stringify(data);
+      if (typeof value !== 'string') return;
 
-      await this.evictToFit(byteSize);
-      await FileSystem.writeAsStringAsync(filePath, content);
+      const byteSize = getByteSize(value);
+      if (byteSize > MAX_CACHE_BYTES) return;
 
-      if (this.manifest.items[key]) {
-        await this.removeItem(key, false);
-      }
+      await db.runAsync('DELETE FROM cache_entries WHERE key = ?', key);
+      await this.evictToFit(db, byteSize);
 
-      this.manifest.items[key] = {
-        filename,
+      const now = Date.now();
+      await db.runAsync(
+        `INSERT INTO cache_entries
+          (key, value, size_bytes, last_accessed, created_at, ttl_ms, type)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        key,
+        value,
         byteSize,
-        lastAccessed: Date.now(),
-        timestamp: Date.now(),
+        now,
+        now,
         ttl,
-        type: 'json',
-      };
-      this.manifest.totalBytes += byteSize;
-
-      await this.saveManifest();
-      const mb = (this.manifest.totalBytes / (1024 * 1024)).toFixed(2);
-      console.log(`[PersistentLRU] 💾 Cached JSON: "${key}" (${byteSize} bytes | Total Cache: ${mb} MB)`);
-    } catch (err) {
-      console.warn(`[PersistentLRU] Failed to cache JSON for ${key}:`, err.message || err);
-    }
+        'json'
+      );
+    });
   }
-
-  // --- Image / Logo File Caching (128x128 Logos) ---
 
   async getCachedLogo(symbol) {
     if (!symbol) return null;
-    await this.init();
 
-    const cleanSym = symbol.toUpperCase();
-    const cacheKey = `logo_${cleanSym}`;
-    const item = this.manifest.items[cacheKey];
-    if (!item) return null;
+    return this.run(async () => {
+      const db = await this.init();
+      const key = `logo_${symbol.toUpperCase()}`;
+      const item = await db.getFirstAsync(
+        'SELECT value, created_at, ttl_ms, type FROM cache_entries WHERE key = ?',
+        key
+      );
+      if (!item || item.type !== 'logo') return null;
 
-    const filePath = `${CACHE_DIR}${item.filename}`;
-    const now = Date.now();
-    if (now - item.timestamp < (item.ttl || DEFAULT_TTL_MS)) {
-      item.lastAccessed = now;
-      this.saveManifest();
-      return filePath;
-    } else {
-      await this.removeItem(cacheKey);
-      return null;
-    }
+      const now = Date.now();
+      if (now - item.created_at > (item.ttl_ms || DEFAULT_TTL_MS)) {
+        await db.runAsync('DELETE FROM cache_entries WHERE key = ?', key);
+        return null;
+      }
+
+      await db.runAsync(
+        'UPDATE cache_entries SET last_accessed = ? WHERE key = ?',
+        now,
+        key
+      );
+      return item.value;
+    });
+  }
+
+  async cacheLogoData(symbol, dataUri) {
+    if (!symbol || !dataUri) return false;
+
+    return this.run(async () => {
+      const db = await this.init();
+      const key = `logo_${symbol.toUpperCase()}`;
+      const byteSize = getByteSize(dataUri);
+      if (byteSize > MAX_CACHE_BYTES) return false;
+
+      await db.runAsync('DELETE FROM cache_entries WHERE key = ?', key);
+      await this.evictToFit(db, byteSize);
+
+      const now = Date.now();
+      await db.runAsync(
+        `INSERT INTO cache_entries
+          (key, value, size_bytes, last_accessed, created_at, ttl_ms, type)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        key,
+        dataUri,
+        byteSize,
+        now,
+        now,
+        DEFAULT_TTL_MS,
+        'logo'
+      );
+      return true;
+    });
+  }
+
+  async resizeAndEncodeImage(uri) {
+    const result = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: LOGO_SIZE, height: LOGO_SIZE } }],
+      {
+        base64: true,
+        compress: 1,
+        format: ImageManipulator.SaveFormat.PNG,
+      }
+    );
+
+    return result.base64
+      ? { dataUri: `data:image/png;base64,${result.base64}`, uri: result.uri }
+      : null;
   }
 
   async getOrCacheImage(remoteUrl, symbol) {
     if (!remoteUrl || remoteUrl.includes('placehold.co')) return null;
-    await this.init();
 
     const cleanSym = (symbol || '').toUpperCase();
-    const cacheKey = `logo_${cleanSym}`;
-
-    // 1. Check if already cached by symbol
     const existing = await this.getCachedLogo(cleanSym);
-    if (existing) {
-      console.log(`[PersistentLRU] 🎯 Cache HIT (Logo): "${cleanSym}" -> Local Disk`);
-      return existing;
-    }
+    if (existing) return existing;
 
-    // 2. If remoteUrl is already a local file path, check and return
-    if (remoteUrl.startsWith('file://') || remoteUrl.startsWith('/')) {
-      try {
-        const info = await FileSystem.getInfoAsync(remoteUrl);
-        if (info.exists) {
-          return remoteUrl;
-        }
-      } catch (e) {}
-      return null;
-    }
+    let sourceUri = remoteUrl;
+    let temporaryUri = null;
+    let resizedUri = null;
 
-    // 3. Download from remote URL
     try {
-      console.log(`[PersistentLRU] 📥 Downloading logo: "${cleanSym}" from ${remoteUrl}`);
-      const extMatch = remoteUrl.match(/\.(png|jpg|jpeg|svg|webp)/i);
-      const ext = extMatch ? extMatch[1] : 'png';
-      const safeSym = cleanSym.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const filename = `img_${safeSym.toLowerCase()}_${Date.now()}.${ext}`;
-      const targetPath = `${CACHE_DIR}${filename}`;
-
-      const downloadResult = await FileSystem.downloadAsync(remoteUrl, targetPath);
-      if (downloadResult.status !== 200) {
-        console.log(`[PersistentLRU] ℹ️ Remote logo returned HTTP ${downloadResult.status} for ${cleanSym} (Not cached)`);
-        try {
-          await FileSystem.deleteAsync(targetPath, { idempotent: true });
-        } catch (e) {}
-        return null;
+      if (!remoteUrl.startsWith('data:image/')) {
+        if (remoteUrl.startsWith('file://') || remoteUrl.startsWith('/')) {
+          const info = await FileSystem.getInfoAsync(remoteUrl);
+          if (!info.exists) return null;
+        } else {
+          const safeSym = cleanSym.replace(/[^a-zA-Z0-9_-]/g, '_');
+          const temporaryName = `logo_${safeSym.toLowerCase()}_${Date.now()}.png`;
+          temporaryUri = `${FileSystem.cacheDirectory || FileSystem.documentDirectory || ''}${temporaryName}`;
+          const downloadResult = await FileSystem.downloadAsync(remoteUrl, temporaryUri);
+          if (downloadResult.status !== 200) return null;
+          sourceUri = temporaryUri;
+        }
       }
 
-      const fileInfo = await FileSystem.getInfoAsync(targetPath);
-      const byteSize = fileInfo.size || 15000;
+      const resized = await this.resizeAndEncodeImage(sourceUri);
+      if (!resized) return null;
+      resizedUri = resized.uri;
 
-      await this.evictToFit(byteSize);
-
-      this.manifest.items[cacheKey] = {
-        filename,
-        byteSize,
-        lastAccessed: Date.now(),
-        timestamp: Date.now(),
-        ttl: DEFAULT_TTL_MS,
-        type: 'image',
-      };
-      this.manifest.totalBytes += byteSize;
-
-      await this.saveManifest();
-      const kb = (byteSize / 1024).toFixed(1);
-      const totalMb = (this.manifest.totalBytes / (1024 * 1024)).toFixed(2);
-      console.log(`[PersistentLRU] 💾 Cached Logo: "${cleanSym}" (${kb} KB | Total Cache: ${totalMb} MB)`);
-      return targetPath;
+      await this.cacheLogoData(cleanSym, resized.dataUri);
+      console.log(`[PersistentLRU] Cached resized logo: "${cleanSym}" (128x128 PNG)`);
+      return resized.dataUri;
     } catch (err) {
-      console.warn(`[PersistentLRU] Image download failed for ${symbol}:`, err.message || err);
+      console.warn(`[PersistentLRU] Image download or resize failed for ${symbol}:`, err.message || err);
       return null;
+    } finally {
+      for (const uri of [temporaryUri, resizedUri]) {
+        if (uri && (uri === temporaryUri || uri !== sourceUri)) {
+          try {
+            await FileSystem.deleteAsync(uri, { idempotent: true });
+          } catch (e) {}
+        }
+      }
     }
   }
 
   async getCacheStats() {
-    await this.init();
-    return {
-      totalBytes: this.manifest.totalBytes,
-      totalMB: (this.manifest.totalBytes / (1024 * 1024)).toFixed(2),
-      maxMB: 128,
-      itemCount: Object.keys(this.manifest.items).length,
-    };
+    return this.run(async () => {
+      const db = await this.init();
+      const totalBytes = await this.getTotalBytes(db);
+      const row = await db.getFirstAsync('SELECT COUNT(*) AS item_count FROM cache_entries');
+
+      return {
+        totalBytes,
+        totalMB: (totalBytes / (1024 * 1024)).toFixed(2),
+        maxMB: CACHE_MAX_MB,
+        itemCount: row?.item_count || 0,
+      };
+    });
   }
 
   async clearAll() {
-    await this.init();
-    try {
-      await FileSystem.deleteAsync(CACHE_DIR, { idempotent: true });
-      await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
-      this.manifest = { totalBytes: 0, items: {} };
-      await this.saveManifest();
-      console.log('[PersistentLRU] 🗑️ Successfully wiped all 128MB cache and reset manifest');
-    } catch (e) {
-      console.warn('[PersistentLRU] Failed to clear cache:', e.message || e);
-    }
+    return this.run(async () => {
+      const db = await this.init();
+      await db.runAsync('DELETE FROM cache_entries');
+      await this.removeLegacyCacheFiles();
+      console.log('[PersistentLRU] Cleared single SQLite cache');
+    });
   }
 }
 

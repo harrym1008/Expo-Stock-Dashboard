@@ -3,8 +3,6 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-nat
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
-  FadeIn,
-  FadeOut,
   FadeInLeft,
   FadeOutLeft,
   FadeInRight,

@@ -49,7 +49,7 @@ export default function SettingsModal({ visible, onClose }) {
   const handleClearCache = () => {
     Alert.alert(
       'Clear Cache & Exit',
-      'This will wipe all cached company profiles and downloaded logos (128MB max), stop all background data services, and close the application.\n\nDo you want to proceed?',
+      'This will wipe all cached company profiles and logos (50MB max), stop all background data services, and close the application.\n\nDo you want to proceed?',
       [
         {
           text: 'Cancel',
@@ -62,7 +62,7 @@ export default function SettingsModal({ visible, onClose }) {
             // 1. Stop all WebSocket & background services
             finnhubWebSocketService.destroy();
 
-            // 2. Wipe the 128MB persistent LRU disk cache
+            // 2. Wipe the single 50MB persistent LRU cache file
             await storageService.clearCache();
 
             // 3. Inform the user and close the application
@@ -206,9 +206,12 @@ export default function SettingsModal({ visible, onClose }) {
                 </TouchableOpacity>
               </View>
 
-              {/* Persistent 128MB LRU Storage Section */}
-              <AppText bold style={[styles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}>
-                OFFLINE LRU STORAGE (128MB MAX)
+              {/* Persistent cache section */}
+              <AppText
+                bold
+                style={[styles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}
+              >
+                OFFLINE CACHE (50MB MAX)
               </AppText>
               <View style={[styles.apiKeyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <View style={styles.cacheHeaderRow}>
@@ -217,11 +220,11 @@ export default function SettingsModal({ visible, onClose }) {
                     <AppText bold style={styles.apiKeyTitle}>Cache Status</AppText>
                   </View>
                   <AppText style={[styles.cacheUsageText, { color: theme.textSecondary }]}>
-                    {cacheStats.totalMB} MB / 128 MB ({cacheStats.itemCount} items)
+                    {cacheStats.totalMB} MB / 50 MB ({cacheStats.itemCount} items)
                   </AppText>
                 </View>
                 <AppText style={[styles.apiKeyDesc, { color: theme.textSecondary }]}>
-                  Stores 128x128 brand logos and company profiles with 30-day (1 month) TTL for 0ms offline rendering.
+                  Stores resized 128x128 brand logos and company profiles with a 30-day TTL for faster offline rendering.
                 </AppText>
 
                 <TouchableOpacity

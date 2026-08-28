@@ -100,12 +100,3 @@ export function getNextUpcomingHolidays(count = 8, fromDate = new Date()) {
     .filter((item) => item.atDate >= todayKey)
     .slice(0, count);
 }
-
-/**
- * Returns all holidays in a given year and month (0-indexed month)
- */
-export function getHolidaysForMonth(year, monthIndex) {
-  const monthStr = String(monthIndex + 1).padStart(2, '0');
-  const prefix = `${year}-${monthStr}`;
-  return allSortedHolidays.filter((item) => item.atDate.startsWith(prefix));
-}

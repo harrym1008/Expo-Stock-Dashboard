@@ -89,23 +89,6 @@ export function WatchlistProvider({ children }) {
     [watchlists]
   );
 
-  const getWatchlistIdsForStock = useCallback(
-    (symbol) => {
-      if (!symbol) return [];
-      const cleanSym = symbol.toUpperCase();
-      const ids = [];
-      for (const wl of watchlists) {
-        if (Array.isArray(wl.items)) {
-          if (wl.items.some((item) => item?.symbol?.toUpperCase() === cleanSym)) {
-            ids.push(wl.id);
-          }
-        }
-      }
-      return ids;
-    },
-    [watchlists]
-  );
-
   // 5. Stock mutations
   const addStockToWatchlist = useCallback((watchlistId, stockData) => {
     if (!stockData?.symbol) return;
@@ -250,13 +233,11 @@ export function WatchlistProvider({ children }) {
 
   const value = {
     watchlists,
-    setWatchlists,
     activeWatchlistId,
     setActiveWatchlistId,
     activeWatchlist,
     isStockInWatchlist,
     isStockInAnyWatchlist,
-    getWatchlistIdsForStock,
     addStockToWatchlist,
     removeStockFromWatchlist,
     toggleStockInWatchlist,

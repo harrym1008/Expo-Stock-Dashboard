@@ -11,32 +11,20 @@ import { WatchlistProvider } from './src/context/WatchlistContext';
 
 function AppContent() {
   const { theme, isDark } = useTheme();
+  const baseNavigationTheme = isDark ? DarkTheme : DefaultTheme;
 
-  const navigationTheme = isDark
-    ? {
-        ...DarkTheme,
-        colors: {
-          ...DarkTheme.colors,
-          primary: theme.primary,
-          background: theme.background,
-          card: theme.surface,
-          text: theme.textPrimary,
-          border: theme.border,
-          notification: theme.primary,
-        },
-      }
-    : {
-        ...DefaultTheme,
-        colors: {
-          ...DefaultTheme.colors,
-          primary: theme.primary,
-          background: theme.background,
-          card: theme.surface,
-          text: theme.textPrimary,
-          border: theme.border,
-          notification: theme.primary,
-        },
-      };
+  const navigationTheme = {
+    ...baseNavigationTheme,
+    colors: {
+      ...baseNavigationTheme.colors,
+      primary: theme.primary,
+      background: theme.background,
+      card: theme.surface,
+      text: theme.textPrimary,
+      border: theme.border,
+      notification: theme.primary,
+    },
+  };
 
   return (
     <NavigationContainer theme={navigationTheme}>

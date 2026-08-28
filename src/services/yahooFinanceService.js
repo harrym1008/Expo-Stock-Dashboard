@@ -12,6 +12,14 @@ const TIMEFRAME_CONFIG = {
   'ALL': { range: '100y', interval: '1mo' },
 };
 
+const BOUNDARY_INTERVALS = {
+  '1H': 1 * 60 * 1000,
+  '1D': 2 * 60 * 1000,
+  '1W': 60 * 60 * 1000,
+  '3M': 24 * 60 * 60 * 1000,
+  '1Y': 7 * 24 * 60 * 60 * 1000,
+};
+
 // Global in-memory cache to preserve the latest 1D after-hours trade price across all timeframe queries
 const latestKnownAfterHoursPrices = {};
 
@@ -23,47 +31,10 @@ const latestKnownAfterHoursPrices = {};
 export function getBoundaryAlignedTtl(timeframe) {
   const now = Date.now();
   const THREE_SECONDS = 3000;
-
-  switch (timeframe) {
-    case '1H': {
-      const intervalMs = 1 * 60 * 1000;
-      const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
-      const remaining = nextBoundary - now;
-      return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
-    }
-    case '1D': {
-      const intervalMs = 2 * 60 * 1000;
-      const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
-      const remaining = nextBoundary - now;
-      return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
-    }
-    case '1W': {
-      const intervalMs = 60 * 60 * 1000;
-      const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
-      const remaining = nextBoundary - now;
-      return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
-    }
-    case '3M': {
-      const intervalMs = 24 * 60 * 60 * 1000;
-      const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
-      const remaining = nextBoundary - now;
-      return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
-    }
-    case '1Y': {
-      const intervalMs = 7 * 24 * 60 * 60 * 1000;
-      const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
-      const remaining = nextBoundary - now;
-      return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
-    }
-    case '5Y':
-    case 'ALL':
-    default: {
-      const intervalMs = 30 * 24 * 60 * 60 * 1000;
-      const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
-      const remaining = nextBoundary - now;
-      return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
-    }
-  }
+  const intervalMs = BOUNDARY_INTERVALS[timeframe] || 30 * 24 * 60 * 60 * 1000;
+  const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
+  const remaining = nextBoundary - now;
+  return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
 }
 
 function applyLivePriceOverlay(chartData, latestLivePrice) {
@@ -179,7 +150,7 @@ export const yahooFinanceService = {
     const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG['1D'];
     const cacheKey = `chart_v4_${timeframe}_${cleanSymbol}`;
 
-    // 1. Check persistent 128MB LRU cache first (with boundary-aligned TTL)
+    // 1. Check persistent 50MB LRU cache first (with boundary-aligned TTL)
     const cached = await persistentLruCache.getJson(cacheKey);
     if (cached && Array.isArray(cached.sparkline) && cached.sparkline.length > 0) {
       if (latestKnownAfterHoursPrices[cleanSymbol] && (!cached.postMarketPrice || Math.abs(cached.postMarketPrice - cached.regularMarketPrice) < 0.001)) {

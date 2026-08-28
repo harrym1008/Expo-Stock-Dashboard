@@ -36,7 +36,7 @@ export const storageService = {
     }
   },
 
-  // --- 128MB Persistent LRU Cache Integration ---
+  // --- 50MB Persistent LRU Cache Integration ---
 
   async getCachedProfile(symbol) {
     if (!symbol) return null;
@@ -46,11 +46,6 @@ export const storageService = {
   async setCachedProfile(symbol, profile) {
     if (!symbol || !profile) return;
     await persistentLruCache.setJson(`profile_${symbol.toUpperCase()}`, profile, PROFILE_TTL_MS);
-  },
-
-  async getCachedLogoUri(remoteUrl, symbol) {
-    if (!remoteUrl) return null;
-    return await persistentLruCache.getOrCacheImage(remoteUrl, symbol);
   },
 
   async getCacheStats() {

@@ -50,7 +50,7 @@ export const finnhubRestService = {
     if (!symbol || !apiKey) return null;
     const cleanSymbol = symbol.trim().toUpperCase();
 
-    // 1. Check persistent 128MB LRU cache first (30-day TTL)
+    // 1. Check persistent 50MB LRU cache first (30-day TTL)
     const cached = await storageService.getCachedProfile(cleanSymbol);
     if (cached) {
       console.log(`[Finnhub REST] ⚡ Using cached profile for: ${cleanSymbol} (No network call needed)`);

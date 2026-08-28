@@ -12,8 +12,6 @@ export function MarketDataProvider({ children }) {
   const [apiKey, setApiKey] = useState('');
   const [quotes, setQuotes] = useState({});
   const [profiles, setProfiles] = useState({});
-  const [loadingQuotes, setLoadingQuotes] = useState({});
-  const [loadingProfiles, setLoadingProfiles] = useState({});
   const [marketStatus, setMarketStatus] = useState(getMarketSessionStatus());
 
   const profilesRef = useRef(profiles);
@@ -135,27 +133,22 @@ export function MarketDataProvider({ children }) {
       if (!symbol || !apiKey) return null;
       const sym = symbol.toUpperCase();
 
-      setLoadingQuotes((prev) => ({ ...prev, [sym]: true }));
-      try {
-        const quote = await finnhubRestService.fetchQuote(sym, apiKey);
-        if (quote) {
-          setQuotes((prev) => {
-            const existing = prev[sym] || {};
-            return {
-              ...prev,
-              [sym]: {
-                ...quote,
-                ...existing,
-                previousClose: quote.previousClose || existing.previousClose,
-                regularMarketPrice: quote.price || existing.regularMarketPrice,
-              },
-            };
-          });
-        }
-        return quote;
-      } finally {
-        setLoadingQuotes((prev) => ({ ...prev, [sym]: false }));
+      const quote = await finnhubRestService.fetchQuote(sym, apiKey);
+      if (quote) {
+        setQuotes((prev) => {
+          const existing = prev[sym] || {};
+          return {
+            ...prev,
+            [sym]: {
+              ...quote,
+              ...existing,
+              previousClose: quote.previousClose || existing.previousClose,
+              regularMarketPrice: quote.price || existing.regularMarketPrice,
+            },
+          };
+        });
       }
+      return quote;
     },
     [apiKey]
   );
@@ -168,19 +161,14 @@ export function MarketDataProvider({ children }) {
 
       if (profilesRef.current[sym]) return profilesRef.current[sym];
 
-      setLoadingProfiles((prev) => ({ ...prev, [sym]: true }));
-      try {
-        const profile = await finnhubRestService.fetchCompanyProfile(sym, apiKey);
-        if (profile) {
-          setProfiles((prev) => ({
-            ...prev,
-            [sym]: profile,
-          }));
-        }
-        return profile;
-      } finally {
-        setLoadingProfiles((prev) => ({ ...prev, [sym]: false }));
+      const profile = await finnhubRestService.fetchCompanyProfile(sym, apiKey);
+      if (profile) {
+        setProfiles((prev) => ({
+          ...prev,
+          [sym]: profile,
+        }));
       }
+      return profile;
     },
     [apiKey]
   );
@@ -213,8 +201,6 @@ export function MarketDataProvider({ children }) {
     updateApiKey,
     quotes,
     profiles,
-    loadingQuotes,
-    loadingProfiles,
     marketStatus,
     fetchQuote,
     fetchProfile,

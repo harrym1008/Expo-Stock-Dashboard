@@ -7,7 +7,7 @@ import Animated, {
   LinearTransition,
 } from 'react-native-reanimated';
 import { useTheme } from '../../context/ThemeContext';
-import { spacing, borderRadius } from '../../constants/theme';
+import { spacing } from '../../constants/theme';
 import AppText from '../common/AppText';
 import Sparkline from './Sparkline';
 import CompanyLogo from '../common/CompanyLogo';
@@ -116,18 +116,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 3,
     gap: spacing.md,
-  },
-  logoContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: borderRadius.sm + 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  logoImage: {
-    width: '100%',
-    height: '100%',
   },
   titleWrapper: {
     flex: 1,

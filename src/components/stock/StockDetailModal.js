@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Image,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -53,7 +52,6 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   const [chartData, setChartData] = useState(null);
   const [scrubData, setScrubData] = useState(null);
   const [isInitialStockLoading, setIsInitialStockLoading] = useState(true);
-  const [imageError, setImageError] = useState(false);
   const [timeAgoText, setTimeAgoText] = useState('just now');
   const [calendarVisible, setCalendarVisible] = useState(false);
 
@@ -64,7 +62,6 @@ export default function StockDetailModal({ visible, stock, onClose }) {
 
   // Initialize or restore per-stock timeframe when active stock changes (first load for stock)
   useEffect(() => {
-    setImageError(false);
     latestExtendedPriceRef.current = null;
     setChartData(null);
     setScrubData(null);
@@ -262,12 +259,6 @@ export default function StockDetailModal({ visible, stock, onClose }) {
         ]
       : chartData?.points || [];
 
-  const placeholderLogoUri = `https://placehold.co/128x128/FFFFFF/000000.png?text=${encodeURIComponent(
-    stock.symbol || 'ST'
-  )}`;
-
-  const logoUri = !imageError && stock.logo ? stock.logo : placeholderLogoUri;
-
   return (
     <Modal
       visible={visible}
@@ -440,7 +431,6 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                     sparkline={sparklineData}
                     timeframe={activeDisplayedTimeframe}
                     color={timeframeTrendColor}
-                    currency={stock.currency || '$'}
                     onScrub={(curr, prev) => setScrubData({ current: curr, prev })}
                     onScrubEnd={() => setScrubData(null)}
                   />
@@ -565,18 +555,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: spacing.md,
   },
-  logoContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: borderRadius.sm + 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  logoImage: {
-    width: '100%',
-    height: '100%',
-  },
   titleInfo: {
     flex: 1,
   },
@@ -648,11 +626,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-  },
-  statusLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
   },
   afterHoursPriceText: {
     fontSize: 22,

@@ -1,17 +1,16 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Animated, {
   useAnimatedStyle,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../context/ThemeContext';
 import { spacing } from '../../constants/theme';
 
 /**
  * Animated delete button rendered when swiping left.
  */
-function RightActionButton({ progress, dragX, onDelete }) {
+function RightActionButton({ progress, onDelete }) {
   const animatedStyle = useAnimatedStyle(() => {
     return {
       opacity: progress.value,
@@ -49,19 +48,16 @@ function RightActionButton({ progress, dragX, onDelete }) {
  * @param {string|number} props.itemId - Optional ID identifier for the item
  */
 export default function SwipeableStockItem({ children, onDelete, itemId }) {
-  const { theme } = useTheme();
-
   const handleDelete = () => {
     if (onDelete) {
       onDelete(itemId);
     }
   };
 
-  const renderRightActions = (progress, dragX) => {
+  const renderRightActions = (progress) => {
     return (
       <RightActionButton
         progress={progress}
-        dragX={dragX}
         onDelete={handleDelete}
       />
     );
