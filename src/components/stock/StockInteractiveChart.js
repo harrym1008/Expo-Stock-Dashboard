@@ -130,6 +130,117 @@ export function formatCandleDate(timestamp, timeframe = '1D') {
   });
 }
 
+/**
+ * Static portion of the chart that never changes during scrubbing.
+ * Memoised so it only re-renders when the data or dimensions change.
+ */
+const StaticChart = React.memo(function StaticChart({
+  chartWidth,
+  chartHeight,
+  linePath,
+  areaPath,
+  color,
+  isDark,
+  gridLineColor,
+  gridLines,
+}) {
+  return (
+    <Svg width={chartWidth} height={chartHeight} style={styles.svg}>
+      <Defs>
+        <LinearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0%" stopColor={color} stopOpacity={isDark ? "0.22" : "0.15"} />
+          <Stop offset="100%" stopColor={color} stopOpacity="0.0" />
+        </LinearGradient>
+      </Defs>
+
+      {/* Horizontal Gridlines aligned strictly to neat ticks */}
+      {gridLines.map(({ key, y }) => (
+        <Line
+          key={key}
+          x1={0}
+          y1={y}
+          x2={chartWidth}
+          y2={y}
+          stroke={gridLineColor}
+          strokeWidth={1}
+          strokeDasharray="4,4"
+        />
+      ))}
+
+      {/* Gradient Fill under curve */}
+      {areaPath ? <Path d={areaPath} fill="url(#chartGradient)" /> : null}
+
+      {/* Main Sparkline Curve */}
+      {linePath ? (
+        <Path
+          d={linePath}
+          fill="none"
+          stroke={color}
+          strokeWidth={2.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ) : null}
+    </Svg>
+  );
+});
+
+/**
+ * Scrub crosshair overlay rendered as a separate small SVG.
+ * Only this layer re-renders when scrubIndex changes.
+ */
+const ScrubOverlay = React.memo(function ScrubOverlay({
+  activeX,
+  activeY,
+  chartWidth,
+  chartHeight,
+  color,
+  isDark,
+  crosshairColor,
+  visible,
+}) {
+  if (!visible || activeX === null || activeY === null) return null;
+
+  return (
+    <Svg
+      width={chartWidth}
+      height={chartHeight}
+      style={StyleSheet.absoluteFill}
+      pointerEvents="none"
+    >
+      {/* Vertical Hairline */}
+      <Line
+        x1={activeX}
+        y1={0}
+        x2={activeX}
+        y2={chartHeight}
+        stroke={crosshairColor}
+        strokeWidth={1.2}
+        strokeDasharray="3,3"
+      />
+
+      {/* Outer glowing halo on intersection */}
+      <Circle
+        cx={activeX}
+        cy={activeY}
+        r={7}
+        fill={color}
+        fillOpacity={0.3}
+      />
+
+      {/* Inner crisp intersection dot */}
+      <Circle
+        cx={activeX}
+        cy={activeY}
+        r={3.8}
+        fill={color}
+        stroke={isDark ? '#000000' : '#FFFFFF'}
+        strokeWidth={1.8}
+      />
+    </Svg>
+  );
+});
+
 export default function StockInteractiveChart({
   points = [],
   sparkline = [],
@@ -147,6 +258,17 @@ export default function StockInteractiveChart({
 
   const containerRef = useRef(null);
   const containerPageXRef = useRef(0);
+
+  // Stable refs for callbacks so PanResponder never rebuilds due to prop changes
+  const onScrubRef = useRef(onScrub);
+  const onScrubEndRef = useRef(onScrubEnd);
+  onScrubRef.current = onScrub;
+  onScrubEndRef.current = onScrubEnd;
+
+  // Throttle parent onScrub callback: fire at most once per 50ms (~20fps)
+  // to avoid cascading parent re-renders on every touch-move frame
+  const lastScrubCallTimeRef = useRef(0);
+  const pendingScrubRafRef = useRef(null);
 
   // Unify points array: if points with { time, price } exist, use them; else fallback to sparkline
   const chartPoints = useMemo(() => {
@@ -185,7 +307,7 @@ export default function StockInteractiveChart({
   }, [prices]);
 
   // Dynamic adaptive Y-axis column width based on the formatted tick lengths
-  const Y_AXIS_WIDTH = useMemo(() => {
+  const yAxisWidth = useMemo(() => {
     if (!neatY.ticks || neatY.ticks.length === 0) return 30;
     const maxChars = Math.max(
       ...neatY.ticks.map((t) => formatTickLabel(t, neatY.step).length)
@@ -195,80 +317,113 @@ export default function StockInteractiveChart({
   }, [neatY.ticks, neatY.step]);
 
   const paddingY = 16;
-  const chartWidth = Math.max(10, layout.width - Y_AXIS_WIDTH);
+  const chartWidth = Math.max(10, layout.width - yAxisWidth);
   const chartHeight = Math.max(10, layout.height);
   const usableHeight = Math.max(10, chartHeight - paddingY * 2);
 
   const yRange = maxVal - minVal === 0 ? 1 : maxVal - minVal;
 
-  const getYCoordinate = useCallback(
-    (price) => {
-      const fraction = (price - minVal) / yRange;
-      return chartHeight - paddingY - fraction * usableHeight;
-    },
-    [chartHeight, minVal, yRange, usableHeight]
-  );
+  // Pre-compute coordinate lookup arrays so scrub doesn't call functions per-frame
+  const { xCoords, yCoords } = useMemo(() => {
+    const len = chartPoints.length;
+    if (len === 0) return { xCoords: [], yCoords: [] };
 
-  const getXCoordinate = useCallback(
-    (index) => {
-      if (chartPoints.length <= 1) return 0;
-      return (index / (chartPoints.length - 1)) * chartWidth;
-    },
-    [chartPoints.length, chartWidth]
-  );
+    const xs = new Float64Array(len);
+    const ys = new Float64Array(len);
+    const divisor = len <= 1 ? 1 : len - 1;
+
+    for (let i = 0; i < len; i++) {
+      xs[i] = (i / divisor) * chartWidth;
+      const fraction = (chartPoints[i].price - minVal) / yRange;
+      ys[i] = chartHeight - paddingY - fraction * usableHeight;
+    }
+    return { xCoords: xs, yCoords: ys };
+  }, [chartPoints, chartWidth, chartHeight, minVal, yRange, usableHeight]);
 
   // Compute SVG line path and area gradient path
   const { linePath, areaPath } = useMemo(() => {
-    if (chartPoints.length < 2 || chartWidth <= 0 || chartHeight <= 0) {
+    const len = chartPoints.length;
+    if (len < 2 || chartWidth <= 0 || chartHeight <= 0) {
       return { linePath: '', areaPath: '' };
     }
 
-    let dLine = '';
-    chartPoints.forEach((p, idx) => {
-      const x = getXCoordinate(idx);
-      const y = getYCoordinate(p.price);
-      dLine += idx === 0 ? `M ${x.toFixed(2)} ${y.toFixed(2)}` : ` L ${x.toFixed(2)} ${y.toFixed(2)}`;
-    });
+    // Build path string via array join (faster than repeated string concat)
+    const parts = new Array(len);
+    parts[0] = `M ${xCoords[0].toFixed(2)} ${yCoords[0].toFixed(2)}`;
+    for (let i = 1; i < len; i++) {
+      parts[i] = `L ${xCoords[i].toFixed(2)} ${yCoords[i].toFixed(2)}`;
+    }
+    const dLine = parts.join(' ');
 
-    const lastX = getXCoordinate(chartPoints.length - 1);
-    const firstX = getXCoordinate(0);
-    const bottomY = chartHeight;
+    const lastX = xCoords[len - 1].toFixed(2);
+    const firstX = xCoords[0].toFixed(2);
+    const bottomY = chartHeight.toFixed(2);
 
-    const dArea = `${dLine} L ${lastX.toFixed(2)} ${bottomY.toFixed(2)} L ${firstX.toFixed(2)} ${bottomY.toFixed(2)} Z`;
+    const dArea = `${dLine} L ${lastX} ${bottomY} L ${firstX} ${bottomY} Z`;
 
     return { linePath: dLine, areaPath: dArea };
-  }, [chartPoints, chartWidth, chartHeight, getXCoordinate, getYCoordinate]);
+  }, [chartPoints.length, chartWidth, chartHeight, xCoords, yCoords]);
 
-  // Touch & Scrub Handler with global screen coordinates tracking
+  // Pre-compute grid line Y positions (avoids calling getYCoordinate during render)
+  const gridLines = useMemo(() => {
+    return neatY.ticks.map((tickVal) => ({
+      key: `grid-${tickVal}`,
+      y: chartHeight - paddingY - ((tickVal - minVal) / yRange) * usableHeight,
+      tickVal,
+    }));
+  }, [neatY.ticks, chartHeight, minVal, yRange, usableHeight]);
+
+  // Touch & Scrub Handler — uses coordinate lookup arrays instead of functions
   const updateTouch = useCallback(
     (evt, gestureState) => {
-      if (!chartPoints || chartPoints.length === 0 || chartWidth <= 0) return;
+      const len = chartPoints.length;
+      if (len === 0 || chartWidth <= 0) return;
+
       const pageX = evt?.nativeEvent?.pageX ?? gestureState?.moveX ?? 0;
       const localX = pageX - containerPageXRef.current;
       const clampedX = Math.max(0, Math.min(chartWidth, localX));
       const ratio = clampedX / chartWidth;
-      const idx = Math.round(ratio * (chartPoints.length - 1));
-      const clampedIdx = Math.max(0, Math.min(chartPoints.length - 1, idx));
+      const idx = Math.round(ratio * (len - 1));
+      const clampedIdx = Math.max(0, Math.min(len - 1, idx));
 
       setScrubIndex(clampedIdx);
 
-      if (onScrub) {
-        const curr = chartPoints[clampedIdx];
-        const prev = clampedIdx > 0 ? chartPoints[clampedIdx - 1] : null;
-        onScrub(curr, prev);
+      // Throttle parent callback to ~20fps to avoid cascading re-renders upstream
+      const cb = onScrubRef.current;
+      if (cb) {
+        const now = Date.now();
+        if (now - lastScrubCallTimeRef.current >= 50) {
+          lastScrubCallTimeRef.current = now;
+          const curr = chartPoints[clampedIdx];
+          const prev = clampedIdx > 0 ? chartPoints[clampedIdx - 1] : null;
+          cb(curr, prev);
+        } else if (!pendingScrubRafRef.current) {
+          // Schedule a trailing call so the final position is always reported
+          const capturedIdx = clampedIdx;
+          pendingScrubRafRef.current = requestAnimationFrame(() => {
+            pendingScrubRafRef.current = null;
+            lastScrubCallTimeRef.current = Date.now();
+            const curr = chartPoints[capturedIdx];
+            const prev = capturedIdx > 0 ? chartPoints[capturedIdx - 1] : null;
+            onScrubRef.current?.(curr, prev);
+          });
+        }
       }
     },
-    [chartPoints, chartWidth, onScrub]
+    [chartPoints, chartWidth]
   );
 
   const handleTouchEnd = useCallback(() => {
-    setScrubIndex(null);
-    if (onScrubEnd) {
-      onScrubEnd();
+    // Cancel any pending trailing scrub call
+    if (pendingScrubRafRef.current) {
+      cancelAnimationFrame(pendingScrubRafRef.current);
+      pendingScrubRafRef.current = null;
     }
-  }, [onScrubEnd]);
+    setScrubIndex(null);
+    onScrubEndRef.current?.();
+  }, []);
 
-  // PanResponder to capture scrubbing seamlessly even when dragging over external buttons
+  // PanResponder — stable because updateTouch and handleTouchEnd have minimal deps
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -299,25 +454,28 @@ export default function StockInteractiveChart({
     [updateTouch, handleTouchEnd]
   );
 
-  const handleLayout = (event) => {
+  const handleLayout = useCallback((event) => {
     const { width, height } = event.nativeEvent.layout;
-    if (
-      Math.round(width) !== Math.round(layout.width) ||
-      Math.round(height) !== Math.round(layout.height)
-    ) {
-      setLayout({ width, height });
-    }
+    setLayout((prev) => {
+      if (
+        Math.round(width) !== Math.round(prev.width) ||
+        Math.round(height) !== Math.round(prev.height)
+      ) {
+        return { width, height };
+      }
+      return prev;
+    });
     containerRef.current?.measureInWindow?.((x) => {
       if (typeof x === 'number') {
         containerPageXRef.current = x;
       }
     });
-  };
+  }, []);
 
-  // Active scrubbed point data
+  // Active scrubbed point data — simple lookups into pre-computed arrays
   const activePoint = scrubIndex !== null && chartPoints[scrubIndex] ? chartPoints[scrubIndex] : null;
-  const activeX = activePoint ? getXCoordinate(scrubIndex) : null;
-  const activeY = activePoint ? getYCoordinate(activePoint.price) : null;
+  const activeX = activePoint ? xCoords[scrubIndex] : null;
+  const activeY = activePoint ? yCoords[scrubIndex] : null;
 
   const dateText = activePoint ? formatCandleDate(activePoint.time, timeframe) : '';
 
@@ -333,86 +491,29 @@ export default function StockInteractiveChart({
     >
       {layout.width > 0 && layout.height > 0 && chartPoints.length > 1 && (
         <View style={styles.chartWrapper}>
-          {/* Main SVG Area */}
-          <Svg
-            width={chartWidth}
-            height={chartHeight}
-            style={styles.svg}
-          >
-            <Defs>
-              <LinearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0%" stopColor={color} stopOpacity={isDark ? "0.22" : "0.15"} />
-                <Stop offset="100%" stopColor={color} stopOpacity="0.0" />
-              </LinearGradient>
-            </Defs>
+          {/* Static chart layer — never re-renders during scrub */}
+          <StaticChart
+            chartWidth={chartWidth}
+            chartHeight={chartHeight}
+            linePath={linePath}
+            areaPath={areaPath}
+            color={color}
+            isDark={isDark}
+            gridLineColor={gridLineColor}
+            gridLines={gridLines}
+          />
 
-            {/* Horizontal Gridlines aligned strictly to neat ticks */}
-            {neatY.ticks.map((tickVal) => {
-              const tickY = getYCoordinate(tickVal);
-              return (
-                <Line
-                  key={`grid-${tickVal}`}
-                  x1={0}
-                  y1={tickY}
-                  x2={chartWidth}
-                  y2={tickY}
-                  stroke={gridLineColor}
-                  strokeWidth={1}
-                  strokeDasharray="4,4"
-                />
-              );
-            })}
-
-            {/* Gradient Fill under curve */}
-            {areaPath ? <Path d={areaPath} fill="url(#chartGradient)" /> : null}
-
-            {/* Main Sparkline Curve */}
-            {linePath ? (
-              <Path
-                d={linePath}
-                fill="none"
-                stroke={color}
-                strokeWidth={2.2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            ) : null}
-
-            {/* Active Scrub Vertical Crosshair and Intersection Dot */}
-            {activePoint && activeX !== null && activeY !== null && (
-              <>
-                {/* Vertical Hairline */}
-                <Line
-                  x1={activeX}
-                  y1={0}
-                  x2={activeX}
-                  y2={chartHeight}
-                  stroke={crosshairColor}
-                  strokeWidth={1.2}
-                  strokeDasharray="3,3"
-                />
-
-                {/* Outer glowing halo on intersection */}
-                <Circle
-                  cx={activeX}
-                  cy={activeY}
-                  r={7}
-                  fill={color}
-                  fillOpacity={0.3}
-                />
-
-                {/* Inner crisp intersection dot */}
-                <Circle
-                  cx={activeX}
-                  cy={activeY}
-                  r={3.8}
-                  fill={color}
-                  stroke={isDark ? '#000000' : '#FFFFFF'}
-                  strokeWidth={1.8}
-                />
-              </>
-            )}
-          </Svg>
+          {/* Scrub overlay — lightweight SVG with only crosshair + dot */}
+          <ScrubOverlay
+            activeX={activeX}
+            activeY={activeY}
+            chartWidth={chartWidth}
+            chartHeight={chartHeight}
+            color={color}
+            isDark={isDark}
+            crosshairColor={crosshairColor}
+            visible={scrubIndex !== null}
+          />
 
           {/* Top Date-Time Pill: Always at top, centered on the line, clamped at borders */}
           {activePoint && activeX !== null && (
@@ -441,25 +542,22 @@ export default function StockInteractiveChart({
           )}
 
           {/* Right-Hand Y-Axis Labels Column */}
-          <View style={[styles.yAxisLabelsColumn, { width: Y_AXIS_WIDTH, borderLeftColor: gridLineColor }]}>
-            {neatY.ticks.map((tickVal) => {
-              const tickY = getYCoordinate(tickVal);
-              return (
-                <View
-                  key={`label-${tickVal}`}
-                  style={[
-                    styles.yLabelItem,
-                    {
-                      top: Math.max(2, Math.min(chartHeight - 16, tickY - 7)),
-                    },
-                  ]}
-                >
-                  <AppText style={[styles.yAxisText, { color: theme.textMuted }]}>
-                    {formatTickLabel(tickVal, neatY.step)}
-                  </AppText>
-                </View>
-              );
-            })}
+          <View style={[styles.yAxisLabelsColumn, { width: yAxisWidth, borderLeftColor: gridLineColor }]}>
+            {gridLines.map(({ tickVal, y }) => (
+              <View
+                key={`label-${tickVal}`}
+                style={[
+                  styles.yLabelItem,
+                  {
+                    top: Math.max(2, Math.min(chartHeight - 16, y - 7)),
+                  },
+                ]}
+              >
+                <AppText style={[styles.yAxisText, { color: theme.textMuted }]}>
+                  {formatTickLabel(tickVal, neatY.step)}
+                </AppText>
+              </View>
+            ))}
           </View>
         </View>
       )}

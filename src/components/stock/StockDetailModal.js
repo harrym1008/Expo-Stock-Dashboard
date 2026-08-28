@@ -15,10 +15,12 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import { formatTimeAgo } from '../../utils/formatTimeAgo';
 import { storageService } from '../../services/storageService';
+import { useWatchlist } from '../../context/WatchlistContext';
 import AppText from '../common/AppText';
 import StockInteractiveChart from './StockInteractiveChart';
 import MarketCalendarModal from '../common/MarketCalendarModal';
 import CompanyLogo from '../common/CompanyLogo';
+import AddToWatchlistModal from './AddToWatchlistModal';
 
 const TIMEFRAMES = ['1H', '1D', '1W', '3M', '1Y', '5Y', 'ALL'];
 
@@ -45,7 +47,8 @@ storageService.getStockTimeframes().then((saved) => {
 export default function StockDetailModal({ visible, stock, onClose }) {
   const { theme, isDark } = useTheme();
   const { fetchHistoricalChart, quotes, marketStatus } = useMarketData();
-  const [isFavorite, setIsFavorite] = useState(false);
+  const { isStockInAnyWatchlist } = useWatchlist();
+  const [watchlistModalVisible, setWatchlistModalVisible] = useState(false);
   const [selectedTimeframe, setSelectedTimeframe] = useState('1D');
   const [chartData, setChartData] = useState(null);
   const [scrubData, setScrubData] = useState(null);
@@ -53,6 +56,8 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   const [imageError, setImageError] = useState(false);
   const [timeAgoText, setTimeAgoText] = useState('just now');
   const [calendarVisible, setCalendarVisible] = useState(false);
+
+  const isFavorite = stock?.symbol ? isStockInAnyWatchlist(stock.symbol) : false;
 
   // Track the latest known after-hours price across timeframe switches
   const latestExtendedPriceRef = useRef(null);
@@ -320,10 +325,10 @@ export default function StockDetailModal({ visible, stock, onClose }) {
 
                 <View style={styles.headerActions}>
                   <TouchableOpacity
-                    onPress={() => setIsFavorite((prev) => !prev)}
+                    onPress={() => setWatchlistModalVisible(true)}
                     style={styles.actionBtn}
                     accessibilityRole="button"
-                    accessibilityLabel="Favorite"
+                    accessibilityLabel="Add to Wishlist"
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <Ionicons
@@ -508,6 +513,13 @@ export default function StockDetailModal({ visible, stock, onClose }) {
           <MarketCalendarModal
             visible={calendarVisible}
             onClose={() => setCalendarVisible(false)}
+          />
+
+          {/* Add to Wishlist Modal */}
+          <AddToWatchlistModal
+            visible={watchlistModalVisible}
+            stock={stock}
+            onClose={() => setWatchlistModalVisible(false)}
           />
         </View>
       </View>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import DraggableFlatList from 'react-native-draggable-flatlist';
 import ScreenContainer from '../components/common/ScreenContainer';
 import WatchlistTabSelector from '../components/home/WatchlistTabSelector';
@@ -8,14 +9,14 @@ import SwipeableStockItem from '../components/home/SwipeableStockItem';
 import AppText from '../components/common/AppText';
 import TextInputModal from '../components/common/TextInputModal';
 import StockDetailModal from '../components/stock/StockDetailModal';
-import { mockWatchlists } from '../constants/mockData';
-import { storageService } from '../services/storageService';
+import SearchStockModal from '../components/stock/SearchStockModal';
 import { useTheme } from '../context/ThemeContext';
 import { useMarketData } from '../context/MarketDataContext';
-import { spacing } from '../constants/theme';
+import { useWatchlist } from '../context/WatchlistContext';
+import { spacing, borderRadius } from '../constants/theme';
 
 export default function HomeScreen() {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const {
     quotes,
     profiles,
@@ -23,18 +24,28 @@ export default function HomeScreen() {
     fetchQuote,
     fetchProfile,
     fetchHistoricalChart,
-    setWatchlistSymbols,
     setActiveModalSymbol,
     hasValidKey,
   } = useMarketData();
 
-  const [watchlists, setWatchlists] = useState(mockWatchlists);
-  const [activeWatchlistId, setActiveWatchlistId] = useState(
-    mockWatchlists[0]?.id || 'watchlist-1'
-  );
+  const {
+    watchlists,
+    activeWatchlistId,
+    setActiveWatchlistId,
+    activeWatchlist,
+    createWatchlist,
+    renameWatchlist,
+    deleteWatchlist,
+    reorderWatchlists,
+    addStockToWatchlist,
+    deleteStock,
+    reorderStocks,
+  } = useWatchlist();
+
   const [selectedStock, setSelectedStock] = useState(null);
   const [sparklines1D, setSparklines1D] = useState({});
   const [isEditMode, setIsEditMode] = useState(false);
+  const [searchStockModalVisible, setSearchStockModalVisible] = useState(false);
 
   // Text input modal state
   const [inputModalVisible, setInputModalVisible] = useState(false);
@@ -43,52 +54,10 @@ export default function HomeScreen() {
   const [inputModalAction, setInputModalAction] = useState(null); // 'add' | 'rename'
   const [renameTargetId, setRenameTargetId] = useState(null);
 
-  // Track whether initial load from storage is complete
-  const hasLoadedFromStorage = useRef(false);
-
   // Track symbols already fetched in the current active watchlist
   const fetchedSparklinesRef = useRef(new Set());
 
-  // --- Persistence: Load watchlists from AsyncStorage on mount ---
-  useEffect(() => {
-    storageService.getStoredWatchlists().then((stored) => {
-      if (stored && Array.isArray(stored) && stored.length > 0) {
-        setWatchlists(stored);
-        setActiveWatchlistId(stored[0]?.id || 'watchlist-1');
-      }
-      hasLoadedFromStorage.current = true;
-    });
-  }, []);
-
-  // --- Persistence: Save watchlists to AsyncStorage on every change ---
-  useEffect(() => {
-    if (hasLoadedFromStorage.current) {
-      storageService.setStoredWatchlists(watchlists);
-    }
-  }, [watchlists]);
-
-  // 1. Gather all unique symbols across all watchlists to subscribe in WebSocket pool
-  const allUniqueSymbols = useMemo(() => {
-    const syms = new Set();
-    for (const wl of watchlists) {
-      if (Array.isArray(wl.items)) {
-        for (const item of wl.items) {
-          if (item.symbol) syms.add(item.symbol.toUpperCase());
-        }
-      }
-    }
-    return Array.from(syms);
-  }, [watchlists]);
-
-  // 2. Sync watchlist symbols to the 45-budget WebSocket manager
-  useEffect(() => {
-    setWatchlistSymbols(allUniqueSymbols);
-  }, [allUniqueSymbols, setWatchlistSymbols]);
-
-  // 3. Fetch real 1D sparklines & Finnhub profiles/quotes for active watchlist stocks
-  const activeWatchlist =
-    watchlists.find((wl) => wl.id === activeWatchlistId) || watchlists[0];
-
+  // Fetch real 1D sparklines & Finnhub profiles/quotes for active watchlist stocks
   useEffect(() => {
     fetchedSparklinesRef.current.clear();
   }, [activeWatchlistId]);
@@ -160,80 +129,92 @@ export default function HomeScreen() {
     setInputModalVisible(true);
   }, []);
 
-  const handleRenameWatchlist = useCallback((id) => {
-    const wl = watchlists.find((w) => w.id === id);
-    if (!wl) return;
-    setInputModalTitle('Rename Watchlist');
-    setInputModalInitialValue(wl.title);
-    setInputModalAction('rename');
-    setRenameTargetId(id);
-    setInputModalVisible(true);
-  }, [watchlists]);
+  const handleRenameWatchlist = useCallback(
+    (id) => {
+      const wl = watchlists.find((w) => w.id === id);
+      if (!wl) return;
+      setInputModalTitle('Rename Watchlist');
+      setInputModalInitialValue(wl.title);
+      setInputModalAction('rename');
+      setRenameTargetId(id);
+      setInputModalVisible(true);
+    },
+    [watchlists]
+  );
 
-  const handleInputModalSubmit = useCallback((text) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
+  const handleInputModalSubmit = useCallback(
+    (text) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
 
-    if (inputModalAction === 'add') {
-      const newId = `watchlist-${Date.now()}`;
-      const newWatchlist = {
-        id: newId,
-        title: trimmed,
-        items: [],
-      };
-      setWatchlists((prev) => [...prev, newWatchlist]);
-      setActiveWatchlistId(newId);
-    } else if (inputModalAction === 'rename' && renameTargetId) {
-      setWatchlists((prev) =>
-        prev.map((wl) =>
-          wl.id === renameTargetId ? { ...wl, title: trimmed } : wl
-        )
-      );
-    }
+      if (inputModalAction === 'add') {
+        createWatchlist(trimmed);
+      } else if (inputModalAction === 'rename' && renameTargetId) {
+        renameWatchlist(renameTargetId, trimmed);
+      }
 
-    setInputModalVisible(false);
-  }, [inputModalAction, renameTargetId]);
+      setInputModalVisible(false);
+    },
+    [inputModalAction, renameTargetId, createWatchlist, renameWatchlist]
+  );
 
   const handleInputModalCancel = useCallback(() => {
     setInputModalVisible(false);
   }, []);
 
-  const handleDeleteWatchlist = useCallback((id) => {
-    setWatchlists((prev) => {
-      if (prev.length <= 1) return prev;
-      const filtered = prev.filter((wl) => wl.id !== id);
-      // If deleting the active watchlist, select the nearest one
-      if (id === activeWatchlistId && filtered.length > 0) {
-        setActiveWatchlistId(filtered[0].id);
-      }
-      return filtered;
-    });
-  }, [activeWatchlistId]);
+  const handleDeleteWatchlist = useCallback(
+    (id) => {
+      deleteWatchlist(id);
+    },
+    [deleteWatchlist]
+  );
 
-  const handleReorderWatchlists = useCallback((reordered) => {
-    setWatchlists(reordered);
-  }, []);
+  const handleReorderWatchlists = useCallback(
+    (reordered) => {
+      reorderWatchlists(reordered);
+    },
+    [reorderWatchlists]
+  );
 
   // --- Stock CRUD ---
-  const handleDeleteStock = useCallback((stockId) => {
-    setWatchlists((prev) =>
-      prev.map((wl) =>
-        wl.id === activeWatchlistId
-          ? { ...wl, items: wl.items.filter((item) => item.id !== stockId) }
-          : wl
-      )
-    );
-  }, [activeWatchlistId]);
+  const handleDeleteStock = useCallback(
+    (stockId) => {
+      deleteStock(activeWatchlistId, stockId);
+    },
+    [activeWatchlistId, deleteStock]
+  );
 
-  const handleReorderStocks = useCallback((reorderedItems) => {
-    setWatchlists((prev) =>
-      prev.map((wl) =>
-        wl.id === activeWatchlistId
-          ? { ...wl, items: reorderedItems }
-          : wl
-      )
-    );
-  }, [activeWatchlistId]);
+  const handleReorderStocks = useCallback(
+    (reorderedItems) => {
+      reorderStocks(activeWatchlistId, reorderedItems);
+    },
+    [activeWatchlistId, reorderStocks]
+  );
+
+  const handleSelectStockToAdd = useCallback(
+    (stockItem) => {
+      if (activeWatchlistId && stockItem) {
+        addStockToWatchlist(activeWatchlistId, stockItem);
+        const sym = stockItem.symbol?.toUpperCase();
+        if (sym) {
+          if (hasValidKey) {
+            fetchQuote(sym);
+            fetchProfile(sym);
+          }
+          fetchHistoricalChart(sym, '1D');
+        }
+      }
+      setSearchStockModalVisible(false);
+    },
+    [
+      activeWatchlistId,
+      addStockToWatchlist,
+      hasValidKey,
+      fetchQuote,
+      fetchProfile,
+      fetchHistoricalChart,
+    ]
+  );
 
   // Merge dynamic quotes, 1D historical candles, and profiles into items
   const displayItems = useMemo(() => {
@@ -258,18 +239,34 @@ export default function HomeScreen() {
         displayChangePercent = refClose !== 0 ? (displayChange / refClose) * 100 : 0;
       } else {
         // Market is OUT OF HOURS:
-        const hasLiveWsTrade = liveQuote?.isLiveWs && typeof liveQuote?.price === 'number' && Math.abs(liveQuote.price - regularClose) > 0.001;
-        const postPrice = (marketStatus.isPreMarket ? y1D?.preMarketPrice : y1D?.postMarketPrice) || y1D?.postMarketPrice || y1D?.preMarketPrice;
-        const hasPostMarketDelta = typeof postPrice === 'number' && Math.abs(postPrice - regularClose) > 0.001;
+        const hasLiveWsTrade =
+          liveQuote?.isLiveWs &&
+          typeof liveQuote?.price === 'number' &&
+          Math.abs(liveQuote.price - regularClose) > 0.001;
+        const postPrice =
+          (marketStatus.isPreMarket
+            ? y1D?.preMarketPrice
+            : y1D?.postMarketPrice) ||
+          y1D?.postMarketPrice ||
+          y1D?.preMarketPrice;
+        const hasPostMarketDelta =
+          typeof postPrice === 'number' &&
+          Math.abs(postPrice - regularClose) > 0.001;
 
         if (hasLiveWsTrade) {
           displayPrice = liveQuote.price;
           displayChange = liveQuote.price - regularClose;
-          displayChangePercent = regularClose !== 0 ? (displayChange / regularClose) * 100 : 0;
+          displayChangePercent =
+            regularClose !== 0
+              ? (displayChange / regularClose) * 100
+              : 0;
         } else if (hasPostMarketDelta) {
           displayPrice = postPrice;
           displayChange = postPrice - regularClose;
-          displayChangePercent = regularClose !== 0 ? (displayChange / regularClose) * 100 : 0;
+          displayChangePercent =
+            regularClose !== 0
+              ? (displayChange / regularClose) * 100
+              : 0;
         } else {
           // If no extended delta occurred, show the official regular market session close figures
           displayPrice = regularClose;
@@ -279,7 +276,8 @@ export default function HomeScreen() {
       }
 
       // Dynamically update the sparkline's endmost value with the current active trade price
-      const baseSparkline = y1D?.sparkline || liveQuote?.sparkline || item.sparkline || [];
+      const baseSparkline =
+        y1D?.sparkline || liveQuote?.sparkline || item.sparkline || [];
       const dynamicSparkline =
         typeof displayPrice === 'number' && baseSparkline.length > 0
           ? [...baseSparkline.slice(0, -1), displayPrice]
@@ -305,25 +303,28 @@ export default function HomeScreen() {
     });
   }, [activeWatchlist, quotes, profiles, sparklines1D, marketStatus]);
 
-  const renderStockItem = useCallback(({ item, drag, isActive }) => {
-    const stockContent = (
-      <WatchlistItem
-        item={item}
-        onPress={() => handleOpenStockDetail(item)}
-        isEditMode={isEditMode}
-        drag={drag}
-      />
-    );
+  const renderStockItem = useCallback(
+    ({ item, drag, isActive }) => {
+      const stockContent = (
+        <WatchlistItem
+          item={item}
+          onPress={() => handleOpenStockDetail(item)}
+          isEditMode={isEditMode}
+          drag={drag}
+        />
+      );
 
-    return (
-      <SwipeableStockItem
-        itemId={item.id}
-        onDelete={() => handleDeleteStock(item.id)}
-      >
-        {stockContent}
-      </SwipeableStockItem>
-    );
-  }, [isEditMode, handleDeleteStock]);
+      return (
+        <SwipeableStockItem
+          itemId={item.id}
+          onDelete={() => handleDeleteStock(item.id)}
+        >
+          {stockContent}
+        </SwipeableStockItem>
+      );
+    },
+    [isEditMode, handleDeleteStock]
+  );
 
   return (
     <ScreenContainer
@@ -355,6 +356,27 @@ export default function HomeScreen() {
           activationDistance={isEditMode ? 0 : 999}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
+          ListFooterComponent={
+            !isEditMode ? (
+              <View style={styles.listFooter}>
+                <TouchableOpacity
+                  style={[
+                    styles.addStockIconButton,
+                    {
+                      backgroundColor: isDark ? '#1C1F26' : '#E4E7EC',
+                    },
+                  ]}
+                  onPress={() => setSearchStockModalVisible(true)}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add stock to active watchlist"
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="add" size={18} color={theme.textPrimary} />
+                </TouchableOpacity>
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <AppText style={[styles.emptyText, { color: theme.textSecondary }]}>
@@ -364,6 +386,14 @@ export default function HomeScreen() {
           }
         />
 
+        {/* Search Stock to Add Modal */}
+        <SearchStockModal
+          visible={searchStockModalVisible}
+          watchlistTitle={activeWatchlist?.title || ''}
+          onSelectStock={handleSelectStockToAdd}
+          onClose={() => setSearchStockModalVisible(false)}
+        />
+
         {/* Fullscreen Stock Detail Slide-Up Modal */}
         <StockDetailModal
           visible={!!selectedStock}
@@ -371,16 +401,45 @@ export default function HomeScreen() {
             selectedStock
               ? {
                   ...selectedStock,
-                  price: (quotes[selectedStock.symbol]?.isLiveWs ? quotes[selectedStock.symbol]?.price : null) ?? sparklines1D[selectedStock.symbol]?.postMarketPrice ?? selectedStock.price,
-                  postMarketPrice: sparklines1D[selectedStock.symbol]?.postMarketPrice || selectedStock.postMarketPrice,
-                  regularMarketPrice: sparklines1D[selectedStock.symbol]?.regularMarketPrice || selectedStock.regularMarketPrice,
-                  change: quotes[selectedStock.symbol]?.change ?? sparklines1D[selectedStock.symbol]?.change ?? selectedStock.change,
-                  changePercent: quotes[selectedStock.symbol]?.changePercent ?? sparklines1D[selectedStock.symbol]?.changePercent ?? selectedStock.changePercent,
-                  name: profiles[selectedStock.symbol]?.name || selectedStock.name,
-                  exchange: profiles[selectedStock.symbol]?.exchange || selectedStock.exchange || '...',
-                  logo: profiles[selectedStock.symbol]?.logo || selectedStock.logo || null,
-                  sparkline: sparklines1D[selectedStock.symbol]?.sparkline || quotes[selectedStock.symbol]?.sparkline || selectedStock.sparkline,
-                  lastUpdated: quotes[selectedStock.symbol]?.lastTickTime || quotes[selectedStock.symbol]?.timestamp || sparklines1D[selectedStock.symbol]?.lastUpdated || selectedStock.lastUpdated,
+                  price:
+                    (quotes[selectedStock.symbol]?.isLiveWs
+                      ? quotes[selectedStock.symbol]?.price
+                      : null) ??
+                    sparklines1D[selectedStock.symbol]?.postMarketPrice ??
+                    selectedStock.price,
+                  postMarketPrice:
+                    sparklines1D[selectedStock.symbol]?.postMarketPrice ||
+                    selectedStock.postMarketPrice,
+                  regularMarketPrice:
+                    sparklines1D[selectedStock.symbol]?.regularMarketPrice ||
+                    selectedStock.regularMarketPrice,
+                  change:
+                    quotes[selectedStock.symbol]?.change ??
+                    sparklines1D[selectedStock.symbol]?.change ??
+                    selectedStock.change,
+                  changePercent:
+                    quotes[selectedStock.symbol]?.changePercent ??
+                    sparklines1D[selectedStock.symbol]?.changePercent ??
+                    selectedStock.changePercent,
+                  name:
+                    profiles[selectedStock.symbol]?.name || selectedStock.name,
+                  exchange:
+                    profiles[selectedStock.symbol]?.exchange ||
+                    selectedStock.exchange ||
+                    '...',
+                  logo:
+                    profiles[selectedStock.symbol]?.logo ||
+                    selectedStock.logo ||
+                    null,
+                  sparkline:
+                    sparklines1D[selectedStock.symbol]?.sparkline ||
+                    quotes[selectedStock.symbol]?.sparkline ||
+                    selectedStock.sparkline,
+                  lastUpdated:
+                    quotes[selectedStock.symbol]?.lastTickTime ||
+                    quotes[selectedStock.symbol]?.timestamp ||
+                    sparklines1D[selectedStock.symbol]?.lastUpdated ||
+                    selectedStock.lastUpdated,
                 }
               : null
           }
@@ -408,6 +467,18 @@ const styles = StyleSheet.create({
   listContent: {
     paddingTop: spacing.xs,
     paddingBottom: spacing.xl,
+  },
+  listFooter: {
+    alignItems: 'flex-end',
+    paddingVertical: spacing.sm,
+    paddingRight: spacing.xs,
+  },
+  addStockIconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.sm + 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyState: {
     paddingVertical: spacing.xxl,

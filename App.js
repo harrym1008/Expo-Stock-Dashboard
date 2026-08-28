@@ -7,6 +7,7 @@ import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/
 import TabNavigator from './src/navigation/TabNavigator';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { MarketDataProvider } from './src/context/MarketDataContext';
+import { WatchlistProvider } from './src/context/WatchlistContext';
 
 function AppContent() {
   const { theme, isDark } = useTheme();
@@ -62,7 +63,9 @@ export default function App() {
       <SafeAreaProvider>
         <ThemeProvider>
           <MarketDataProvider>
-            <AppContent />
+            <WatchlistProvider>
+              <AppContent />
+            </WatchlistProvider>
           </MarketDataProvider>
         </ThemeProvider>
       </SafeAreaProvider>
