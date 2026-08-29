@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { spacing } from '../../constants/theme';
+import { layoutStyles } from '../../styles';
 import AppText from './AppText';
 import SettingsModal from './SettingsModal';
 
@@ -56,7 +57,7 @@ export default function ScreenContainer({
         </View>
       </View>
 
-      <View style={styles.body}>{children}</View>
+      <View style={layoutStyles.flex1}>{children}</View>
 
       <SettingsModal
         visible={settingsVisible}
@@ -67,7 +68,7 @@ export default function ScreenContainer({
 
   return (
     <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: theme.background }]}
+      style={[layoutStyles.flex1, { backgroundColor: theme.background }]}
       edges={['top', 'left', 'right']}
     >
       {content}
@@ -76,9 +77,6 @@ export default function ScreenContainer({
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
   content: {
     flex: 1,
     paddingHorizontal: spacing.lg,
@@ -107,7 +105,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  body: {
-    flex: 1,
-  },
 });
+

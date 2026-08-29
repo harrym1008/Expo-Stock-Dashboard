@@ -3,6 +3,7 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { spacing } from '../../constants/theme';
+import { stockItemStyles } from '../../styles';
 import AppText from '../common/AppText';
 import CompanyLogo from '../common/CompanyLogo';
 
@@ -12,8 +13,9 @@ export default function SearchResultItem({ item, onPress }) {
   return (
     <TouchableOpacity
       style={[
-        styles.container,
+        stockItemStyles.itemContainer,
         {
+          borderBottomWidth: StyleSheet.hairlineWidth,
           borderBottomColor: theme.borderSubtle,
         },
       ]}
@@ -31,11 +33,11 @@ export default function SearchResultItem({ item, onPress }) {
         />
 
         <View style={styles.textWrapper}>
-          <AppText bold style={styles.symbolText}>
+          <AppText bold style={stockItemStyles.symbolText}>
             {item.symbol}
           </AppText>
           <AppText
-            style={[styles.nameText, { color: theme.textSecondary }]}
+            style={[stockItemStyles.nameText, styles.nameText, { color: theme.textSecondary }]}
             numberOfLines={1}
           >
             {item.name}
@@ -56,14 +58,6 @@ export default function SearchResultItem({ item, onPress }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    minHeight: 64,
-  },
   leftSection: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -75,13 +69,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
-  symbolText: {
-    fontSize: 16,
-    letterSpacing: 0.3,
-  },
   nameText: {
-    fontSize: 12,
-    marginTop: 2,
     letterSpacing: -0.2,
   },
   rightSection: {
@@ -90,3 +78,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+

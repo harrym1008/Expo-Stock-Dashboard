@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { useWatchlist } from '../../context/WatchlistContext';
 import { spacing, borderRadius } from '../../constants/theme';
+import { modalStyles } from '../../styles';
 import AppText from '../common/AppText';
 import CompanyLogo from '../common/CompanyLogo';
 
@@ -34,10 +35,10 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
+      <View style={modalStyles.modalOverlay}>
         {/* Top Gap - Tap to dismiss */}
         <TouchableOpacity
-          style={styles.topBackdropGap}
+          style={modalStyles.topBackdropGap}
           activeOpacity={1}
           onPress={onClose}
           accessibilityRole="button"
@@ -47,18 +48,18 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
         {/* Bottom Sheet Container */}
         <View
           style={[
-            styles.sheetContainer,
+            modalStyles.sheetContainer,
             { backgroundColor: theme.background },
           ]}
         >
           <SafeAreaView
-            style={[styles.safeArea, { backgroundColor: theme.background }]}
+            style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
             {/* Header: Matches StockDetailModal layout with Logo, Ticker, Exchange & Company Name */}
             <View
               style={[
-                styles.header,
+                modalStyles.header,
                 { borderBottomColor: theme.borderSubtle },
               ]}
             >
@@ -92,7 +93,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
               {/* Close Button: Cross icon matching other modals */}
               <TouchableOpacity
                 onPress={onClose}
-                style={styles.closeBtn}
+                style={[modalStyles.closeBtn, styles.closeBtn]}
                 accessibilityRole="button"
                 accessibilityLabel="Close"
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -104,11 +105,12 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
             {/* Vertical List of All Wishlists */}
             <ScrollView
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.content}
+              contentContainerStyle={modalStyles.content}
             >
               <AppText
                 bold
                 style={[
+                  modalStyles.sectionLabel,
                   styles.sectionLabel,
                   { color: theme.textSecondary },
                 ]}
@@ -203,31 +205,6 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-  },
-  topBackdropGap: {
-    height: 120,
-    width: '100%',
-  },
-  sheetContainer: {
-    flex: 1,
-    borderTopLeftRadius: borderRadius.md + 6,
-    borderTopRightRadius: borderRadius.md + 6,
-    overflow: 'hidden',
-  },
-  safeArea: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-  },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -253,20 +230,10 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   closeBtn: {
-    padding: spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
     marginLeft: spacing.sm,
   },
-  content: {
-    paddingTop: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
   sectionLabel: {
-    fontSize: 12,
     letterSpacing: 1.1,
-    marginBottom: spacing.sm,
     marginLeft: spacing.xs,
   },
   listCard: {
@@ -304,3 +271,4 @@ const styles = StyleSheet.create({
     marginLeft: spacing.md,
   },
 });
+

@@ -25,13 +25,23 @@ class PersistentLruCache {
   constructor() {
     this.db = null;
     this.dbPromise = null;
-    this.operationPromise = Promise.resolve();
+    this.writePromise = Promise.resolve();
   }
 
-  run(operation) {
-    const next = this.operationPromise.then(operation, operation);
-    this.operationPromise = next.catch(() => {});
+  enqueueWrite(operation) {
+    const next = this.writePromise.then(operation, operation);
+    this.writePromise = next.catch(() => {});
     return next;
+  }
+
+  touch(key, timestamp) {
+    if (!this.db) return;
+
+    // LRU bookkeeping must never hold up a cache hit or a network response.
+    // SQLite serializes the individual statement safely on the shared connection.
+    this.db
+      .runAsync('UPDATE cache_entries SET last_accessed = ? WHERE key = ?', timestamp, key)
+      .catch(() => {});
   }
 
   async init() {
@@ -102,36 +112,31 @@ class PersistentLruCache {
   }
 
   async getJson(key) {
-    return this.run(async () => {
-      const db = await this.init();
-      const item = await db.getFirstAsync(
-        'SELECT value, created_at, ttl_ms, type FROM cache_entries WHERE key = ?',
-        key
-      );
-      if (!item || item.type !== 'json') return null;
+    const db = await this.init();
+    const item = await db.getFirstAsync(
+      'SELECT value, created_at, ttl_ms, type FROM cache_entries WHERE key = ?',
+      key
+    );
+    if (!item || item.type !== 'json') return null;
 
-      const now = Date.now();
-      if (now - item.created_at > (item.ttl_ms || DEFAULT_TTL_MS)) {
-        await db.runAsync('DELETE FROM cache_entries WHERE key = ?', key);
-        return null;
-      }
+    const now = Date.now();
+    if (now - item.created_at > (item.ttl_ms || DEFAULT_TTL_MS)) {
+      this.enqueueWrite(() => db.runAsync('DELETE FROM cache_entries WHERE key = ?', key));
+      return null;
+    }
 
-      try {
-        await db.runAsync(
-          'UPDATE cache_entries SET last_accessed = ? WHERE key = ?',
-          now,
-          key
-        );
-        return JSON.parse(item.value);
-      } catch (err) {
-        await db.runAsync('DELETE FROM cache_entries WHERE key = ?', key);
-        return null;
-      }
-    });
+    try {
+      const value = JSON.parse(item.value);
+      this.touch(key, now);
+      return value;
+    } catch (err) {
+      this.enqueueWrite(() => db.runAsync('DELETE FROM cache_entries WHERE key = ?', key));
+      return null;
+    }
   }
 
   async setJson(key, data, ttl = DEFAULT_TTL_MS) {
-    return this.run(async () => {
+    return this.enqueueWrite(async () => {
       const db = await this.init();
       const value = JSON.stringify(data);
       if (typeof value !== 'string') return;
@@ -161,34 +166,28 @@ class PersistentLruCache {
   async getCachedLogo(symbol) {
     if (!symbol) return null;
 
-    return this.run(async () => {
-      const db = await this.init();
-      const key = `logo_${symbol.toUpperCase()}`;
-      const item = await db.getFirstAsync(
-        'SELECT value, created_at, ttl_ms, type FROM cache_entries WHERE key = ?',
-        key
-      );
-      if (!item || item.type !== 'logo') return null;
+    const db = await this.init();
+    const key = `logo_${symbol.toUpperCase()}`;
+    const item = await db.getFirstAsync(
+      'SELECT value, created_at, ttl_ms, type FROM cache_entries WHERE key = ?',
+      key
+    );
+    if (!item || item.type !== 'logo') return null;
 
-      const now = Date.now();
-      if (now - item.created_at > (item.ttl_ms || DEFAULT_TTL_MS)) {
-        await db.runAsync('DELETE FROM cache_entries WHERE key = ?', key);
-        return null;
-      }
+    const now = Date.now();
+    if (now - item.created_at > (item.ttl_ms || DEFAULT_TTL_MS)) {
+      this.enqueueWrite(() => db.runAsync('DELETE FROM cache_entries WHERE key = ?', key));
+      return null;
+    }
 
-      await db.runAsync(
-        'UPDATE cache_entries SET last_accessed = ? WHERE key = ?',
-        now,
-        key
-      );
-      return item.value;
-    });
+    this.touch(key, now);
+    return item.value;
   }
 
   async cacheLogoData(symbol, dataUri) {
     if (!symbol || !dataUri) return false;
 
-    return this.run(async () => {
+    return this.enqueueWrite(async () => {
       const db = await this.init();
       const key = `logo_${symbol.toUpperCase()}`;
       const byteSize = getByteSize(dataUri);
@@ -220,7 +219,7 @@ class PersistentLruCache {
       [{ resize: { width: LOGO_SIZE, height: LOGO_SIZE } }],
       {
         base64: true,
-        compress: 1,
+        compress: 0.5,
         format: ImageManipulator.SaveFormat.PNG,
       }
     );
@@ -278,22 +277,20 @@ class PersistentLruCache {
   }
 
   async getCacheStats() {
-    return this.run(async () => {
-      const db = await this.init();
-      const totalBytes = await this.getTotalBytes(db);
-      const row = await db.getFirstAsync('SELECT COUNT(*) AS item_count FROM cache_entries');
+    const db = await this.init();
+    const totalBytes = await this.getTotalBytes(db);
+    const row = await db.getFirstAsync('SELECT COUNT(*) AS item_count FROM cache_entries');
 
-      return {
-        totalBytes,
-        totalMB: (totalBytes / (1024 * 1024)).toFixed(2),
-        maxMB: CACHE_MAX_MB,
-        itemCount: row?.item_count || 0,
-      };
-    });
+    return {
+      totalBytes,
+      totalMB: (totalBytes / (1024 * 1024)).toFixed(2),
+      maxMB: CACHE_MAX_MB,
+      itemCount: row?.item_count || 0,
+    };
   }
 
   async clearAll() {
-    return this.run(async () => {
+    return this.enqueueWrite(async () => {
       const db = await this.init();
       await db.runAsync('DELETE FROM cache_entries');
       await this.removeLegacyCacheFiles();

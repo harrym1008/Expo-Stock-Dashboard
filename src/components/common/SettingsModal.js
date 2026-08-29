@@ -18,6 +18,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { storageService } from '../../services/storageService';
 import { finnhubWebSocketService } from '../../services/finnhubWebSocketService';
 import { spacing, borderRadius } from '../../constants/theme';
+import { modalStyles } from '../../styles';
 import AppText from './AppText';
 
 export default function SettingsModal({ visible, onClose }) {
@@ -96,10 +97,10 @@ export default function SettingsModal({ visible, onClose }) {
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
+      <View style={modalStyles.modalOverlayLight}>
         {/* Top Gap - Tapping here dismisses the modal */}
         <TouchableOpacity
-          style={styles.topBackdropGap}
+          style={modalStyles.topBackdropGap}
           activeOpacity={1}
           onPress={onClose}
         />
@@ -107,18 +108,18 @@ export default function SettingsModal({ visible, onClose }) {
         {/* Sheet Container */}
         <View
           style={[
-            styles.sheetContainer,
+            modalStyles.sheetContainer,
             { backgroundColor: theme.background },
           ]}
         >
           <SafeAreaView
-            style={[styles.safeArea, { backgroundColor: theme.background }]}
+            style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
             {/* Header */}
             <View
               style={[
-                styles.header,
+                modalStyles.header,
                 { borderBottomColor: theme.borderSubtle },
               ]}
             >
@@ -126,7 +127,7 @@ export default function SettingsModal({ visible, onClose }) {
 
               <TouchableOpacity
                 onPress={onClose}
-                style={styles.closeBtn}
+                style={modalStyles.closeBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Close Settings"
                 hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
@@ -135,9 +136,9 @@ export default function SettingsModal({ visible, onClose }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={modalStyles.content}>
               {/* Appearance Section */}
-              <AppText bold style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+              <AppText bold style={[modalStyles.sectionLabel, { color: theme.textSecondary }]}>
                 APPEARANCE
               </AppText>
               <View style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -159,7 +160,7 @@ export default function SettingsModal({ visible, onClose }) {
               </View>
 
               {/* Market Data API Configuration Section */}
-              <AppText bold style={[styles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}>
+              <AppText bold style={[modalStyles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}>
                 FINNHUB API CONFIGURATION
               </AppText>
               <View style={[styles.apiKeyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -209,7 +210,7 @@ export default function SettingsModal({ visible, onClose }) {
               {/* Persistent cache section */}
               <AppText
                 bold
-                style={[styles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}
+                style={[modalStyles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}
               >
                 OFFLINE CACHE (50MB MAX)
               </AppText>
@@ -247,48 +248,8 @@ export default function SettingsModal({ visible, onClose }) {
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-  },
-  topBackdropGap: {
-    height: 72,
-    width: '100%',
-  },
-  sheetContainer: {
-    flex: 1,
-    borderTopLeftRadius: borderRadius.md + 4,
-    borderTopRightRadius: borderRadius.md + 4,
-    overflow: 'hidden',
-  },
-  safeArea: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-  },
   title: {
     fontSize: 20,
-  },
-  closeBtn: {
-    padding: spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  content: {
-    paddingTop: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    letterSpacing: 0.8,
-    marginBottom: spacing.sm,
   },
   row: {
     flexDirection: 'row',
@@ -377,3 +338,4 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 });
+

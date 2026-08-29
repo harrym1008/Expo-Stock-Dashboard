@@ -1,19 +1,15 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View } from 'react-native';
 import ScreenContainer from '../components/common/ScreenContainer';
+import { layoutStyles } from '../styles';
 
 export default function PortfolioScreen() {
   return (
     <ScreenContainer title="Portfolio">
-      <View style={styles.container}>
+      <View style={layoutStyles.flex1}>
         {/* Configure your Portfolio screen content here */}
       </View>
     </ScreenContainer>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});

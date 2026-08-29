@@ -15,6 +15,7 @@ import { spacing, borderRadius } from '../../constants/theme';
 import { formatTimeAgo } from '../../utils/formatTimeAgo';
 import { storageService } from '../../services/storageService';
 import { useWatchlist } from '../../context/WatchlistContext';
+import { modalStyles, layoutStyles } from '../../styles';
 import AppText from '../common/AppText';
 import StockInteractiveChart from './StockInteractiveChart';
 import MarketCalendarModal from '../common/MarketCalendarModal';
@@ -266,10 +267,10 @@ export default function StockDetailModal({ visible, stock, onClose }) {
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
+      <View style={modalStyles.modalOverlayLight}>
         {/* Top Gap - Tapping here dismisses the modal */}
         <TouchableOpacity
-          style={styles.topBackdropGap}
+          style={modalStyles.topBackdropGap}
           activeOpacity={1}
           onPress={onClose}
         />
@@ -277,17 +278,17 @@ export default function StockDetailModal({ visible, stock, onClose }) {
         {/* Sheet Container */}
         <View
           style={[
-            styles.sheetContainer,
+            modalStyles.sheetContainer,
             { backgroundColor: theme.background },
           ]}
         >
           <SafeAreaView
-            style={[styles.safeArea, { backgroundColor: theme.background }]}
+            style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
             <ScrollView
               showsVerticalScrollIndicator={false}
-              style={styles.scrollFlex}
+              style={layoutStyles.flex1}
               contentContainerStyle={styles.scrollContent}
             >
               {/* 1. Header Row */}
@@ -317,7 +318,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 <View style={styles.headerActions}>
                   <TouchableOpacity
                     onPress={() => setWatchlistModalVisible(true)}
-                    style={styles.actionBtn}
+                    style={modalStyles.closeBtn}
                     accessibilityRole="button"
                     accessibilityLabel="Add to Wishlist"
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -331,7 +332,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
 
                   <TouchableOpacity
                     onPress={onClose}
-                    style={styles.actionBtn}
+                    style={modalStyles.closeBtn}
                     accessibilityRole="button"
                     accessibilityLabel="Close Stock Details"
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -518,26 +519,6 @@ export default function StockDetailModal({ visible, stock, onClose }) {
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-  },
-  topBackdropGap: {
-    height: 60,
-    width: '100%',
-  },
-  sheetContainer: {
-    flex: 1,
-    borderTopLeftRadius: borderRadius.md + 6,
-    borderTopRightRadius: borderRadius.md + 6,
-    overflow: 'hidden',
-  },
-  safeArea: {
-    flex: 1,
-  },
-  scrollFlex: {
-    flex: 1,
-  },
   scrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
@@ -580,23 +561,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md * 2,
   },
-  actionBtn: {
-    padding: spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginVertical: spacing.md,
-    gap: spacing.md,
+    // gap: spacing.md,
   },
   mainPriceColOpen: {
     flex: 1,
   },
   mainPriceColClosed: {
-    flex: 1.4,
+    flex: 1.36,
   },
   mainPriceText: {
     fontSize: 32,

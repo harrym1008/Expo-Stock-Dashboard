@@ -9,7 +9,8 @@ import {
   Platform,
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
-import { spacing, borderRadius, fonts } from '../../constants/theme';
+import { spacing, fonts } from '../../constants/theme';
+import { dialogStyles } from '../../styles';
 import AppText from './AppText';
 
 /**
@@ -38,30 +39,21 @@ export default function TextInputModal({
   onCancel,
 }) {
   const { theme, isDark } = useTheme();
-  const [text, setText] = useState(initialValue || '');
+  const [text, setText] = useState(initialValue);
   const inputRef = useRef(null);
 
-  // Reset input text to initialValue whenever the modal opens
+  // Sync state when modal opens or initialValue changes
   useEffect(() => {
     if (visible) {
-      setText(initialValue || '');
-      // Ensure input receives focus once modal is presented
-      const focusTimer = setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-        }
-      }, 100);
-      return () => clearTimeout(focusTimer);
+      setText(initialValue);
     }
   }, [visible, initialValue]);
 
-  const trimmedText = text.trim();
-  const isSubmitDisabled = trimmedText.length === 0;
-
   const handleSubmit = () => {
-    if (isSubmitDisabled) return;
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
     if (onSubmit) {
-      onSubmit(trimmedText);
+      onSubmit(trimmed);
     }
   };
 
@@ -71,16 +63,19 @@ export default function TextInputModal({
     }
   };
 
+  const isSubmitDisabled = text.trim().length === 0;
+
   return (
     <Modal
       visible={visible}
-      animationType="fade"
       transparent={true}
+      animationType="fade"
       onRequestClose={handleCancel}
+      statusBarTranslucent={true}
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.overlay}
+        style={dialogStyles.overlay}
       >
         {/* Semi-transparent backdrop - tapping dismisses */}
         <TouchableOpacity
@@ -94,7 +89,7 @@ export default function TextInputModal({
         {/* Centered Modal Card */}
         <View
           style={[
-            styles.card,
+            dialogStyles.card,
             {
               backgroundColor: isDark ? '#1C1F26' : '#FFFFFF',
               borderColor: theme.border,
@@ -110,7 +105,7 @@ export default function TextInputModal({
           <TextInput
             ref={inputRef}
             style={[
-              styles.input,
+              dialogStyles.input,
               {
                 backgroundColor: isDark ? '#12161E' : '#F0F3F7',
                 borderColor: theme.border,
@@ -132,11 +127,10 @@ export default function TextInputModal({
           />
 
           {/* Action Buttons Row */}
-          <View style={styles.buttonRow}>
+          <View style={dialogStyles.buttonRow}>
             <TouchableOpacity
               style={[
-                styles.button,
-                styles.cancelButton,
+                dialogStyles.button,
                 { backgroundColor: isDark ? '#262D3D' : '#E8ECF2' },
               ]}
               onPress={handleCancel}
@@ -144,15 +138,14 @@ export default function TextInputModal({
               accessibilityRole="button"
               accessibilityLabel={cancelLabel}
             >
-              <AppText bold style={[styles.buttonText, { color: theme.textSecondary }]}>
+              <AppText bold style={[dialogStyles.buttonText, { color: theme.textSecondary }]}>
                 {cancelLabel}
               </AppText>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
-                styles.button,
-                styles.submitButton,
+                dialogStyles.button,
                 {
                   backgroundColor: theme.primary,
                   opacity: isSubmitDisabled ? 0.45 : 1,
@@ -164,7 +157,7 @@ export default function TextInputModal({
               accessibilityRole="button"
               accessibilityLabel={submitLabel}
             >
-              <AppText bold style={[styles.buttonText, styles.submitButtonText]}>
+              <AppText bold style={[dialogStyles.buttonText, dialogStyles.submitButtonText]}>
                 {submitLabel}
               </AppText>
             </TouchableOpacity>
@@ -176,58 +169,8 @@ export default function TextInputModal({
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 380,
-    borderRadius: borderRadius.md + 4,
-    borderWidth: 1,
-    padding: spacing.xl,
-    // Elevation / Shadow for depth
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 10,
-  },
   title: {
     fontSize: 18,
     marginBottom: spacing.lg,
-  },
-  input: {
-    height: 48,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    fontSize: 15,
-    marginBottom: spacing.xl,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  button: {
-    paddingVertical: spacing.md - 2,
-    paddingHorizontal: spacing.lg,
-    borderRadius: borderRadius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 84,
-  },
-  cancelButton: {},
-  submitButton: {},
-  buttonText: {
-    fontSize: 14,
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
   },
 });

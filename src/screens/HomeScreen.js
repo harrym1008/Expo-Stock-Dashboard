@@ -14,6 +14,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useMarketData } from '../context/MarketDataContext';
 import { useWatchlist } from '../context/WatchlistContext';
 import { spacing, borderRadius } from '../constants/theme';
+import { layoutStyles, emptyStateStyles } from '../styles';
 
 export default function HomeScreen() {
   const { theme, isDark } = useTheme();
@@ -334,7 +335,7 @@ export default function HomeScreen() {
       isEditMode={isEditMode}
       onEditPress={handleToggleEditMode}
     >
-      <View style={styles.container}>
+      <View style={layoutStyles.flex1}>
         {/* Watchlist Horizontal Drag Selector with Gradient Fades */}
         <WatchlistTabSelector
           watchlists={watchlists}
@@ -378,8 +379,8 @@ export default function HomeScreen() {
             ) : null
           }
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <AppText style={[styles.emptyText, { color: theme.textSecondary }]}>
+            <View style={emptyStateStyles.container}>
+              <AppText style={[emptyStateStyles.text, { color: theme.textSecondary }]}>
                 No stocks in this watchlist yet.
               </AppText>
             </View>
@@ -461,9 +462,6 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   listContent: {
     paddingTop: spacing.xs,
     paddingBottom: spacing.xl,
@@ -479,13 +477,5 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm + 2,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  emptyState: {
-    paddingVertical: spacing.xxl,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    fontSize: 14,
   },
 });

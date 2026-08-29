@@ -15,6 +15,7 @@ import { logoService } from '../../services/logoService';
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
 import { spacing, borderRadius, fonts } from '../../constants/theme';
+import { layoutStyles, emptyStateStyles } from '../../styles';
 
 // Module-level memoized ticker entries
 const ALL_TICKERS = Object.entries(searchTickersData).map(([symbol, item]) => ({
@@ -95,7 +96,7 @@ export default function StockSearchView({
   const isSearching = searchQuery.trim().length > 0;
 
   return (
-    <View style={[styles.container, containerStyle]}>
+    <View style={[layoutStyles.flex1, containerStyle]}>
       {/* Search Input Bar */}
       <View
         style={[
@@ -122,8 +123,8 @@ export default function StockSearchView({
           autoCorrect={false}
           autoFocus={autoFocus}
           selectionColor={theme.primary}
-          clearButtonMode="never"
           returnKeyType="search"
+          clearButtonMode="never"
         />
         {isSearching && (
           <TouchableOpacity
@@ -169,10 +170,10 @@ export default function StockSearchView({
         keyboardDismissMode="on-drag"
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
+          <View style={[emptyStateStyles.container, styles.emptyState]}>
             <View
               style={[
-                styles.emptyIconContainer,
+                emptyStateStyles.iconContainer,
                 { backgroundColor: theme.surfaceSubtle },
               ]}
             >
@@ -182,11 +183,11 @@ export default function StockSearchView({
                 color={theme.textMuted}
               />
             </View>
-            <AppText bold style={styles.emptyTitle}>
+            <AppText bold style={emptyStateStyles.title}>
               No stocks found
             </AppText>
             <AppText
-              style={[styles.emptySubtitle, { color: theme.textSecondary }]}
+              style={[emptyStateStyles.subtitle, { color: theme.textSecondary }]}
             >
               No results matching "{searchQuery}". Try searching for another ticker symbol or company name.
             </AppText>
@@ -198,9 +199,6 @@ export default function StockSearchView({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -238,26 +236,5 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     paddingVertical: spacing.xxl * 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-  },
-  emptyIconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: borderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 18,
   },
 });

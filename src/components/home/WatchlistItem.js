@@ -8,6 +8,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useTheme } from '../../context/ThemeContext';
 import { spacing } from '../../constants/theme';
+import { stockItemStyles } from '../../styles';
 import AppText from '../common/AppText';
 import Sparkline from './Sparkline';
 import CompanyLogo from '../common/CompanyLogo';
@@ -21,7 +22,7 @@ export default function WatchlistItem({ item, onPress, isEditMode = false, drag 
   return (
     <Animated.View layout={LinearTransition.duration(200)}>
       <TouchableOpacity
-        style={styles.container}
+        style={stockItemStyles.itemContainer}
         onPress={onPress}
         activeOpacity={0.7}
         accessibilityRole="button"
@@ -57,11 +58,11 @@ export default function WatchlistItem({ item, onPress, isEditMode = false, drag 
           />
 
           <View style={styles.titleWrapper}>
-            <AppText bold style={styles.symbolText}>
+            <AppText bold style={stockItemStyles.symbolText}>
               {item.symbol}
             </AppText>
             <AppText
-              style={[styles.nameText, { color: theme.textSecondary }]}
+              style={[stockItemStyles.nameText, styles.nameText, { color: theme.textSecondary }]}
               numberOfLines={1}
             >
               {item.name}
@@ -81,14 +82,14 @@ export default function WatchlistItem({ item, onPress, isEditMode = false, drag 
 
         {/* Right: Price & Percent Change */}
         <View style={styles.rightSection}>
-          <AppText style={styles.priceText}>
+          <AppText style={stockItemStyles.priceText}>
             {item.currency || '$'}
             {(item.price ?? 0).toLocaleString('en-GB', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}
           </AppText>
-          <AppText style={[styles.changeText, { color: trendColor }]}>
+          <AppText style={[stockItemStyles.changeText, { color: trendColor }]}>
             {isPositive ? '+' : '-'}
             {Math.abs(item.changePercent ?? 0).toFixed(2)}%
           </AppText>
@@ -99,13 +100,6 @@ export default function WatchlistItem({ item, onPress, isEditMode = false, drag 
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.md,
-    minHeight: 64,
-  },
   dragHandle: {
     paddingRight: spacing.sm,
     justifyContent: 'center',
@@ -120,13 +114,7 @@ const styles = StyleSheet.create({
   titleWrapper: {
     flex: 1,
   },
-  symbolText: {
-    fontSize: 16,
-    letterSpacing: 0.2,
-  },
   nameText: {
-    fontSize: 12,
-    marginTop: 2,
     letterSpacing: -0.3,
     fontWeight: '100',
   },
@@ -142,11 +130,5 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
-  priceText: {
-    fontSize: 17,
-    letterSpacing: 0.2,
-  },
-  changeText: {
-    fontSize: 12,
-  },
 });
+

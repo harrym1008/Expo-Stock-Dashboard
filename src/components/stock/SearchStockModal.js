@@ -8,7 +8,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
-import { spacing, borderRadius } from '../../constants/theme';
+import { spacing } from '../../constants/theme';
+import { modalStyles } from '../../styles';
 import AppText from '../common/AppText';
 import StockSearchView from '../search/StockSearchView';
 
@@ -27,10 +28,10 @@ export default function SearchStockModal({
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
+      <View style={modalStyles.modalOverlay}>
         {/* Top Gap - Tap to dismiss */}
         <TouchableOpacity
-          style={styles.topBackdropGap}
+          style={modalStyles.topBackdropGap}
           activeOpacity={1}
           onPress={onClose}
           accessibilityRole="button"
@@ -40,18 +41,18 @@ export default function SearchStockModal({
         {/* Sheet Container */}
         <View
           style={[
-            styles.sheetContainer,
+            modalStyles.sheetContainer,
             { backgroundColor: theme.background },
           ]}
         >
           <SafeAreaView
-            style={[styles.safeArea, { backgroundColor: theme.background }]}
+            style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
             {/* Header: Title and Close Button */}
             <View
               style={[
-                styles.header,
+                modalStyles.header,
                 { borderBottomColor: theme.borderSubtle },
               ]}
             >
@@ -66,7 +67,7 @@ export default function SearchStockModal({
 
               <TouchableOpacity
                 onPress={onClose}
-                style={styles.closeBtn}
+                style={modalStyles.closeBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Close search modal"
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -89,31 +90,6 @@ export default function SearchStockModal({
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-  },
-  topBackdropGap: {
-    height: 70,
-    width: '100%',
-  },
-  sheetContainer: {
-    flex: 1,
-    borderTopLeftRadius: borderRadius.md + 6,
-    borderTopRightRadius: borderRadius.md + 6,
-    overflow: 'hidden',
-  },
-  safeArea: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
   headerLeft: {
     flex: 1,
     paddingRight: spacing.sm,
@@ -125,11 +101,6 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 12,
     marginTop: 2,
-  },
-  closeBtn: {
-    padding: spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   searchContainer: {
     flex: 1,

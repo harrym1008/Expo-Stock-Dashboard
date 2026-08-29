@@ -285,7 +285,9 @@ export const yahooFinanceService = {
 
         // 3. Save to persistent LRU cache with boundary-aligned TTL
         const alignedTtl = getBoundaryAlignedTtl(timeframe);
-        await persistentLruCache.setJson(cacheKey, chartData, alignedTtl);
+        // Persist independently of rendering. A slow native database write must
+        // not delay an already-completed market-data request reaching the UI.
+        persistentLruCache.setJson(cacheKey, chartData, alignedTtl).catch(() => {});
 
         const ttlSecs = Math.round(alignedTtl / 1000);
         console.log(

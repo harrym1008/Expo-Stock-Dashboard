@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View } from 'react-native';
 import ScreenContainer from '../components/common/ScreenContainer';
 import StockSearchView from '../components/search/StockSearchView';
 import StockDetailModal from '../components/stock/StockDetailModal';
 import { useMarketData } from '../context/MarketDataContext';
+import { layoutStyles } from '../styles';
 
 export default function SearchScreen() {
   const {
@@ -57,7 +58,7 @@ export default function SearchScreen() {
 
   return (
     <ScreenContainer title="Search">
-      <View style={styles.container}>
+      <View style={layoutStyles.flex1}>
         <StockSearchView onSelectStock={handleOpenStockDetail} />
 
         {/* Stock Detail Slide-Up Modal */}
@@ -71,9 +72,4 @@ export default function SearchScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
 

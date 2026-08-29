@@ -12,6 +12,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import { getNextUpcomingHolidays } from '../../utils/marketHolidays';
+import { modalStyles } from '../../styles';
 import AppText from './AppText';
 
 export default function MarketCalendarModal({ visible, onClose }) {
@@ -68,10 +69,10 @@ export default function MarketCalendarModal({ visible, onClose }) {
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
+      <View style={modalStyles.modalOverlay}>
         {/* Top Gap - Tap to dismiss */}
         <TouchableOpacity
-          style={styles.topBackdropGap}
+          style={modalStyles.topBackdropGap}
           activeOpacity={1}
           onPress={onClose}
         />
@@ -79,18 +80,18 @@ export default function MarketCalendarModal({ visible, onClose }) {
         {/* Sheet Container */}
         <View
           style={[
-            styles.sheetContainer,
+            modalStyles.sheetContainer,
             { backgroundColor: theme.background },
           ]}
         >
           <SafeAreaView
-            style={[styles.safeArea, { backgroundColor: theme.background }]}
+            style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
             {/* Header */}
             <View
               style={[
-                styles.header,
+                modalStyles.header,
                 { borderBottomColor: theme.borderSubtle },
               ]}
             >
@@ -105,7 +106,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
 
               <TouchableOpacity
                 onPress={onClose}
-                style={styles.closeBtn}
+                style={modalStyles.closeBtn}
                 accessibilityRole="button"
                 accessibilityLabel="Close Calendar"
                 hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
@@ -116,7 +117,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
 
             <ScrollView
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.content}
+              contentContainerStyle={modalStyles.content}
             >
               {/* 1. Live Clock & Current Session Card */}
               <View
@@ -159,7 +160,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
               </View>
 
               {/* 2. Standard Market Sessions */}
-              <AppText bold style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+              <AppText bold style={[modalStyles.sectionLabel, { color: theme.textSecondary }]}>
                 STANDARD MARKET SESSIONS
               </AppText>
 
@@ -173,14 +174,14 @@ export default function MarketCalendarModal({ visible, onClose }) {
                 ]}
               >
                 <AppText bold style={styles.daysHeader}>
-                  Monday – Friday:
+                  Monday - Friday (US Eastern Time)
                 </AppText>
 
                 {/* Session Rows with colored bullet points */}
                 <View style={styles.sessionItemRow}>
                   <View style={styles.sessionLeftCol}>
-                    <View style={[styles.sessionBulletDot, { backgroundColor: '#FF9500' }]} />
-                    <AppText bold style={[styles.sessionItemName, { color: '#FF9500' }]}>
+                    <View style={[styles.sessionBulletDot, { backgroundColor: '#FFA500' }]} />
+                    <AppText bold style={[styles.sessionItemName, { color: '#FFA500' }]}>
                       Pre-Market
                     </AppText>
                   </View>
@@ -193,7 +194,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
                   <View style={styles.sessionLeftCol}>
                     <View style={[styles.sessionBulletDot, { backgroundColor: '#00D084' }]} />
                     <AppText bold style={[styles.sessionItemName, { color: '#00D084' }]}>
-                      Market Open
+                      Regular Market
                     </AppText>
                   </View>
                   <AppText bold style={styles.sessionItemTime}>
@@ -203,25 +204,13 @@ export default function MarketCalendarModal({ visible, onClose }) {
 
                 <View style={styles.sessionItemRow}>
                   <View style={styles.sessionLeftCol}>
-                    <View style={[styles.sessionBulletDot, { backgroundColor: '#D946EF' }]} />
-                    <AppText bold style={[styles.sessionItemName, { color: '#D946EF' }]}>
-                      After-Hours
+                    <View style={[styles.sessionBulletDot, { backgroundColor: '#B872FF' }]} />
+                    <AppText bold style={[styles.sessionItemName, { color: '#B872FF' }]}>
+                      Post-Market
                     </AppText>
                   </View>
                   <AppText bold style={styles.sessionItemTime}>
                     16:00 - 20:00 ET
-                  </AppText>
-                </View>
-
-                <View style={styles.sessionItemRow}>
-                  <View style={styles.sessionLeftCol}>
-                    <View style={[styles.sessionBulletDot, { backgroundColor: '#00A3FF' }]} />
-                    <AppText bold style={[styles.sessionItemName, { color: '#00A3FF' }]}>
-                      Overnight (Closed)
-                    </AppText>
-                  </View>
-                  <AppText bold style={styles.sessionItemTime}>
-                    20:00 - 04:00 ET
                   </AppText>
                 </View>
 
@@ -240,7 +229,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
               <AppText
                 bold
                 style={[
-                  styles.sectionLabel,
+                  modalStyles.sectionLabel,
                   { color: theme.textSecondary, marginTop: spacing.lg },
                 ]}
               >
@@ -317,31 +306,6 @@ export default function MarketCalendarModal({ visible, onClose }) {
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-  },
-  topBackdropGap: {
-    height: 60,
-    width: '100%',
-  },
-  sheetContainer: {
-    flex: 1,
-    borderTopLeftRadius: borderRadius.md + 6,
-    borderTopRightRadius: borderRadius.md + 6,
-    overflow: 'hidden',
-  },
-  safeArea: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-  },
   title: {
     fontSize: 20,
   },
@@ -349,16 +313,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
     letterSpacing: 0.5,
-  },
-  closeBtn: {
-    padding: spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  content: {
-    paddingTop: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl,
   },
   liveClockCard: {
     borderRadius: borderRadius.md,
@@ -400,11 +354,6 @@ const styles = StyleSheet.create({
   },
   activeStatusText: {
     fontSize: 14,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    letterSpacing: 0.8,
-    marginBottom: spacing.sm,
   },
   standardSessionsCard: {
     borderRadius: borderRadius.md,
