@@ -6,6 +6,7 @@ import {
   TextInput,
   TouchableOpacity,
   Keyboard,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AppText from '../common/AppText';
@@ -14,6 +15,7 @@ import searchTickersData from '../../constants/searchTickers.json';
 import { logoService } from '../../services/logoService';
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
+import { finnhubRestService } from '../../services/finnhubRestService';
 import { spacing, borderRadius, fonts } from '../../constants/theme';
 import { layoutStyles, emptyStateStyles } from '../../styles';
 
@@ -36,9 +38,59 @@ export default function StockSearchView({
   containerStyle,
 }) {
   const { theme } = useTheme();
-  const { profiles } = useMarketData();
+  const { profiles, apiKey } = useMarketData();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [remoteResults, setRemoteResults] = useState([]);
+  const [remoteSearchStatus, setRemoteSearchStatus] = useState('idle');
+
+  // Search Finnhub only after the user has stopped typing for one second.
+  useEffect(() => {
+    const trimmedQuery = searchQuery.trim();
+    let isCurrentSearch = true;
+
+    if (!trimmedQuery || !apiKey) {
+      setRemoteResults([]);
+      setRemoteSearchStatus('idle');
+      return undefined;
+    }
+
+    // Do not show results from a previous query while waiting for this query.
+    setRemoteResults([]);
+    setRemoteSearchStatus('pending');
+
+    const timeoutId = setTimeout(async () => {
+      if (!isCurrentSearch) return;
+
+      let results = [];
+      try {
+        results = await finnhubRestService.searchSymbols(trimmedQuery, apiKey);
+      } catch (err) {
+        if (isCurrentSearch) {
+          setRemoteSearchStatus('error');
+        }
+        return;
+      }
+
+      if (!isCurrentSearch) return;
+
+      const normalizedResults = (Array.isArray(results) ? results : [])
+        .filter((item) => item?.symbol)
+        .map((item) => ({
+          symbol: item.symbol.trim().toUpperCase(),
+          name: item.name || item.displaySymbol || item.symbol,
+          marketCap: 0,
+        }));
+
+      setRemoteResults(normalizedResults);
+      setRemoteSearchStatus(normalizedResults.length > 0 ? 'success' : 'empty');
+    }, 1000);
+
+    return () => {
+      isCurrentSearch = false;
+      clearTimeout(timeoutId);
+    };
+  }, [searchQuery, apiKey]);
 
   // Filter tickers by symbol or name and sort by market cap descending (max 25 results)
   const filteredResults = useMemo(() => {
@@ -48,7 +100,6 @@ export default function StockSearchView({
     }
 
     const query = trimmedQuery.toLowerCase();
-    const exactSymbol = trimmedQuery.toUpperCase();
 
     const matches = [];
     for (let i = 0; i < ALL_TICKERS.length; i++) {
@@ -67,21 +118,17 @@ export default function StockSearchView({
     // Limit to max 25 results
     const results = matches.slice(0, 25);
 
-    // Append exact searched ticker at bottom if not already included in results
-    const alreadyIncluded = results.some((item) => item.symbol === exactSymbol);
-    if (!alreadyIncluded) {
-      const existingItem = ALL_TICKERS.find((item) => item.symbol === exactSymbol);
-      results.push(
-        existingItem || {
-          symbol: exactSymbol,
-          name: exactSymbol,
-          marketCap: 0,
-        }
-      );
-    }
+    // Append Finnhub matches that are not already present in the local list.
+    const existingSymbols = new Set(results.map((item) => item.symbol));
+    remoteResults.forEach((item) => {
+      if (!existingSymbols.has(item.symbol)) {
+        results.push(item);
+        existingSymbols.add(item.symbol);
+      }
+    });
 
     return results;
-  }, [searchQuery]);
+  }, [searchQuery, remoteResults]);
 
   // Preload static logos in background for visible search results
   useEffect(() => {
@@ -94,6 +141,7 @@ export default function StockSearchView({
   }, []);
 
   const isSearching = searchQuery.trim().length > 0;
+  const isRemoteSearchPending = isSearching && remoteSearchStatus === 'pending';
 
   return (
     <View style={[layoutStyles.flex1, containerStyle]}>
@@ -147,7 +195,9 @@ export default function StockSearchView({
       <View style={styles.sectionHeaderRow}>
         <AppText bold style={[styles.sectionHeaderText, { color: theme.textSecondary }]}>
           {isSearching
-            ? `RESULTS (${filteredResults.length})`
+            ? isRemoteSearchPending
+              ? 'SEARCHING...'
+              : `RESULTS (${filteredResults.length})`
             : 'TOP STOCKS'}
         </AppText>
       </View>
@@ -169,29 +219,42 @@ export default function StockSearchView({
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={[emptyStateStyles.container, styles.emptyState]}>
-            <View
-              style={[
-                emptyStateStyles.iconContainer,
-                { backgroundColor: theme.surfaceSubtle },
-              ]}
-            >
-              <Ionicons
-                name="search-outline"
-                size={32}
-                color={theme.textMuted}
-              />
+        ListFooterComponent={
+          isRemoteSearchPending && filteredResults.length > 0 ? (
+            <View style={styles.loadingFooter}>
+              <ActivityIndicator size="small" color={theme.primary} />
             </View>
-            <AppText bold style={emptyStateStyles.title}>
-              No stocks found
-            </AppText>
-            <AppText
-              style={[emptyStateStyles.subtitle, { color: theme.textSecondary }]}
-            >
-              No results matching "{searchQuery}". Try searching for another ticker symbol or company name.
-            </AppText>
-          </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          isRemoteSearchPending ? (
+            <View style={styles.loadingEmptyState}>
+              <ActivityIndicator size="small" color={theme.primary} />
+            </View>
+          ) : (
+            <View style={[emptyStateStyles.container, styles.emptyState]}>
+              <View
+                style={[
+                  emptyStateStyles.iconContainer,
+                  { backgroundColor: theme.surfaceSubtle },
+                ]}
+              >
+                <Ionicons
+                  name="search-outline"
+                  size={32}
+                  color={theme.textMuted}
+                />
+              </View>
+              <AppText bold style={emptyStateStyles.title}>
+                No stocks found
+              </AppText>
+              <AppText
+                style={[emptyStateStyles.subtitle, { color: theme.textSecondary }]}
+              >
+                No results matching "{searchQuery}". Try searching for another ticker symbol or company name.
+              </AppText>
+            </View>
+          )
         }
       />
     </View>
@@ -233,6 +296,14 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: spacing.xxl,
+  },
+  loadingFooter: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+  },
+  loadingEmptyState: {
+    alignItems: 'center',
+    paddingVertical: spacing.xxl,
   },
   emptyState: {
     paddingVertical: spacing.xxl * 1.5,

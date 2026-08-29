@@ -111,7 +111,7 @@ export const finnhubRestService = {
       try {
         console.log(`[Finnhub REST] 🔎 Searching symbols for: "${query}"`);
         const res = await fetch(
-          `${FINNHUB_BASE_URL}/search?q=${encodeURIComponent(query.trim())}&token=${encodeURIComponent(apiKey)}`
+          `${FINNHUB_BASE_URL}/search?q=${encodeURIComponent(query.trim())}&token=${encodeURIComponent(apiKey)}&exchange=US`
         );
 
         if (!res.ok) return [];
