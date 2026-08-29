@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
+import { useTrading } from '../../context/TradingContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import { formatTimeAgo } from '../../utils/formatTimeAgo';
 import { storageService } from '../../services/storageService';
@@ -97,6 +98,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     apiKey,
   } = useMarketData();
   const { isStockInAnyWatchlist } = useWatchlist();
+  const { isPaperTradingEnabled } = useTrading();
   const [watchlistModalVisible, setWatchlistModalVisible] = useState(false);
   const [selectedTimeframe, setSelectedTimeframe] = useState('1D');
   const [chartData, setChartData] = useState(null);
@@ -898,7 +900,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
               )}
             </ScrollView>
 
-            {/* 8. Anchored Bottom Price Freshness Indicator */}
+            {/* 8. Anchored Bottom Price Freshness Indicator & Paper Trading Actions */}
             <View
               style={[
                 styles.anchoredFooter,
@@ -909,6 +911,32 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 },
               ]}
             >
+              {isPaperTradingEnabled && (
+                <View style={styles.paperTradeButtonRow}>
+                  <TouchableOpacity
+                    style={[styles.paperTradeBtn, styles.paperBuyBtn]}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Paper Buy"
+                  >
+                    <AppText bold style={styles.paperTradeBtnText}>
+                      Paper Buy
+                    </AppText>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.paperTradeBtn, styles.paperSellBtn]}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Paper Sell"
+                  >
+                    <AppText bold style={styles.paperTradeBtnText}>
+                      Paper Sell
+                    </AppText>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               <AppText style={[styles.lastUpdatedText, { color: theme.textMuted }]}>
                 Latest price updated {timeAgoText}
               </AppText>
@@ -1190,8 +1218,39 @@ const styles = StyleSheet.create({
   anchoredFooter: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.sm,
-    // borderTopWidth: 1,/
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#CCCCCC',
+  },
+  paperTradeButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  paperTradeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: borderRadius.sm
+  },
+  paperBuyBtn: {
+    backgroundColor: '#00D084',
+  },
+  paperSellBtn: {
+    backgroundColor: '#FF4D4F',
+  },
+  paperTradeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 18,
   },
   lastUpdatedText: {
     fontSize: 10,

@@ -1,10 +1,20 @@
 /**
- * Sliding window async queue rate limiter supporting both per-second and per-minute constraints.
+ * Adaptive sliding window async queue rate limiter supporting:
+ * - Immediate processing for low traffic (0 extra latency for isolated requests)
+ * - Proportional backlog pacing (gradually slows down dispatch speed as queue depth builds up)
+ * - Per-second and per-minute sliding window constraints
  */
 export class RateLimiter {
-  constructor({ maxPerSecond, maxPerMinute }) {
+  constructor({
+    maxPerSecond,
+    maxPerMinute,
+    backlogDelayPerItem = 50,
+    maxBacklogDelay = 1000,
+  }) {
     this.maxPerSecond = maxPerSecond;
     this.maxPerMinute = maxPerMinute;
+    this.backlogDelayPerItem = backlogDelayPerItem;
+    this.maxBacklogDelay = maxBacklogDelay;
     this.queue = [];
     this.secondTimestamps = [];
     this.minuteTimestamps = [];
@@ -25,6 +35,8 @@ export class RateLimiter {
   async processQueue() {
     if (this.processing || this.queue.length === 0) return;
     this.processing = true;
+    // Yield to microtask queue so any synchronous batch of schedule() calls is queued
+    await Promise.resolve();
 
     while (this.queue.length > 0) {
       const now = Date.now();
@@ -46,9 +58,20 @@ export class RateLimiter {
             .fn()
             .then(item.resolve)
             .catch(item.reject);
+
+          // If more requests are waiting in the queue, add adaptive pacing delay.
+          // Small queues (0 remaining) don't wait at all (instant execution).
+          // As queue builds up, delays increase proportionally to pace requests and form a backlog.
+          if (this.queue.length > 0 && this.backlogDelayPerItem > 0) {
+            const backlogDelay = Math.min(
+              this.maxBacklogDelay,
+              this.queue.length * this.backlogDelayPerItem
+            );
+            await new Promise((r) => setTimeout(r, backlogDelay));
+          }
         }
       } else {
-        // Calculate optimal wait delay
+        // Calculate optimal wait delay when rate limit thresholds are reached
         let waitTime = 50;
         if (!canSendSecond && this.secondTimestamps.length > 0) {
           const oldestSecond = this.secondTimestamps[0];
@@ -65,16 +88,24 @@ export class RateLimiter {
 
     this.processing = false;
   }
+
+  get queueLength() {
+    return this.queue.length;
+  }
 }
 
-// 1. Finnhub: 60/min, 10/sec
+// 1. Finnhub: 60/min, 10/sec (50ms pacing per queued item up to 1000ms)
 export const finnhubRateLimiter = new RateLimiter({
   maxPerSecond: 10,
   maxPerMinute: 60,
+  backlogDelayPerItem: 50,
+  maxBacklogDelay: 1000,
 });
 
-// 2. Yahoo Finance: 100/min, 10/sec
+// 2. Yahoo Finance: 100/min, 10/sec (40ms pacing per queued item up to 800ms)
 export const yahooRateLimiter = new RateLimiter({
   maxPerSecond: 10,
   maxPerMinute: 100,
+  backlogDelayPerItem: 40,
+  maxBacklogDelay: 800,
 });

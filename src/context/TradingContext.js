@@ -1,0 +1,57 @@
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from 'react';
+import { storageService } from '../services/storageService';
+
+const TradingContext = createContext(null);
+
+export function TradingProvider({ children }) {
+  const [isPaperTradingEnabled, setIsPaperTradingEnabledState] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    storageService.getPaperTradingEnabled().then((enabled) => {
+      setIsPaperTradingEnabledState(Boolean(enabled));
+      setIsLoading(false);
+    });
+  }, []);
+
+  const setPaperTradingEnabled = useCallback(async (enabled) => {
+    const value = Boolean(enabled);
+    setIsPaperTradingEnabledState(value);
+    await storageService.setPaperTradingEnabled(value);
+  }, []);
+
+  const togglePaperTrading = useCallback(async () => {
+    setIsPaperTradingEnabledState((prev) => {
+      const next = !prev;
+      storageService.setPaperTradingEnabled(next);
+      return next;
+    });
+  }, []);
+
+  const value = {
+    isPaperTradingEnabled,
+    setIsPaperTradingEnabled: setPaperTradingEnabled,
+    togglePaperTrading,
+    isLoading,
+  };
+
+  return (
+    <TradingContext.Provider value={value}>
+      {children}
+    </TradingContext.Provider>
+  );
+}
+
+export function useTrading() {
+  const context = useContext(TradingContext);
+  if (!context) {
+    throw new Error('useTrading must be used within a TradingProvider');
+  }
+  return context;
+}

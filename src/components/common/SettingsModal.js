@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
+import { useTrading } from '../../context/TradingContext';
 import { storageService } from '../../services/storageService';
 import { finnhubWebSocketService } from '../../services/finnhubWebSocketService';
 import { spacing, borderRadius } from '../../constants/theme';
@@ -25,6 +26,7 @@ import AppText from './AppText';
 export default function SettingsModal({ visible, onClose }) {
   const { theme, isDark, toggleTheme } = useTheme();
   const { apiKey, updateApiKey } = useMarketData();
+  const { isPaperTradingEnabled, setIsPaperTradingEnabled } = useTrading();
   const [inputKey, setInputKey] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [showKey, setShowKey] = useState(false);
@@ -144,6 +146,28 @@ export default function SettingsModal({ visible, onClose }) {
                 />
               </View>
 
+              {/* Simulated Paper Trading Section */}
+              <AppText bold style={[modalStyles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}>
+                SIMULATED TRADING
+              </AppText>
+              <View style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                <View style={styles.rowLeft}>
+                  <Ionicons name="trending-up-outline" size={20} color={theme.primary} />
+                  <View style={styles.textGroup}>
+                    <AppText bold style={styles.rowTitle}>Simulated Paper Trading</AppText>
+                    <AppText style={[styles.rowSubtitle, { color: theme.textSecondary }]}>
+                      {isPaperTradingEnabled ? 'Simulated trading is enabled' : 'Practice trading with virtual funds'}
+                    </AppText>
+                  </View>
+                </View>
+                <Switch
+                  value={isPaperTradingEnabled}
+                  onValueChange={setIsPaperTradingEnabled}
+                  trackColor={{ false: '#D4D4D4', true: 'rgba(0, 163, 255, 0.3)' }}
+                  thumbColor={isPaperTradingEnabled ? theme.primary : '#5C6A7E'}
+                />
+              </View>
+
               {/* Market Data API Configuration Section */}
               <AppText bold style={[modalStyles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}>
                 FINNHUB API CONFIGURATION
@@ -245,8 +269,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    flex: 1,
+    marginRight: spacing.sm,
   },
   textGroup: {
+    flex: 1,
     gap: 2,
   },
   rowTitle: {

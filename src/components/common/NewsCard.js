@@ -14,7 +14,8 @@ export default function NewsCard({ item }) {
   const sourceLower = (item.source || '').toLowerCase();
   const isReuters = sourceLower.includes('reuters');
   const isBloomberg = sourceLower.includes('bloomberg');
-  const hideImageBySource = isReuters || isBloomberg;
+  const isYahoo = sourceLower.includes('yahoo');
+  const hideImageBySource = isReuters || isBloomberg || isYahoo;
   const hasSummary = !isReuters && Boolean(item.summary && item.summary.trim());
 
   const hasValidImage = Boolean(item.image && typeof item.image === 'string' && item.image.trim().length > 0);
@@ -52,7 +53,7 @@ export default function NewsCard({ item }) {
           {item.headline}
         </AppText>
         {hasSummary && (
-          <AppText style={[newsStyles.newsSummary, { color: theme.textSecondary }]}>
+          <AppText style={[newsStyles.newsSummary, { color: theme.textSecondary }]} numberOfLines={3} ellipsizeMode="tail">
             {item.summary}
           </AppText>
         )}

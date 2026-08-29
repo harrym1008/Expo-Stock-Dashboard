@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   FINNHUB_API_KEY: '@stock_dashboard_finnhub_api_key',
   WATCHLISTS: '@stock_dashboard_watchlists',
   STOCK_TIMEFRAMES: '@stock_dashboard_stock_timeframes',
+  PAPER_TRADING_ENABLED: '@stock_dashboard_paper_trading_enabled',
 };
 
 // 30 Days (1 Month) TTL for company profiles and logos
@@ -94,6 +95,28 @@ export const storageService = {
       await AsyncStorage.setItem(STORAGE_KEYS.STOCK_TIMEFRAMES, JSON.stringify(current));
     } catch (e) {
       console.warn('Failed to save stock timeframe:', e);
+    }
+  },
+
+  // --- Simulated Paper Trading ---
+
+  async getPaperTradingEnabled() {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEYS.PAPER_TRADING_ENABLED);
+      return raw !== null ? JSON.parse(raw) : false;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async setPaperTradingEnabled(enabled) {
+    try {
+      await AsyncStorage.setItem(
+        STORAGE_KEYS.PAPER_TRADING_ENABLED,
+        JSON.stringify(Boolean(enabled))
+      );
+    } catch (e) {
+      console.warn('Failed to save paper trading setting:', e);
     }
   },
 };
