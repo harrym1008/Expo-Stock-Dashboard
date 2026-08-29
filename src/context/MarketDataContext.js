@@ -182,7 +182,45 @@ export function MarketDataProvider({ children }) {
     return await yahooFinanceService.fetchHistoricalData(sym, timeframe, livePrice);
   }, []);
 
-  // 9. Watchlist & Active Modal Symbol Subscriptions
+  // 9. Fetch Key Metrics (Finnhub)
+  const fetchStockMetrics = useCallback(
+    async (symbol) => {
+      if (!symbol) return null;
+      const key = apiKey || (await storageService.getApiKey());
+      if (!key) return null;
+      return await finnhubRestService.fetchStockMetrics(symbol, key);
+    },
+    [apiKey]
+  );
+
+  // 10. Fetch Company Description & Overview (Yahoo Finance)
+  const fetchCompanyDescription = useCallback(async (symbol) => {
+    if (!symbol) return null;
+    return await yahooFinanceService.fetchCompanyDescription(symbol);
+  }, []);
+
+  // 11. Fetch Recent Company News (Finnhub)
+  const fetchCompanyNews = useCallback(
+    async (symbol) => {
+      if (!symbol) return [];
+      const key = apiKey || (await storageService.getApiKey());
+      if (!key) return [];
+      return await finnhubRestService.fetchCompanyNews(symbol, key);
+    },
+    [apiKey]
+  );
+
+  // 12. Fetch Market News (Finnhub)
+  const fetchMarketNews = useCallback(
+    async (category = 'general', forceRefresh = false) => {
+      const key = apiKey || (await storageService.getApiKey());
+      if (!key) return [];
+      return await finnhubRestService.fetchMarketNews(key, category, forceRefresh);
+    },
+    [apiKey]
+  );
+
+  // 13. Watchlist & Active Modal Symbol Subscriptions
   const setWatchlistSymbols = useCallback((symbols) => {
     finnhubWebSocketService.setWatchlistSymbols(symbols);
   }, []);
@@ -205,6 +243,10 @@ export function MarketDataProvider({ children }) {
     fetchQuote,
     fetchProfile,
     fetchHistoricalChart,
+    fetchStockMetrics,
+    fetchCompanyDescription,
+    fetchCompanyNews,
+    fetchMarketNews,
     setWatchlistSymbols,
     setActiveModalSymbol,
   };

@@ -27,10 +27,22 @@ export function formatTimeAgo(timestamp) {
     return `${diffSeconds} secs ago`;
   }
 
-  const hours = Math.floor(diffSeconds / 3600);
+  const days = Math.floor(diffSeconds / 86400);
+  const hours = Math.floor((diffSeconds % 86400) / 3600);
   const minutes = Math.floor((diffSeconds % 3600) / 60);
   const seconds = diffSeconds % 60;
 
+  // >= 1 day
+  if (days > 0) {
+    const dayText = days === 1 ? '1 day' : `${days} days`;
+    if (hours > 0) {
+      const hrText = hours === 1 ? '1 hr' : `${hours} hrs`;
+      return `${dayText} ${hrText} ago`;
+    }
+    return `${dayText} ago`;
+  }
+
+  // Under 1 day
   if (hours > 0) {
     const hrText = hours === 1 ? '1 hr' : `${hours} hrs`;
     if (minutes > 0) {

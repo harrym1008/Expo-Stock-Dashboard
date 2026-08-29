@@ -191,3 +191,61 @@ export const emptyStateStyles = StyleSheet.create({
     lineHeight: 18,
   },
 });
+
+/**
+ * Common news list and card styles reused across NewsScreen and StockDetailModal.
+ */
+export const newsStyles = StyleSheet.create({
+  newsList: {
+    gap: spacing.sm + 2,
+  },
+  newsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    gap: spacing.md,
+  },
+  newsContent: {
+    flex: 1,
+  },
+  newsMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  newsSource: {
+    fontSize: 11,
+  },
+  newsDot: {
+    fontSize: 11,
+  },
+  newsTime: {
+    fontSize: 11,
+  },
+  newsHeadline: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  newsSummary: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 4,
+  },
+  newsThumbnail: {
+    width: 68,
+    height: 54,
+    borderRadius: borderRadius.sm,
+    alignSelf: 'center',
+  },
+  newsThumbnailPlaceholder: {
+    width: 68,
+    height: 54,
+    borderRadius: borderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+  },
+});

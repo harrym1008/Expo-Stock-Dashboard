@@ -11,6 +11,7 @@ import {
   BackHandler,
   Platform,
 } from 'react-native';
+import * as Updates from 'expo-updates';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -49,8 +50,8 @@ export default function SettingsModal({ visible, onClose }) {
 
   const handleClearCache = () => {
     Alert.alert(
-      'Clear Cache & Exit',
-      'This will wipe all cached company profiles and logos (50MB max), stop all background data services, and close the application.\n\nDo you want to proceed?',
+      'Clear Cache & Restart',
+      'This will wipe the offline cache and restart the application.\n\nDo you want to proceed?',
       [
         {
           text: 'Cancel',
@@ -66,24 +67,8 @@ export default function SettingsModal({ visible, onClose }) {
             // 2. Wipe the single 50MB persistent LRU cache file
             await storageService.clearCache();
 
-            // 3. Inform the user and close the application
-            Alert.alert(
-              'Cache Cleared',
-              'Offline cache has been successfully wiped and all background services have stopped. The application will now close.',
-              [
-                {
-                  text: 'Close App',
-                  onPress: () => {
-                    if (Platform.OS === 'android') {
-                      BackHandler.exitApp();
-                    } else {
-                      onClose();
-                    }
-                  },
-                },
-              ],
-              { cancelable: false }
-            );
+            // 3. Reload the app
+            await Updates.reloadAsync(); 
           },
         },
       ]
@@ -202,7 +187,7 @@ export default function SettingsModal({ visible, onClose }) {
                   activeOpacity={0.8}
                 >
                   <AppText bold style={styles.saveBtnText}>
-                    {isSaved ? 'API Key Saved ✓' : 'Save Key'}
+                    {isSaved ? 'API Key Saved' : 'Save Key'}
                   </AppText>
                 </TouchableOpacity>
               </View>
@@ -212,7 +197,7 @@ export default function SettingsModal({ visible, onClose }) {
                 bold
                 style={[modalStyles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}
               >
-                OFFLINE CACHE (50MB MAX)
+                OFFLINE CACHE
               </AppText>
               <View style={[styles.apiKeyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <View style={styles.cacheHeaderRow}>
@@ -224,9 +209,6 @@ export default function SettingsModal({ visible, onClose }) {
                     {cacheStats.totalMB} MB / 50 MB ({cacheStats.itemCount} items)
                   </AppText>
                 </View>
-                <AppText style={[styles.apiKeyDesc, { color: theme.textSecondary }]}>
-                  Stores resized 128x128 brand logos and company profiles with a 30-day TTL for faster offline rendering.
-                </AppText>
 
                 <TouchableOpacity
                   style={[styles.clearCacheBtn, { borderColor: '#FF4D4F', backgroundColor: theme.background }]}
@@ -330,9 +312,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
+    marginTop: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.sm,
-    borderWidth: 1,
+    borderWidth: 1
   },
   clearCacheText: {
     fontSize: 13,

@@ -86,7 +86,7 @@ export default function WatchlistTabSelector({
               layout={LinearTransition.duration(200)}
               style={styles.pillWrapper}
             >
-              {/* Left arrow — move earlier in order (edit mode only) */}
+              {/* Left arrow - move earlier in order (edit mode only) */}
               {isEditMode && (
                 <Animated.View
                   entering={FadeInLeft.duration(200)}
@@ -133,7 +133,7 @@ export default function WatchlistTabSelector({
                 </AppText>
               </TouchableOpacity>
 
-              {/* Right arrow — move later in order (edit mode only) */}
+              {/* Right arrow - move later in order (edit mode only) */}
               {isEditMode && (
                 <Animated.View
                   entering={FadeInRight.duration(200)}

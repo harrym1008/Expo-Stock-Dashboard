@@ -1,6 +1,7 @@
 import { storageService } from './storageService';
 import { finnhubRateLimiter } from '../utils/rateLimiter';
 import { logoService } from './logoService';
+import { persistentLruCache } from './persistentLruCache';
 
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
@@ -150,6 +151,188 @@ export const finnhubRestService = {
       } catch (err) {
         console.warn('[Finnhub REST] Failed to fetch market holidays:', err.message || err);
         return null;
+      }
+    });
+  },
+
+  async fetchStockMetrics(symbol, apiKey) {
+    if (!symbol) return null;
+    const key = apiKey || (await storageService.getApiKey());
+    if (!key) return null;
+
+    const cleanSymbol = symbol.trim().toUpperCase();
+    const cacheKey = `metrics_${cleanSymbol}`;
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+
+    const cached = await persistentLruCache.getJson(cacheKey);
+    if (cached) {
+      console.log(`[Finnhub REST] ⚡ Using cached metrics for: ${cleanSymbol}`);
+      return cached;
+    }
+
+    return finnhubRateLimiter.schedule(async () => {
+      try {
+        console.log(`[Finnhub REST] 📊 Fetching metrics for: ${cleanSymbol}`);
+        const res = await fetch(
+          `${FINNHUB_BASE_URL}/stock/metric?symbol=${encodeURIComponent(cleanSymbol)}&metric=all&token=${encodeURIComponent(key)}`
+        );
+
+        if (!res.ok) {
+          if (res.status === 429) {
+            console.warn(`[Finnhub REST] ⚠️ 429 Rate limit for metrics: ${cleanSymbol}`);
+          }
+          return null;
+        }
+
+        const data = await res.json();
+        const m = data?.metric;
+        if (!m) return null;
+
+        const metrics = {
+          symbol: cleanSymbol,
+          ...m,
+          marketCap: m.marketCapitalization ?? null,
+          avgVolume3M: m['3MonthAverageTradingVolume'] ?? null,
+          avgVolume10D: m['10DayAverageTradingVolume'] ?? null,
+          fiftyTwoWeekHigh: m['52WeekHigh'] ?? null,
+          fiftyTwoWeekLow: m['52WeekLow'] ?? null,
+        };
+
+        await persistentLruCache.setJson(cacheKey, metrics, ONE_HOUR_MS);
+        return metrics;
+      } catch (err) {
+        console.warn(`[Finnhub REST] Failed to fetch metrics for ${cleanSymbol}:`, err.message || err);
+        return null;
+      }
+    });
+  },
+
+  async fetchCompanyNews(symbol, apiKey) {
+    if (!symbol) return [];
+    const key = apiKey || (await storageService.getApiKey());
+    if (!key) return [];
+
+    const cleanSymbol = symbol.trim().toUpperCase();
+    const cacheKey = `news_${cleanSymbol}`;
+    const THIRTY_MINUTES_MS = 30 * 60 * 1000;
+
+    const cached = await persistentLruCache.getJson(cacheKey);
+    if (cached && Array.isArray(cached)) {
+      console.log(`[Finnhub REST] ⚡ Using cached news for: ${cleanSymbol}`);
+      return cached;
+    }
+
+    const now = new Date();
+    const toDate = now.toISOString().split('T')[0];
+    const oneMonthAgo = new Date(now);
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    const fromDate = oneMonthAgo.toISOString().split('T')[0];
+
+    return finnhubRateLimiter.schedule(async () => {
+      try {
+        console.log(`[Finnhub REST] 📰 Fetching news for: ${cleanSymbol} (${fromDate} to ${toDate})`);
+        const res = await fetch(
+          `${FINNHUB_BASE_URL}/company-news?symbol=${encodeURIComponent(cleanSymbol)}&from=${fromDate}&to=${toDate}&token=${encodeURIComponent(key)}`
+        );
+
+        if (!res.ok) return [];
+        const rawNews = await res.json();
+        if (!Array.isArray(rawNews)) return [];
+
+        const articles = rawNews
+          .filter((item) => {
+            if (!item.headline || !item.url) return false;
+            const source = (item.source || '').toLowerCase();
+            const headline = (item.headline || '').toLowerCase();
+            if (source.includes('chartmill') || headline.includes('chartmill')) {
+              return false;
+            }
+            return true;
+          })
+          .slice(0, 6)
+          .map((item) => ({
+            id: item.id || String(item.datetime) + item.headline.slice(0, 10),
+            headline: item.headline,
+            summary: item.summary || '',
+            source: item.source || 'News',
+            url: item.url,
+            image: item.image || null,
+            datetime: item.datetime ? item.datetime * 1000 : Date.now(),
+          }));
+
+        if (articles.length > 0) {
+          await persistentLruCache.setJson(cacheKey, articles, THIRTY_MINUTES_MS);
+        }
+
+        return articles;
+      } catch (err) {
+        console.warn(`[Finnhub REST] Failed to fetch news for ${cleanSymbol}:`, err.message || err);
+        return [];
+      }
+    });
+  },
+
+  async fetchMarketNews(apiKey, category = 'general', forceRefresh = false) {
+    const key = apiKey || (await storageService.getApiKey());
+    if (!key) return [];
+
+    const cacheKey = `market_news_${category}`;
+    const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+
+    if (!forceRefresh) {
+      const cached = await persistentLruCache.getJson(cacheKey);
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        console.log(`[Finnhub REST] ⚡ Using cached market news for category: ${category}`);
+        return cached;
+      }
+    }
+
+    return finnhubRateLimiter.schedule(async () => {
+      try {
+        console.log(`[Finnhub REST] 📰 Fetching market news for category: ${category}`);
+        const res = await fetch(
+          `${FINNHUB_BASE_URL}/news?category=${encodeURIComponent(category)}&token=${encodeURIComponent(key)}`
+        );
+
+        if (!res.ok) {
+          if (res.status === 429) {
+            console.warn(`[Finnhub REST] ⚠️ 429 Rate limit reached for market news`);
+          }
+          return [];
+        }
+
+        const rawNews = await res.json();
+        if (!Array.isArray(rawNews)) return [];
+
+        const articles = rawNews
+          .filter((item) => {
+            if (!item.headline || !item.url) return false;
+            const source = (item.source || '').toLowerCase();
+            const headline = (item.headline || '').toLowerCase();
+            if (source.includes('chartmill') || headline.includes('chartmill')) {
+              return false;
+            }
+            return true;
+          })
+          .map((item) => ({
+            id: item.id || String(item.datetime) + item.headline.slice(0, 10),
+            headline: item.headline,
+            summary: item.summary || '',
+            source: item.source || 'News',
+            url: item.url,
+            image: item.image || null,
+            datetime: item.datetime ? item.datetime * 1000 : Date.now(),
+            category: item.category || category,
+          }));
+
+        if (articles.length > 0) {
+          await persistentLruCache.setJson(cacheKey, articles, FIFTEEN_MINUTES_MS);
+        }
+
+        return articles;
+      } catch (err) {
+        console.warn('[Finnhub REST] Failed to fetch market news:', err.message || err);
+        return [];
       }
     });
   },

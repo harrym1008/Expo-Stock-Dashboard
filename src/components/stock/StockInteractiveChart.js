@@ -365,7 +365,7 @@ export default function StockInteractiveChart({
     }));
   }, [neatY.ticks, chartHeight, minVal, yRange, usableHeight]);
 
-  // Touch & Scrub Handler — uses coordinate lookup arrays instead of functions
+  // Touch & Scrub Handler - uses coordinate lookup arrays instead of functions
   const updateTouch = useCallback(
     (evt, gestureState) => {
       const len = chartPoints.length;
@@ -415,7 +415,7 @@ export default function StockInteractiveChart({
     onScrubEndRef.current?.();
   }, []);
 
-  // PanResponder — stable because updateTouch and handleTouchEnd have minimal deps
+  // PanResponder - stable because updateTouch and handleTouchEnd have minimal deps
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -464,7 +464,7 @@ export default function StockInteractiveChart({
     });
   }, []);
 
-  // Active scrubbed point data — simple lookups into pre-computed arrays
+  // Active scrubbed point data - simple lookups into pre-computed arrays
   const activePoint = scrubIndex !== null && chartPoints[scrubIndex] ? chartPoints[scrubIndex] : null;
   const activeX = activePoint ? xCoords[scrubIndex] : null;
   const activeY = activePoint ? yCoords[scrubIndex] : null;
@@ -483,7 +483,7 @@ export default function StockInteractiveChart({
     >
       {layout.width > 0 && layout.height > 0 && chartPoints.length > 1 && (
         <View style={styles.chartWrapper}>
-          {/* Static chart layer — never re-renders during scrub */}
+          {/* Static chart layer - never re-renders during scrub */}
           <StaticChart
             chartWidth={chartWidth}
             chartHeight={chartHeight}
@@ -495,7 +495,7 @@ export default function StockInteractiveChart({
             gridLines={gridLines}
           />
 
-          {/* Scrub overlay — lightweight SVG with only crosshair + dot */}
+          {/* Scrub overlay - lightweight SVG with only crosshair + dot */}
           <ScrubOverlay
             activeX={activeX}
             activeY={activeY}

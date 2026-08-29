@@ -102,53 +102,12 @@ function applyLivePriceOverlay(chartData, latestLivePrice) {
   };
 }
 
-/**
- * Normalizes split anomalies and applies forward/reverse stock split adjustments
- * across all historical candles so every chart download is 100% split-adjusted.
- */
-export function normalizeSplits(timestamps, rawPrices, rawSplits) {
-  if (!Array.isArray(rawPrices) || rawPrices.length === 0) return [];
-  const validIndices = [];
-  for (let i = 0; i < rawPrices.length; i++) {
-    const v = rawPrices[i];
-    if (typeof v === 'number' && !isNaN(v) && v > 0) validIndices.push(i);
-  }
-  if (validIndices.length === 0) return [];
-
-  const endIdx = validIndices[validIndices.length - 1];
-  const currentPrice = rawPrices[endIdx];
-
-  const splitList = (rawSplits ? Object.values(rawSplits) : []).filter(
-    (s) => s && s.numerator && s.denominator && s.date
-  );
-
-  // Chronological sort: earliest split to latest
-  splitList.sort((a, b) => (a.date || 0) - (b.date || 0));
-
-  const points = [];
-  for (const i of validIndices) {
-    const t = (timestamps[i] || 0) * 1000;
-    let price = rawPrices[i];
-
-    // For each split that occurred after this candle
-    for (const s of splitList) {
-      const splitTimeMs = s.date * 1000;
-      if (t < splitTimeMs) {
-        const ratio = s.denominator / s.numerator;
-        price = price * ratio;
-      }
-    }
-    points.push({ time: t, price: Number(price.toFixed(2)) });
-  }
-  return points;
-}
-
 export const yahooFinanceService = {
   async fetchHistoricalData(symbol, timeframe = '1D', latestLivePrice = null) {
     if (!symbol) return null;
     const cleanSymbol = symbol.trim().toUpperCase();
     const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG['1D'];
-    const cacheKey = `chart_v4_${timeframe}_${cleanSymbol}`;
+    const cacheKey = `chart_${timeframe}_${cleanSymbol}`;
 
     // 1. Check persistent 50MB LRU cache first (with boundary-aligned TTL)
     const cached = await persistentLruCache.getJson(cacheKey);
@@ -206,7 +165,21 @@ export const yahooFinanceService = {
         const rawQuotes = result.indicators?.quote?.[0] || {};
         const rawCloses = rawQuotes.close || [];
 
-        let points = normalizeSplits(rawTimestamps, rawCloses, result.events?.splits);
+        let points = [];
+        if (Array.isArray(rawCloses) && rawCloses.length > 0) {
+          const validIndices = [];
+          for (let i = 0; i < rawCloses.length; i++) {
+            const v = rawCloses[i];
+            if (typeof v === 'number' && !isNaN(v) && v > 0) validIndices.push(i);
+          }
+          if (validIndices.length > 0) {
+            for (const i of validIndices) {
+              const t = (rawTimestamps[i] || 0) * 1000;
+              let price = rawCloses[i];
+              points.push({ time: t, price: Number(price.toFixed(2)) });
+            }
+          }
+        }
 
         if (points.length === 0) return null;
 
@@ -267,6 +240,11 @@ export const yahooFinanceService = {
           startPrice,
           currentPrice: endmostPrice,
           regularMarketPrice,
+          regularMarketDayHigh: typeof meta.regularMarketDayHigh === 'number' ? meta.regularMarketDayHigh : maxPrice,
+          regularMarketDayLow: typeof meta.regularMarketDayLow === 'number' ? meta.regularMarketDayLow : minPrice,
+          regularMarketVolume: typeof meta.regularMarketVolume === 'number' ? meta.regularMarketVolume : (rawQuotes.volume ? rawQuotes.volume.reduce((a, b) => a + (b || 0), 0) : null),
+          fiftyTwoWeekHigh: typeof meta.fiftyTwoWeekHigh === 'number' ? meta.fiftyTwoWeekHigh : null,
+          fiftyTwoWeekLow: typeof meta.fiftyTwoWeekLow === 'number' ? meta.fiftyTwoWeekLow : null,
           priceChange,
           priceChangePercent,
           lastUpdated,
@@ -298,6 +276,168 @@ export const yahooFinanceService = {
         return applyLivePriceOverlay(chartData, latestLivePrice);
       } catch (err) {
         console.warn(`[Yahoo Finance] Error fetching data for ${cleanSymbol}:`, err.message || err);
+        return null;
+      }
+    });
+  },
+
+  /**
+   * Retrieves or refreshes Yahoo Finance cookie and crumb session auth.
+   */
+  async getSession(forceRefresh = false) {
+    const cacheKey = 'yahoo_auth_session';
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    const USER_AGENT =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+    if (!forceRefresh) {
+      const cached = await persistentLruCache.getJson(cacheKey);
+      if (cached && cached.cookie && cached.crumb) {
+        return cached;
+      }
+    }
+
+    try {
+      console.log('[Yahoo Finance] 🔑 Fetching fresh session cookie & crumb...');
+      // 1. Fetch cookie from fc.yahoo.com
+      const cookieRes = await fetch('https://fc.yahoo.com', {
+        headers: { 'User-Agent': USER_AGENT },
+      });
+
+      let cookie = cookieRes.headers.get('set-cookie');
+      if (!cookie && typeof cookieRes.headers.getSetCookie === 'function') {
+        const rawArr = cookieRes.headers.getSetCookie();
+        if (Array.isArray(rawArr) && rawArr.length > 0) {
+          cookie = rawArr.join('; ');
+        }
+      }
+
+      if (!cookie) {
+        // Fallback request to finance.yahoo.com
+        const fallbackRes = await fetch('https://finance.yahoo.com', {
+          headers: { 'User-Agent': USER_AGENT },
+        });
+        cookie = fallbackRes.headers.get('set-cookie');
+      }
+
+      // 2. Fetch crumb using the session cookie
+      const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Cookie': cookie || '',
+        },
+      });
+
+      let crumb = null;
+      if (crumbRes.ok) {
+        crumb = (await crumbRes.text()).trim();
+      }
+
+      // If query2 failed, try query1
+      if (!crumb || crumb.includes('<') || crumb.includes('error')) {
+        const crumbRes1 = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
+          headers: {
+            'User-Agent': USER_AGENT,
+            'Cookie': cookie || '',
+          },
+        });
+        if (crumbRes1.ok) {
+          crumb = (await crumbRes1.text()).trim();
+        }
+      }
+
+      if (crumb && !crumb.includes('<') && !crumb.includes('error')) {
+        const session = { cookie: cookie || '', crumb };
+        await persistentLruCache.setJson(cacheKey, session, ONE_DAY_MS);
+        console.log(`[Yahoo Finance] 🔑 Obtained session crumb: ${crumb.slice(0, 4)}...`);
+        return session;
+      }
+
+      console.warn('[Yahoo Finance] Failed to obtain valid crumb from Yahoo Finance');
+      return null;
+    } catch (err) {
+      console.warn('[Yahoo Finance] Error getting session cookie/crumb:', err.message || err);
+      return null;
+    }
+  },
+
+  async fetchCompanyDescription(symbol, isRetry = false) {
+    if (!symbol) return null;
+    const cleanSymbol = symbol.trim().toUpperCase();
+    const cacheKey = `company_desc_${cleanSymbol}`;
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const USER_AGENT =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+
+    // 1. Check persistent LRU cache
+    const cached = await persistentLruCache.getJson(cacheKey);
+    if (cached && (cached.description || cached.sector || cached.industry)) {
+      console.log(`[Yahoo Finance] ⚡ Cache HIT for company description: ${cleanSymbol}`);
+      return cached;
+    }
+
+    const yahooSymbol = cleanSymbol.replace(/\./g, '-');
+
+    return yahooRateLimiter.schedule(async () => {
+      try {
+        const session = await this.getSession(isRetry);
+        const crumbParam = session?.crumb ? `&crumb=${encodeURIComponent(session.crumb)}` : '';
+        const cookieHeader = session?.cookie ? { 'Cookie': session.cookie } : {};
+
+        const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(
+          yahooSymbol
+        )}?modules=summaryProfile,assetProfile,defaultKeyStatistics,financialData${crumbParam}`;
+
+        console.log(`[Yahoo Finance] 🏢 Fetching company profile/description for: ${cleanSymbol}`);
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent': USER_AGENT,
+            ...cookieHeader,
+          },
+        });
+
+        if (res.status === 401 && !isRetry) {
+          console.warn(`[Yahoo Finance] 401 for ${cleanSymbol}, refreshing cookie + crumb session and retrying...`);
+          return this.fetchCompanyDescription(symbol, true);
+        }
+
+        if (!res.ok) {
+          console.warn(`[Yahoo Finance] Failed to fetch profile summary for ${cleanSymbol}: HTTP ${res.status}`);
+          return null;
+        }
+
+        const json = await res.json();
+        const quoteSummary = json?.quoteSummary?.result?.[0];
+        const profile = quoteSummary?.summaryProfile || quoteSummary?.assetProfile || {};
+        const stats = quoteSummary?.defaultKeyStatistics || {};
+        const fin = quoteSummary?.financialData || {};
+
+        const data = {
+          symbol: cleanSymbol,
+          description: profile.longBusinessSummary || profile.description || '',
+          sector: profile.sector || '',
+          industry: profile.industry || '',
+          website: profile.website || '',
+          employees: profile.fullTimeEmployees || null,
+          city: profile.city || '',
+          state: profile.state || '',
+          country: profile.country || '',
+          // Financial statistics fallbacks
+          peRatio: stats.trailingPE?.raw ?? stats.forwardPE?.raw ?? null,
+          forwardPE: stats.forwardPE?.raw ?? null,
+          eps: stats.trailingEps?.raw ?? stats.forwardEps?.raw ?? null,
+          profitMargin: fin.profitMargins?.raw ? fin.profitMargins.raw * 100 : null,
+          beta: stats.beta?.raw ?? null,
+          dividendYield: stats.dividendYield?.raw ?? stats.yield?.raw ?? null,
+        };
+
+        if (data.description || data.sector || data.industry || data.peRatio) {
+          persistentLruCache.setJson(cacheKey, data, SEVEN_DAYS_MS).catch(() => {});
+        }
+
+        return data;
+      } catch (err) {
+        console.warn(`[Yahoo Finance] Error fetching description for ${cleanSymbol}:`, err.message || err);
         return null;
       }
     });

@@ -356,6 +356,7 @@ export default function HomeScreen() {
           onDragEnd={({ data }) => handleReorderStocks(data)}
           activationDistance={isEditMode ? 0 : 999}
           showsVerticalScrollIndicator={false}
+          containerStyle={layoutStyles.flex1}
           contentContainerStyle={styles.listContent}
           ListFooterComponent={
             !isEditMode ? (
@@ -463,12 +464,14 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   listContent: {
+    flexGrow: 1,
     paddingTop: spacing.xs,
-    paddingBottom: spacing.xl,
+    paddingBottom: 16,
   },
   listFooter: {
     alignItems: 'flex-end',
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
     paddingRight: spacing.xs,
   },
   addStockIconButton: {

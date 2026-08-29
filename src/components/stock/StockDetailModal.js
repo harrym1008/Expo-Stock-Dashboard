@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Linking,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,12 +17,13 @@ import { spacing, borderRadius } from '../../constants/theme';
 import { formatTimeAgo } from '../../utils/formatTimeAgo';
 import { storageService } from '../../services/storageService';
 import { useWatchlist } from '../../context/WatchlistContext';
-import { modalStyles, layoutStyles } from '../../styles';
+import { modalStyles, layoutStyles, newsStyles } from '../../styles';
 import AppText from '../common/AppText';
 import StockInteractiveChart from './StockInteractiveChart';
 import MarketCalendarModal from '../common/MarketCalendarModal';
 import CompanyLogo from '../common/CompanyLogo';
 import AddToWatchlistModal from './AddToWatchlistModal';
+import NewsCard from '../common/NewsCard';
 
 const TIMEFRAMES = ['1H', '1D', '1W', '3M', '1Y', '5Y', 'ALL'];
 
@@ -44,9 +47,55 @@ storageService.getStockTimeframes().then((saved) => {
   }
 });
 
+function formatLargeNum(num, currency = '') {
+  if (num === null || num === undefined || isNaN(num) || num === 0) return '-';
+  const abs = Math.abs(num);
+  if (abs >= 1e12) {
+    return `${currency}${(num / 1e12).toFixed(2)}T`;
+  }
+  if (abs >= 1e9) {
+    return `${currency}${(num / 1e9).toFixed(2)}B`;
+  }
+  if (abs >= 1e6) {
+    return `${currency}${(num / 1e6).toFixed(2)}M`;
+  }
+  if (abs >= 1e3) {
+    return `${currency}${(num / 1e3).toFixed(1)}K`;
+  }
+  return `${currency}${num.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
+function formatStatPrice(val, currency = '$') {
+  if (val === null || val === undefined || isNaN(val) || val === 0) return '-';
+  return `${currency}${Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function getRangePosition(current, low, high) {
+  if (
+    typeof current !== 'number' ||
+    typeof low !== 'number' ||
+    typeof high !== 'number' ||
+    high <= low
+  ) {
+    return 50;
+  }
+  const ratio = (current - low) / (high - low);
+  return Math.max(0, Math.min(100, ratio * 100));
+}
+
 export default function StockDetailModal({ visible, stock, onClose }) {
   const { theme, isDark } = useTheme();
-  const { fetchHistoricalChart, quotes, marketStatus } = useMarketData();
+  const {
+    fetchHistoricalChart,
+    quotes,
+    profiles,
+    fetchProfile,
+    fetchStockMetrics,
+    fetchCompanyDescription,
+    fetchCompanyNews,
+    marketStatus,
+    apiKey,
+  } = useMarketData();
   const { isStockInAnyWatchlist } = useWatchlist();
   const [watchlistModalVisible, setWatchlistModalVisible] = useState(false);
   const [selectedTimeframe, setSelectedTimeframe] = useState('1D');
@@ -55,6 +104,13 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   const [isInitialStockLoading, setIsInitialStockLoading] = useState(true);
   const [timeAgoText, setTimeAgoText] = useState('just now');
   const [calendarVisible, setCalendarVisible] = useState(false);
+
+  // Additional detail states
+  const [metrics, setMetrics] = useState(null);
+  const [companyDesc, setCompanyDesc] = useState(null);
+  const [companyNews, setCompanyNews] = useState([]);
+  const [isDescExpanded, setIsDescExpanded] = useState(false);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
   const isFavorite = stock?.symbol ? isStockInAnyWatchlist(stock.symbol) : false;
 
@@ -66,6 +122,10 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     latestExtendedPriceRef.current = null;
     setChartData(null);
     setScrubData(null);
+    setMetrics(null);
+    setCompanyDesc(null);
+    setCompanyNews([]);
+    setIsDescExpanded(false);
     setIsInitialStockLoading(true);
 
     if (stock?.symbol) {
@@ -113,6 +173,34 @@ export default function StockDetailModal({ visible, stock, onClose }) {
       isMounted = false;
     };
   }, [visible, stock?.symbol, selectedTimeframe, fetchHistoricalChart]);
+
+  // Fetch company profile, stock metrics, description, and news
+  useEffect(() => {
+    let isMounted = true;
+    if (visible && stock?.symbol) {
+      const sym = stock.symbol.toUpperCase();
+      setIsLoadingDetails(true);
+
+      Promise.all([
+        fetchProfile(sym).catch(() => null),
+        fetchStockMetrics(sym).catch(() => null),
+        fetchCompanyDescription(sym).catch(() => null),
+        fetchCompanyNews(sym).catch(() => []),
+      ]).then(([prof, met, desc, news]) => {
+        if (isMounted) {
+          if (met) setMetrics(met);
+          if (desc) setCompanyDesc(desc);
+          if (Array.isArray(news)) setCompanyNews(news);
+          setIsLoadingDetails(false);
+        }
+      }).catch(() => {
+        if (isMounted) setIsLoadingDetails(false);
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [visible, stock?.symbol, apiKey, fetchProfile, fetchStockMetrics, fetchCompanyDescription, fetchCompanyNews]);
 
   // 1-second live ticking timer for price freshness indicator
   useEffect(() => {
@@ -260,6 +348,91 @@ export default function StockDetailModal({ visible, stock, onClose }) {
         ]
       : chartData?.points || [];
 
+  // Currency symbol
+  const curSymbol = stock.currency === 'USD' || !stock.currency ? '$' : stock.currency;
+
+  const profileData = profiles[cleanSymbol] || null;
+  const companyName = profileData?.name || stock.name || stock.symbol;
+
+  // Day Range & 52-Week Range (anchored to latest/current price, unaffected by graph scrubbing)
+  const currentStatPrice = leftPrice;
+  const dayLow = wsQuote?.low ?? chartData?.regularMarketDayLow ?? (chartData?.timeframe === '1D' ? chartData?.minPrice : null) ?? stock?.low ?? null;
+  const dayHigh = wsQuote?.high ?? chartData?.regularMarketDayHigh ?? (chartData?.timeframe === '1D' ? chartData?.maxPrice : null) ?? stock?.high ?? null;
+  const dayRangePos = getRangePosition(currentStatPrice, dayLow, dayHigh);
+
+  const fiftyTwoLow = metrics?.['52WeekLow'] ?? metrics?.fiftyTwoWeekLow ?? chartData?.fiftyTwoWeekLow ?? null;
+  const fiftyTwoHigh = metrics?.['52WeekHigh'] ?? metrics?.fiftyTwoWeekHigh ?? chartData?.fiftyTwoWeekHigh ?? null;
+  const fiftyTwoRangePos = getRangePosition(currentStatPrice, fiftyTwoLow, fiftyTwoHigh);
+
+  // 1. Previous Close
+  const prevCloseVal = chartData?.previousClose ?? wsQuote?.previousClose ?? stock.previousClose ?? null;
+  const prevCloseStr = prevCloseVal !== null && prevCloseVal !== undefined && !isNaN(prevCloseVal) && prevCloseVal > 0
+    ? `${curSymbol}${Number(prevCloseVal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : '-';
+
+  // 2. Market Cap (in millions in Finnhub metric/profile)
+  const marketCapVal = metrics?.marketCapitalization ?? profileData?.marketCap ?? stock?.marketCap ?? null;
+  const marketCapStr = marketCapVal !== null && marketCapVal !== undefined && !isNaN(marketCapVal) && marketCapVal > 0
+    ? formatLargeNum(marketCapVal * 1e6, curSymbol)
+    : '-';
+
+  // 3. Volume (today)
+  const volumeVal = chartData?.regularMarketVolume ?? wsQuote?.volume ?? null;
+  const volumeStr = volumeVal !== null && volumeVal !== undefined && !isNaN(volumeVal) && volumeVal > 0
+    ? formatLargeNum(volumeVal)
+    : '-';
+
+  // 4. Avg Volume (3mo) via 3MonthAverageTradingVolume (in millions of shares)
+  const rawAvgVol = metrics?.['3MonthAverageTradingVolume'] ?? metrics?.avgVolume3M ?? null;
+  const numAvgVol = rawAvgVol !== null && rawAvgVol !== undefined ? Number(rawAvgVol) : null;
+  const avgVol3MStr = numAvgVol !== null && !isNaN(numAvgVol) && numAvgVol > 0
+    ? `${numAvgVol.toFixed(2)}M`
+    : '-';
+
+  // 5. Trailing P/E (peTTM)
+  const peTTM = metrics?.peTTM ?? companyDesc?.peRatio ?? null;
+  const trailingPeStr = typeof peTTM === 'number' && !isNaN(peTTM) && peTTM > 0
+    ? peTTM.toFixed(2)
+    : '-';
+
+  // 6. Forward P/E (forwardPE)
+  const forwardPE = metrics?.forwardPE ?? companyDesc?.forwardPE ?? null;
+  const forwardPeStr = typeof forwardPE === 'number' && !isNaN(forwardPE) && forwardPE > 0
+    ? forwardPE.toFixed(2)
+    : '-';
+
+  // 7. Trailing EPS (epsTTM)
+  const epsTTM = metrics?.epsTTM ?? companyDesc?.eps ?? null;
+  const trailingEpsStr = typeof epsTTM === 'number' && !isNaN(epsTTM)
+    ? `${curSymbol}${epsTTM.toFixed(2)}`
+    : '-';
+
+  // 8. Profit Margin (netProfitMarginTTM)
+  const marginTTM = metrics?.netProfitMarginTTM ?? companyDesc?.profitMargin ?? null;
+  const profitMarginStr = typeof marginTTM === 'number' && !isNaN(marginTTM)
+    ? `${marginTTM.toFixed(2)}%`
+    : '-';
+
+  // 9. Beta (beta)
+  const beta = metrics?.beta ?? companyDesc?.beta ?? null;
+  const betaStr = typeof beta === 'number' && !isNaN(beta)
+    ? beta.toFixed(2)
+    : '-';
+
+  // 10. Dividend Yield (dividendYieldIndicatedAnnual)
+  const rawDivYield = metrics?.currentDividendYieldTTM;
+  const numDivYield = rawDivYield !== null && rawDivYield !== undefined ? Number(rawDivYield) : null;
+  const divYieldStr = numDivYield !== null && !isNaN(numDivYield)
+    ? `${numDivYield.toFixed(2)}%`
+    : (metrics ? '0.00%' : '-');
+
+  const businessSummary = companyDesc?.description || '';
+  const sector = companyDesc?.sector || null;
+  const industry = companyDesc?.industry || profileData?.industry || null;
+  const exchange = profileData?.exchange || stock.exchange || null;
+  const country = companyDesc?.country || profileData?.country || null;
+  const websiteUrl = companyDesc?.website || profileData?.weburl || null;
+
   return (
     <Modal
       visible={visible}
@@ -310,7 +483,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                       </AppText>
                     </View>
                     <AppText style={[styles.companyText, { color: theme.textSecondary }]} numberOfLines={1}>
-                      {stock.name}
+                      {companyName}
                     </AppText>
                   </View>
                 </View>
@@ -481,9 +654,251 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                   );
                 })}
               </View>
+
+              {/* 5. KEY STATISTICS SECTION */}
+              <View style={styles.sectionContainer}>
+                <View style={styles.sectionHeaderRow}>
+                  <AppText bold style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+                    {stock.symbol} Key Statistics
+                  </AppText>
+                  {isLoadingDetails && (
+                    <ActivityIndicator size="small" color={theme.primary} />
+                  )}
+                </View>
+
+                {/* Range Bars Card */}
+                <View style={[styles.cardBox, { backgroundColor: isDark ? '#12161E' : '#FFFFFF', borderColor: theme.border }]}>
+                  {/* Day Range Bar */}
+                  <View style={styles.rangeBarGroup}>
+                    <View style={styles.rangeLabelRow}>
+                      <AppText style={[styles.rangeSubtitle, { color: theme.textSecondary }]}>Day Range</AppText>
+                      <View style={styles.rangeValuesRow}>
+                        <AppText bold style={styles.rangeValueText}>{formatStatPrice(dayLow, curSymbol)}</AppText>
+                        <AppText style={[styles.rangeValueSeparator, { color: theme.textMuted }]}>-</AppText>
+                        <AppText bold style={styles.rangeValueText}>{formatStatPrice(dayHigh, curSymbol)}</AppText>
+                      </View>
+                    </View>
+                    <View style={[styles.rangeTrack, { backgroundColor: isDark ? '#1E2532' : '#E4E7EC' }]}>
+                      <View
+                        style={[
+                          styles.rangeFill,
+                          {
+                            width: `${dayRangePos}%`,
+                            backgroundColor: timeframeTrendColor,
+                          },
+                        ]}
+                      />
+                      <View
+                        style={[
+                          styles.rangePin,
+                          {
+                            left: `${Math.max(2, Math.min(98, dayRangePos))}%`,
+                            backgroundColor: theme.textPrimary,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+
+                  {/* 52-Week Range Bar */}
+                  <View style={[styles.rangeBarGroup, { marginTop: spacing.md }]}>
+                    <View style={styles.rangeLabelRow}>
+                      <AppText style={[styles.rangeSubtitle, { color: theme.textSecondary }]}>52-Week Range</AppText>
+                      <View style={styles.rangeValuesRow}>
+                        <AppText bold style={styles.rangeValueText}>{formatStatPrice(fiftyTwoLow, curSymbol)}</AppText>
+                        <AppText style={[styles.rangeValueSeparator, { color: theme.textMuted }]}>-</AppText>
+                        <AppText bold style={styles.rangeValueText}>{formatStatPrice(fiftyTwoHigh, curSymbol)}</AppText>
+                      </View>
+                    </View>
+                    <View style={[styles.rangeTrack, { backgroundColor: isDark ? '#1E2532' : '#E4E7EC' }]}>
+                      <View
+                        style={[
+                          styles.rangeFill,
+                          {
+                            width: `${fiftyTwoRangePos}%`,
+                            backgroundColor: timeframeTrendColor,
+                          },
+                        ]}
+                      />
+                      <View
+                        style={[
+                          styles.rangePin,
+                          {
+                            left: `${Math.max(2, Math.min(98, fiftyTwoRangePos))}%`,
+                            backgroundColor: theme.textPrimary,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                {/* 2-Column Statistics Grid */}
+                <View style={[styles.statsGrid, { backgroundColor: isDark ? '#12161E' : '#FFFFFF', borderColor: theme.border }]}>
+                  {/* Row 1: Previous Close | Market Cap */}
+                  <View style={styles.statGridRow}>
+                    <View style={styles.statGridCol}>
+                      <AppText style={[styles.statLabel, { color: theme.textSecondary }]}>Previous Close</AppText>
+                      <AppText bold style={styles.statValue}>{prevCloseStr}</AppText>
+                    </View>
+                    <View style={styles.statGridCol}>
+                      <AppText style={[styles.statLabel, { color: theme.textSecondary }]}>Market Cap</AppText>
+                      <AppText bold style={styles.statValue}>{marketCapStr}</AppText>
+                    </View>
+                  </View>
+
+                  {/* Row 2: Volume | Avg Volume (3mo) */}
+                  <View style={[styles.statGridRow, { borderTopColor: theme.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
+                    <View style={styles.statGridCol}>
+                      <AppText style={[styles.statLabel, { color: theme.textSecondary }]}>Volume</AppText>
+                      <AppText bold style={styles.statValue}>{volumeStr}</AppText>
+                    </View>
+                    <View style={styles.statGridCol}>
+                      <AppText style={[styles.statLabel, { color: theme.textSecondary }]}>Avg Volume (3mo)</AppText>
+                      <AppText bold style={styles.statValue}>{avgVol3MStr}</AppText>
+                    </View>
+                  </View>
+
+                  {/* Row 3: Trailing P/E | Forward P/E */}
+                  <View style={[styles.statGridRow, { borderTopColor: theme.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
+                    <View style={styles.statGridCol}>
+                      <AppText style={[styles.statLabel, { color: theme.textSecondary }]}>Trailing P/E</AppText>
+                      <AppText bold style={styles.statValue}>{trailingPeStr}</AppText>
+                    </View>
+                    <View style={styles.statGridCol}>
+                      <AppText style={[styles.statLabel, { color: theme.textSecondary }]}>Forward P/E</AppText>
+                      <AppText bold style={styles.statValue}>{forwardPeStr}</AppText>
+                    </View>
+                  </View>
+
+                  {/* Row 4: Trailing EPS | Profit Margin */}
+                  <View style={[styles.statGridRow, { borderTopColor: theme.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
+                    <View style={styles.statGridCol}>
+                      <AppText style={[styles.statLabel, { color: theme.textSecondary }]}>Trailing EPS</AppText>
+                      <AppText bold style={styles.statValue}>{trailingEpsStr}</AppText>
+                    </View>
+                    <View style={styles.statGridCol}>
+                      <AppText style={[styles.statLabel, { color: theme.textSecondary }]}>Profit Margin</AppText>
+                      <AppText bold style={styles.statValue}>{profitMarginStr}</AppText>
+                    </View>
+                  </View>
+
+                  {/* Row 5: Beta | Dividend Yield */}
+                  <View style={[styles.statGridRow, { borderTopColor: theme.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
+                    <View style={styles.statGridCol}>
+                      <AppText style={[styles.statLabel, { color: theme.textSecondary }]}>Beta</AppText>
+                      <AppText bold style={styles.statValue}>{betaStr}</AppText>
+                    </View>
+                    <View style={styles.statGridCol}>
+                      <AppText style={[styles.statLabel, { color: theme.textSecondary }]}>Dividend Yield</AppText>
+                      <AppText bold style={styles.statValue}>{divYieldStr}</AppText>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              {/* 6. ABOUT COMPANY SECTION */}
+              <View style={styles.sectionContainer}>
+                <AppText bold style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+                  About {stock.symbol}
+                </AppText>
+
+                <View style={[styles.cardBox, { backgroundColor: isDark ? '#12161E' : '#FFFFFF', borderColor: theme.border }]}>
+                  {businessSummary ? (
+                    <View>
+                      <AppText
+                        style={[styles.descriptionText, { color: theme.textSecondary }]}
+                        numberOfLines={isDescExpanded ? undefined : 4}
+                      >
+                        {businessSummary}
+                      </AppText>
+                      <TouchableOpacity
+                        onPress={() => setIsDescExpanded((prev) => !prev)}
+                        style={styles.readMoreBtn}
+                        activeOpacity={0.7}
+                      >
+                        <AppText bold style={{ color: theme.primary, fontSize: 13 }}>
+                          {isDescExpanded ? 'Show less' : 'Read more'}
+                        </AppText>
+                        <Ionicons
+                          name={isDescExpanded ? 'chevron-up' : 'chevron-down'}
+                          size={14}
+                          color={theme.primary}
+                          style={{ marginLeft: 4 }}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <AppText style={[styles.descriptionText, { color: theme.textMuted }]}>
+                      Company profile details are loading or currently unavailable.
+                    </AppText>
+                  )}
+
+                  {/* Company Info Tags Grid */}
+                  <View style={[styles.infoTagsGrid, { borderTopColor: theme.border, borderTopWidth: StyleSheet.hairlineWidth }]}>
+                    {sector && (
+                      <View style={styles.infoTagItem}>
+                        <AppText style={[styles.infoTagLabel, { color: theme.textMuted }]}>Sector</AppText>
+                        <AppText bold style={styles.infoTagValue}>{sector}</AppText>
+                      </View>
+                    )}
+                    {industry && (
+                      <View style={styles.infoTagItem}>
+                        <AppText style={[styles.infoTagLabel, { color: theme.textMuted }]}>Industry</AppText>
+                        <AppText bold style={styles.infoTagValue}>{industry}</AppText>
+                      </View>
+                    )}
+                    {country && (
+                      <View style={styles.infoTagItem}>
+                        <AppText style={[styles.infoTagLabel, { color: theme.textMuted }]}>Country</AppText>
+                        <AppText bold style={styles.infoTagValue}>{country}</AppText>
+                      </View>
+                    )}
+                    {companyDesc?.employees && (
+                      <View style={styles.infoTagItem}>
+                        <AppText style={[styles.infoTagLabel, { color: theme.textMuted }]}>Employees</AppText>
+                        <AppText bold style={styles.infoTagValue}>{companyDesc.employees.toLocaleString()}</AppText>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* External Website Button */}
+                  {websiteUrl && (
+                    <TouchableOpacity
+                      style={[styles.websiteButton, { backgroundColor: isDark ? '#181E29' : '#F0F3F7' }]}
+                      onPress={() => {
+                        const target = websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`;
+                        Linking.openURL(target).catch(() => {});
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="globe-outline" size={16} color={theme.primary} style={{ marginRight: 6 }} />
+                      <AppText bold style={[styles.websiteButtonText, { color: theme.primary }]}>
+                        Visit Website
+                      </AppText>
+                      <Ionicons name="open-outline" size={14} color={theme.primary} style={{ marginLeft: 4 }} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+
+              {/* 7. RECENT NEWS SECTION */}
+              {companyNews && companyNews.length > 0 && (
+                <View style={styles.sectionContainer}>
+                  <AppText bold style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+                    Recent News
+                  </AppText>
+
+                  <View style={newsStyles.newsList}>
+                    {companyNews.slice(0, 6).map((item) => (
+                      <NewsCard key={item.id} item={item} />
+                    ))}
+                  </View>
+                </View>
+              )}
             </ScrollView>
 
-            {/* 5. Anchored Bottom Price Freshness Indicator */}
+            {/* 8. Anchored Bottom Price Freshness Indicator */}
             <View
               style={[
                 styles.anchoredFooter,
@@ -522,7 +937,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.xxl,
   },
   header: {
     flexDirection: 'row',
@@ -550,7 +965,7 @@ const styles = StyleSheet.create({
   },
   exchangeText: {
     fontSize: 12,
-    overflowX: 'ellipsis'
+    overflowX: 'ellipsis',
   },
   companyText: {
     fontSize: 13,
@@ -566,7 +981,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginVertical: spacing.md,
-    // gap: spacing.md,
   },
   mainPriceColOpen: {
     flex: 1,
@@ -646,14 +1060,142 @@ const styles = StyleSheet.create({
   timeframeText: {
     fontSize: 13,
   },
+  // Sections layout
+  sectionContainer: {
+    marginTop: spacing.xl,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm + 2,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    letterSpacing: 0.2,
+    marginBottom: spacing.sm,
+  },
+  cardBox: {
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    padding: spacing.md + 2,
+  },
+  // Range bar styles
+  rangeBarGroup: {
+    width: '100%',
+  },
+  rangeLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs + 2,
+  },
+  rangeSubtitle: {
+    fontSize: 13,
+  },
+  rangeValuesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  rangeValueText: {
+    fontSize: 13,
+  },
+  rangeValueSeparator: {
+    fontSize: 13,
+  },
+  rangeTrack: {
+    height: 6,
+    borderRadius: 3,
+    position: 'relative',
+    overflow: 'visible',
+  },
+  rangeFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  rangePin: {
+    position: 'absolute',
+    top: -3,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginLeft: -6,
+    borderWidth: 2,
+    borderColor: '#000000',
+  },
+  // Stats grid styles
+  statsGrid: {
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    marginTop: spacing.md,
+    overflow: 'hidden',
+  },
+  statGridRow: {
+    flexDirection: 'row',
+    paddingVertical: spacing.md - 2,
+    paddingHorizontal: spacing.md,
+  },
+  statGridCol: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  statLabel: {
+    fontSize: 12,
+    marginBottom: 3,
+  },
+  statValue: {
+    fontSize: 15,
+  },
+  // Description styles
+  descriptionText: {
+    fontSize: 13.5,
+    lineHeight: 20,
+  },
+  readMoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    alignSelf: 'flex-start',
+  },
+  infoTagsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    gap: spacing.md,
+  },
+  infoTagItem: {
+    width: '45%',
+  },
+  infoTagLabel: {
+    fontSize: 11,
+    marginBottom: 2,
+  },
+  infoTagValue: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  websiteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: borderRadius.sm,
+  },
+  websiteButtonText: {
+    fontSize: 13,
+  },
   anchoredFooter: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.md,
-    borderTopWidth: 1,
+    paddingVertical: spacing.sm,
+    // borderTopWidth: 1,/
   },
   lastUpdatedText: {
-    fontSize: 12,
+    fontSize: 10,
     letterSpacing: 0.2,
   },
 });
+
