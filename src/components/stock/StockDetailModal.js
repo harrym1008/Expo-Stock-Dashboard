@@ -24,6 +24,7 @@ import StockInteractiveChart from './StockInteractiveChart';
 import MarketCalendarModal from '../common/MarketCalendarModal';
 import CompanyLogo from '../common/CompanyLogo';
 import AddToWatchlistModal from './AddToWatchlistModal';
+import StockOrderModal from './StockOrderModal';
 import NewsCard from '../common/NewsCard';
 
 const TIMEFRAMES = ['1H', '1D', '1W', '3M', '1Y', '5Y', 'ALL'];
@@ -100,6 +101,8 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   const { isStockInAnyWatchlist } = useWatchlist();
   const { isPaperTradingEnabled } = useTrading();
   const [watchlistModalVisible, setWatchlistModalVisible] = useState(false);
+  const [orderModalVisible, setOrderModalVisible] = useState(false);
+  const [orderMode, setOrderMode] = useState('BUY');
   const [selectedTimeframe, setSelectedTimeframe] = useState('1D');
   const [chartData, setChartData] = useState(null);
   const [scrubData, setScrubData] = useState(null);
@@ -915,6 +918,10 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 <View style={styles.paperTradeButtonRow}>
                   <TouchableOpacity
                     style={[styles.paperTradeBtn, styles.paperBuyBtn]}
+                    onPress={() => {
+                      setOrderMode('BUY');
+                      setOrderModalVisible(true);
+                    }}
                     activeOpacity={0.8}
                     accessibilityRole="button"
                     accessibilityLabel="Paper Buy"
@@ -926,6 +933,10 @@ export default function StockDetailModal({ visible, stock, onClose }) {
 
                   <TouchableOpacity
                     style={[styles.paperTradeBtn, styles.paperSellBtn]}
+                    onPress={() => {
+                      setOrderMode('SELL');
+                      setOrderModalVisible(true);
+                    }}
                     activeOpacity={0.8}
                     accessibilityRole="button"
                     accessibilityLabel="Paper Sell"
@@ -954,6 +965,14 @@ export default function StockDetailModal({ visible, stock, onClose }) {
             visible={watchlistModalVisible}
             stock={stock}
             onClose={() => setWatchlistModalVisible(false)}
+          />
+
+          {/* Paper Trading Order Modal */}
+          <StockOrderModal
+            visible={orderModalVisible}
+            stock={stock}
+            mode={orderMode}
+            onClose={() => setOrderModalVisible(false)}
           />
         </View>
       </View>

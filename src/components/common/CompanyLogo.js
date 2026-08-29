@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Image } from 'react-native';
+import { useTheme } from '../../context/ThemeContext';
 import { borderRadius } from '../../constants/theme';
 import { logoService } from '../../services/logoService';
 
@@ -9,6 +10,7 @@ export default function CompanyLogo({
   style,
   logoUri: customLogoUri = null,
 }) {
+  const { theme } = useTheme();
   const [imageUri, setImageUri] = useState(() => {
     if (customLogoUri) return customLogoUri;
     return (
@@ -62,6 +64,7 @@ export default function CompanyLogo({
           width: size,
           height: size,
           borderRadius: borderRadius.sm + 2,
+          backgroundColor: theme.surfaceSubtle,
         },
         style,
       ]}
@@ -78,7 +81,6 @@ export default function CompanyLogo({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',

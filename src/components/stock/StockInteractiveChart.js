@@ -308,10 +308,11 @@ export default function StockInteractiveChart({
     return Math.max(26, Math.ceil(maxChars * 7.2 + 8));
   }, [neatY.ticks, neatY.step]);
 
-  const paddingY = 16;
+  const paddingTop = 16;
+  const paddingBottom = 8;
   const chartWidth = Math.max(10, layout.width - yAxisWidth);
   const chartHeight = Math.max(10, layout.height);
-  const usableHeight = Math.max(10, chartHeight - paddingY * 2);
+  const usableHeight = Math.max(10, chartHeight - paddingTop - paddingBottom);
 
   const yRange = maxVal - minVal === 0 ? 1 : maxVal - minVal;
 
@@ -327,10 +328,10 @@ export default function StockInteractiveChart({
     for (let i = 0; i < len; i++) {
       xs[i] = (i / divisor) * chartWidth;
       const fraction = (chartPoints[i].price - minVal) / yRange;
-      ys[i] = chartHeight - paddingY - fraction * usableHeight;
+      ys[i] = chartHeight - paddingBottom - fraction * usableHeight;
     }
     return { xCoords: xs, yCoords: ys };
-  }, [chartPoints, chartWidth, chartHeight, minVal, yRange, usableHeight]);
+  }, [chartPoints, chartWidth, chartHeight, minVal, yRange, usableHeight, paddingBottom]);
 
   // Compute SVG line path and area gradient path
   const { linePath, areaPath } = useMemo(() => {
@@ -360,10 +361,10 @@ export default function StockInteractiveChart({
   const gridLines = useMemo(() => {
     return neatY.ticks.map((tickVal) => ({
       key: `grid-${tickVal}`,
-      y: chartHeight - paddingY - ((tickVal - minVal) / yRange) * usableHeight,
+      y: chartHeight - paddingBottom - ((tickVal - minVal) / yRange) * usableHeight,
       tickVal,
     }));
-  }, [neatY.ticks, chartHeight, minVal, yRange, usableHeight]);
+  }, [neatY.ticks, chartHeight, minVal, yRange, usableHeight, paddingBottom]);
 
   // Touch & Scrub Handler - uses coordinate lookup arrays instead of functions
   const updateTouch = useCallback(
@@ -541,7 +542,7 @@ export default function StockInteractiveChart({
                 style={[
                   styles.yLabelItem,
                   {
-                    top: Math.max(2, Math.min(chartHeight - 16, y - 7)),
+                    top: Math.max(2, Math.min(chartHeight - 14, y - 7)),
                   },
                 ]}
               >
