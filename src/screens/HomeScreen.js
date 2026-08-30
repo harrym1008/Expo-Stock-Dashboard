@@ -3,7 +3,7 @@ import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DraggableFlatList from 'react-native-draggable-flatlist';
 import ScreenContainer from '../components/common/ScreenContainer';
-import WatchlistTabSelector from '../components/home/WatchlistTabSelector';
+import TabSelector from '../components/common/TabSelector';
 import WatchlistItem from '../components/home/WatchlistItem';
 import SwipeableStockItem from '../components/home/SwipeableStockItem';
 import AppText from '../components/common/AppText';
@@ -337,15 +337,16 @@ export default function HomeScreen() {
     >
       <View style={layoutStyles.flex1}>
         {/* Watchlist Horizontal Drag Selector with Gradient Fades */}
-        <WatchlistTabSelector
-          watchlists={watchlists}
-          activeWatchlistId={activeWatchlistId}
-          onSelectWatchlist={setActiveWatchlistId}
-          onAddWatchlist={handleAddWatchlist}
+        <TabSelector
+          tabs={watchlists}
+          activeTabId={activeWatchlistId}
+          onSelectTab={setActiveWatchlistId}
+          onAddTab={handleAddWatchlist}
           isEditMode={isEditMode}
-          onReorderWatchlists={handleReorderWatchlists}
-          onDeleteWatchlist={handleDeleteWatchlist}
-          onRenameWatchlist={handleRenameWatchlist}
+          onReorderTabs={handleReorderWatchlists}
+          onDeleteTab={handleDeleteWatchlist}
+          onRenameTab={handleRenameWatchlist}
+          itemTypeLabel="Watchlist"
         />
 
         {/* Stock Items List (Draggable in edit mode) */}

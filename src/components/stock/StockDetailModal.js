@@ -530,7 +530,12 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                       : styles.mainPriceColClosed
                   }
                 >
-                  <AppText style={styles.mainPriceText}>
+                  <AppText
+                    style={[
+                      styles.mainPriceText,
+                      !marketStatus.isOpen && !scrubData && { color: theme.textSecondary },
+                    ]}
+                  >
                     {stock.currency || '$'}
                     {displayedMainPrice.toLocaleString(undefined, {
                       minimumFractionDigits: 2,
@@ -915,36 +920,64 @@ export default function StockDetailModal({ visible, stock, onClose }) {
               ]}
             >
               {isPaperTradingEnabled && (
-                <View style={styles.paperTradeButtonRow}>
-                  <TouchableOpacity
-                    style={[styles.paperTradeBtn, styles.paperBuyBtn]}
-                    onPress={() => {
-                      setOrderMode('BUY');
-                      setOrderModalVisible(true);
-                    }}
-                    activeOpacity={0.8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Paper Buy"
-                  >
-                    <AppText bold style={styles.paperTradeBtnText}>
-                      Paper Buy
-                    </AppText>
-                  </TouchableOpacity>
+                <View style={styles.positionContainer}>
+                  <AppText bold style={styles.positionTitle}>
+                    Your Position
+                  </AppText>
+                  <View style={styles.positionDataRow}>
+                    <View style={styles.positionLeftGroup}>
+                      <AppText bold style={styles.positionSharesText}>
+                        4.4832 shares
+                      </AppText>
+                      <AppText style={[styles.positionAvgCostLabel, { color: theme.textSecondary }]}>
+                        Avg cost:{' '}
+                        <AppText bold style={{ color: theme.textPrimary }}>
+                          $108.56
+                        </AppText>
+                      </AppText>
+                    </View>
 
-                  <TouchableOpacity
-                    style={[styles.paperTradeBtn, styles.paperSellBtn]}
-                    onPress={() => {
-                      setOrderMode('SELL');
-                      setOrderModalVisible(true);
-                    }}
-                    activeOpacity={0.8}
-                    accessibilityRole="button"
-                    accessibilityLabel="Paper Sell"
-                  >
-                    <AppText bold style={styles.paperTradeBtnText}>
-                      Paper Sell
-                    </AppText>
-                  </TouchableOpacity>
+                    <View style={styles.positionRightGroup}>
+                      <AppText bold style={styles.positionValueText}>
+                        $4,212.18
+                      </AppText>
+                      <AppText bold style={styles.positionReturnText}>
+                        ↗ 7.54%
+                      </AppText>
+                    </View>
+                  </View>
+
+                  <View style={styles.paperTradeButtonRow}>
+                    <TouchableOpacity
+                      style={[styles.paperTradeBtn, styles.paperBuyBtn]}
+                      onPress={() => {
+                        setOrderMode('BUY');
+                        setOrderModalVisible(true);
+                      }}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Paper Buy"
+                    >
+                      <AppText bold style={styles.paperTradeBtnText}>
+                        Paper Buy
+                      </AppText>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.paperTradeBtn, styles.paperSellBtn]}
+                      onPress={() => {
+                        setOrderMode('SELL');
+                        setOrderModalVisible(true);
+                      }}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Paper Sell"
+                    >
+                      <AppText bold style={styles.paperTradeBtnText}>
+                        Paper Sell
+                      </AppText>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
 
@@ -1036,8 +1069,7 @@ const styles = StyleSheet.create({
     flex: 1.36,
   },
   mainPriceText: {
-    fontSize: 32,
-    letterSpacing: -0.5,
+    fontSize: 32
   },
   changeText: {
     fontSize: 13,
@@ -1242,12 +1274,48 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#CCCCCC',
   },
+  positionContainer: {
+    width: '100%',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+  },
+  positionTitle: {
+    fontSize: 18,
+    marginBottom: spacing.xs,
+  },
+  positionDataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm + 2,
+  },
+  positionLeftGroup: {
+    gap: 2,
+  },
+  positionSharesText: {
+    fontSize: 17,
+    letterSpacing: 0.2,
+  },
+  positionAvgCostLabel: {
+    fontSize: 13,
+  },
+  positionRightGroup: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  positionValueText: {
+    fontSize: 20,
+    letterSpacing: 0.2,
+  },
+  positionReturnText: {
+    fontSize: 13,
+    color: '#00D084',
+  },
   paperTradeButtonRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    paddingHorizontal: spacing.lg,
     gap: spacing.md,
     marginTop: spacing.xs,
     marginBottom: spacing.sm,
@@ -1257,9 +1325,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: borderRadius.sm
+    paddingVertical: spacing.md - 2,
+    borderRadius: borderRadius.sm + 2,
   },
   paperBuyBtn: {
     backgroundColor: '#00D084',
