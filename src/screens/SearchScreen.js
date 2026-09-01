@@ -5,11 +5,13 @@ import StockSearchView from '../components/search/StockSearchView';
 import StockDetailModal from '../components/stock/StockDetailModal';
 import { useMarketData } from '../context/MarketDataContext';
 import { layoutStyles } from '../styles';
+import { formatStockQuote } from '../utils/formatters';
 
 export default function SearchScreen() {
   const {
     quotes,
     profiles,
+    marketStatus,
     fetchQuote,
     fetchProfile,
     setActiveModalSymbol,
@@ -38,23 +40,15 @@ export default function SearchScreen() {
   // Stock object to pass to StockDetailModal with live overlay data if available
   const modalStock = useMemo(() => {
     if (!selectedStock) return null;
-    const sym = selectedStock.symbol;
-    const liveQuote = quotes[sym];
-    const liveProfile = profiles[sym];
-
-    return {
-      symbol: sym,
-      name: liveProfile?.name || selectedStock.name,
-      exchange: liveProfile?.exchange || '...',
-      logo: liveProfile?.logo || null,
-      price: (liveQuote?.isLiveWs ? liveQuote.price : null) ?? liveQuote?.price ?? null,
-      change: liveQuote?.change ?? null,
-      changePercent: liveQuote?.changePercent ?? null,
-      previousClose: liveQuote?.previousClose ?? null,
-      regularMarketPrice: liveQuote?.regularMarketPrice ?? null,
-      lastUpdated: liveQuote?.lastTickTime || liveQuote?.timestamp,
-    };
-  }, [selectedStock, quotes, profiles]);
+    const sym = selectedStock.symbol?.toUpperCase();
+    return formatStockQuote(
+      selectedStock,
+      quotes[sym],
+      profiles[sym],
+      null,
+      marketStatus
+    );
+  }, [selectedStock, quotes, profiles, marketStatus]);
 
   return (
     <ScreenContainer title="Search">

@@ -15,6 +15,7 @@ import { useMarketData } from '../context/MarketDataContext';
 import { useWatchlist } from '../context/WatchlistContext';
 import { spacing, borderRadius } from '../constants/theme';
 import { layoutStyles, emptyStateStyles } from '../styles';
+import { formatStockQuote } from '../utils/formatters';
 
 export default function HomeScreen() {
   const { theme, isDark } = useTheme();
@@ -221,86 +222,13 @@ export default function HomeScreen() {
   const displayItems = useMemo(() => {
     return (activeWatchlist?.items || []).map((item) => {
       const sym = item.symbol?.toUpperCase();
-      const liveQuote = quotes[sym];
-      const liveProfile = profiles[sym];
-      const y1D = sparklines1D[sym];
-
-      const regularClose = y1D?.regularMarketPrice || item.price;
-      const prevDayClose = y1D?.previousClose || item.price;
-
-      let displayPrice;
-      let displayChange;
-      let displayChangePercent;
-
-      if (marketStatus.isOpen) {
-        // Market is OPEN: Live price compared against previous day's close
-        displayPrice = liveQuote?.price ?? y1D?.price ?? item.price;
-        const refClose = prevDayClose || displayPrice;
-        displayChange = displayPrice - refClose;
-        displayChangePercent = refClose !== 0 ? (displayChange / refClose) * 100 : 0;
-      } else {
-        // Market is OUT OF HOURS:
-        const hasLiveWsTrade =
-          liveQuote?.isLiveWs &&
-          typeof liveQuote?.price === 'number' &&
-          Math.abs(liveQuote.price - regularClose) > 0.001;
-        const postPrice =
-          (marketStatus.isPreMarket
-            ? y1D?.preMarketPrice
-            : y1D?.postMarketPrice) ||
-          y1D?.postMarketPrice ||
-          y1D?.preMarketPrice;
-        const hasPostMarketDelta =
-          typeof postPrice === 'number' &&
-          Math.abs(postPrice - regularClose) > 0.001;
-
-        if (hasLiveWsTrade) {
-          displayPrice = liveQuote.price;
-          displayChange = liveQuote.price - regularClose;
-          displayChangePercent =
-            regularClose !== 0
-              ? (displayChange / regularClose) * 100
-              : 0;
-        } else if (hasPostMarketDelta) {
-          displayPrice = postPrice;
-          displayChange = postPrice - regularClose;
-          displayChangePercent =
-            regularClose !== 0
-              ? (displayChange / regularClose) * 100
-              : 0;
-        } else {
-          // If no extended delta occurred, show the official regular market session close figures
-          displayPrice = regularClose;
-          displayChange = y1D?.change ?? item.change ?? 0;
-          displayChangePercent = y1D?.changePercent ?? item.changePercent ?? 0;
-        }
-      }
-
-      // Dynamically update the sparkline's endmost value with the current active trade price
-      const baseSparkline =
-        y1D?.sparkline || liveQuote?.sparkline || item.sparkline || [];
-      const dynamicSparkline =
-        typeof displayPrice === 'number' && baseSparkline.length > 0
-          ? [...baseSparkline.slice(0, -1), displayPrice]
-          : baseSparkline;
-
-      return {
-        ...item,
-        price: displayPrice,
-        postMarketPrice: y1D?.postMarketPrice || displayPrice,
-        regularMarketPrice: regularClose,
-        change: displayChange,
-        changePercent: displayChangePercent,
-        name: liveProfile?.name || item.name,
-        exchange: liveProfile?.exchange || item.exchange || '...',
-        logo: liveProfile?.logo || item.logo || null,
-        sparkline: dynamicSparkline,
-        lastUpdated:
-          liveQuote?.lastTickTime ||
-          liveQuote?.timestamp ||
-          y1D?.lastUpdated ||
-          item.lastUpdated,
-      };
+      return formatStockQuote(
+        item,
+        quotes[sym],
+        profiles[sym],
+        sparklines1D[sym],
+        marketStatus
+      );
     });
   }, [activeWatchlist, quotes, profiles, sparklines1D, marketStatus]);
 
@@ -402,48 +330,13 @@ export default function HomeScreen() {
           visible={!!selectedStock}
           stock={
             selectedStock
-              ? {
-                  ...selectedStock,
-                  price:
-                    (quotes[selectedStock.symbol]?.isLiveWs
-                      ? quotes[selectedStock.symbol]?.price
-                      : null) ??
-                    sparklines1D[selectedStock.symbol]?.postMarketPrice ??
-                    selectedStock.price,
-                  postMarketPrice:
-                    sparklines1D[selectedStock.symbol]?.postMarketPrice ||
-                    selectedStock.postMarketPrice,
-                  regularMarketPrice:
-                    sparklines1D[selectedStock.symbol]?.regularMarketPrice ||
-                    selectedStock.regularMarketPrice,
-                  change:
-                    quotes[selectedStock.symbol]?.change ??
-                    sparklines1D[selectedStock.symbol]?.change ??
-                    selectedStock.change,
-                  changePercent:
-                    quotes[selectedStock.symbol]?.changePercent ??
-                    sparklines1D[selectedStock.symbol]?.changePercent ??
-                    selectedStock.changePercent,
-                  name:
-                    profiles[selectedStock.symbol]?.name || selectedStock.name,
-                  exchange:
-                    profiles[selectedStock.symbol]?.exchange ||
-                    selectedStock.exchange ||
-                    '...',
-                  logo:
-                    profiles[selectedStock.symbol]?.logo ||
-                    selectedStock.logo ||
-                    null,
-                  sparkline:
-                    sparklines1D[selectedStock.symbol]?.sparkline ||
-                    quotes[selectedStock.symbol]?.sparkline ||
-                    selectedStock.sparkline,
-                  lastUpdated:
-                    quotes[selectedStock.symbol]?.lastTickTime ||
-                    quotes[selectedStock.symbol]?.timestamp ||
-                    sparklines1D[selectedStock.symbol]?.lastUpdated ||
-                    selectedStock.lastUpdated,
-                }
+              ? formatStockQuote(
+                  selectedStock,
+                  quotes[selectedStock.symbol?.toUpperCase()],
+                  profiles[selectedStock.symbol?.toUpperCase()],
+                  sparklines1D[selectedStock.symbol?.toUpperCase()],
+                  marketStatus
+                )
               : null
           }
           onClose={handleCloseStockDetail}

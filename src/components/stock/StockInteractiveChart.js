@@ -381,7 +381,7 @@ export default function StockInteractiveChart({
 
       setScrubIndex(clampedIdx);
 
-      // Throttle parent callback to ~20fps to avoid cascading re-renders upstream
+      
       const cb = onScrubRef.current;
       if (cb) {
         const now = Date.now();

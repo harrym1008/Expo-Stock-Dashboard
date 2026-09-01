@@ -14,6 +14,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { yahooFinanceService } from '../../services/yahooFinanceService';
 import { spacing, borderRadius } from '../../constants/theme';
 import { modalStyles, layoutStyles } from '../../styles';
+import { formatMoney, formatShares } from '../../utils/formatters';
 import AppText from '../common/AppText';
 
 export default function OrderExecutedModal({
@@ -30,7 +31,6 @@ export default function OrderExecutedModal({
   const [executionResult, setExecutionResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Unified exit handler that ensures everything behind is dismissed cleanly
   const handleDismiss = () => {
     if (onComplete) {
       onComplete();
@@ -47,24 +47,19 @@ export default function OrderExecutedModal({
       setExecutionResult(null);
       setErrorMessage('');
 
-      const startTime = Date.now();
-
       async function processTrade() {
         try {
           const sym = orderParams.symbol;
-          // 1. Fetch the exact most recent 1m price from Yahoo Finance
           const liveRecentPrice = await yahooFinanceService.getMostRecentPrice(sym);
           const fillPrice =
             typeof liveRecentPrice === 'number' && liveRecentPrice > 0
               ? liveRecentPrice
               : (orderParams.fallbackPrice || 100.0);
 
-          // 2. Immediately inject this fresh price into MarketDataContext as if received via WebSocket
           if (typeof fillPrice === 'number' && fillPrice > 0 && injectLivePrice) {
             injectLivePrice(sym, fillPrice);
           }
 
-          // 3. Execute zero-fee order in PortfolioContext
           const result = executeOrder({
             portfolioId: orderParams.portfolioId,
             symbol: sym,
@@ -74,26 +69,15 @@ export default function OrderExecutedModal({
             price: fillPrice,
           });
 
-          // 3. Guarantee at least 1.0s activity indicator processing window
-          const elapsed = Date.now() - startTime;
-          const remainingDelay = Math.max(0, 1000 - elapsed);
-
-          setTimeout(() => {
-            if (isMounted) {
-              setExecutionResult(result);
-              setIsLoading(false);
-            }
-          }, remainingDelay);
+          if (isMounted) {
+            setExecutionResult(result);
+            setIsLoading(false);
+          }
         } catch (err) {
-          const elapsed = Date.now() - startTime;
-          const remainingDelay = Math.max(0, 1000 - elapsed);
-
-          setTimeout(() => {
-            if (isMounted) {
-              setErrorMessage(err.message || 'Failed to execute order');
-              setIsLoading(false);
-            }
-          }, remainingDelay);
+          if (isMounted) {
+            setErrorMessage(err.message || 'Failed to execute order');
+            setIsLoading(false);
+          }
         }
       }
 
@@ -109,24 +93,6 @@ export default function OrderExecutedModal({
 
   const symbol = orderParams?.symbol?.toUpperCase() || 'NVDA';
   const isBuy = (orderParams?.mode || executionResult?.mode || 'BUY') === 'BUY';
-
-  // Formatting helpers
-  const formatMoney = (val) => {
-    return `$${Number(val || 0).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  };
-
-  const formatShares = (val) => {
-    const num = Number(val || 0);
-    const formatted = num.toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 4,
-    });
-    return `${formatted} shares`;
-  };
-
   const tradedShares = executionResult?.shares ?? orderParams?.shares ?? 0;
   const fillPrice = executionResult?.fillPrice ?? orderParams?.fallbackPrice ?? 0;
   const orderCost = executionResult?.orderCost ?? (tradedShares * fillPrice);
@@ -136,6 +102,13 @@ export default function OrderExecutedModal({
   const positionAvgCost = newPosition?.avgCost ?? 0;
   const totalPositionValue = totalPositionShares * fillPrice;
 
+  const orderRows = [
+    { label: 'TICKER', value: symbol, isTicker: true },
+    { label: 'SHARE COUNT', value: formatShares(tradedShares) },
+    { label: 'SHARE FILL PRICE', value: formatMoney(fillPrice) },
+    { label: isBuy ? 'ORDER COST' : 'ORDER PROCEEDS', value: formatMoney(orderCost) },
+  ];
+
   return (
     <Modal
       visible={visible}
@@ -144,7 +117,6 @@ export default function OrderExecutedModal({
       onRequestClose={handleDismiss}
     >
       <View style={modalStyles.modalOverlayLight}>
-        {/* Top Gap - Tap to dismiss */}
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
@@ -153,7 +125,6 @@ export default function OrderExecutedModal({
           accessibilityLabel="Close Order Complete Modal"
         />
 
-        {/* Bottom Sheet Container */}
         <View
           style={[
             modalStyles.sheetContainer,
@@ -164,7 +135,6 @@ export default function OrderExecutedModal({
             style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
-            {/* Header: "Order Complete" + close 'X' */}
             <View
               style={[
                 modalStyles.header,
@@ -186,7 +156,6 @@ export default function OrderExecutedModal({
               </TouchableOpacity>
             </View>
 
-            {/* Content Area */}
             {isLoading ? (
               <View style={[layoutStyles.flex1, layoutStyles.center, styles.loadingContainer]}>
                 <ActivityIndicator size="large" color={theme.primary} />
@@ -212,50 +181,19 @@ export default function OrderExecutedModal({
               </View>
             ) : (
               <View style={styles.contentContainer}>
-                {/* 1. TOP SECTION: Details of the filled order */}
                 <View style={styles.topSection}>
-                  {/* Row 1: TICKER */}
-                  <View style={styles.dataRow}>
-                    <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
-                      TICKER
-                    </AppText>
-                    <AppText bold style={styles.tickerValue}>
-                      {symbol}
-                    </AppText>
-                  </View>
-
-                  {/* Row 2: SHARE COUNT */}
-                  <View style={styles.dataRow}>
-                    <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
-                      SHARE COUNT
-                    </AppText>
-                    <AppText bold style={styles.detailValue}>
-                      {formatShares(tradedShares)}
-                    </AppText>
-                  </View>
-
-                  {/* Row 3: SHARE FILL PRICE */}
-                  <View style={styles.dataRow}>
-                    <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
-                      SHARE FILL PRICE
-                    </AppText>
-                    <AppText bold style={styles.detailValue}>
-                      {formatMoney(fillPrice)}
-                    </AppText>
-                  </View>
-
-                  {/* Row 4: ORDER COST / ORDER PROCEEDS */}
-                  <View style={styles.dataRow}>
-                    <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
-                      {isBuy ? 'ORDER COST' : 'ORDER PROCEEDS'}
-                    </AppText>
-                    <AppText bold style={styles.detailValue}>
-                      {formatMoney(orderCost)}
-                    </AppText>
-                  </View>
+                  {orderRows.map((row) => (
+                    <View key={row.label} style={styles.dataRow}>
+                      <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
+                        {row.label}
+                      </AppText>
+                      <AppText bold style={row.isTicker ? styles.tickerValue : styles.detailValue}>
+                        {row.value}
+                      </AppText>
+                    </View>
+                  ))}
                 </View>
 
-                {/* Full Width Divider */}
                 <View
                   style={[
                     styles.divider,
@@ -263,14 +201,12 @@ export default function OrderExecutedModal({
                   ]}
                 />
 
-                {/* 2. BOTTOM SECTION: Updated Position */}
                 <View style={styles.positionSection}>
                   <AppText bold style={[styles.positionHeader, { color: theme.textSecondary }]}>
                     {symbol} POSITION
                   </AppText>
 
                   <View style={styles.positionRow}>
-                    {/* Left: Shares & Avg Cost */}
                     <View style={styles.positionLeft}>
                       <AppText bold style={styles.positionShares}>
                         {formatShares(totalPositionShares)}
@@ -283,7 +219,6 @@ export default function OrderExecutedModal({
                       </AppText>
                     </View>
 
-                    {/* Right: Total Value */}
                     <View style={styles.positionRight}>
                       <AppText bold style={styles.positionTotalValue}>
                         {formatMoney(totalPositionValue)}
@@ -292,10 +227,8 @@ export default function OrderExecutedModal({
                   </View>
                 </View>
 
-                {/* Spacer */}
                 <View style={layoutStyles.flex1} />
 
-                {/* 3. ACTION BUTTON: "Continue" */}
                 <TouchableOpacity
                   style={[styles.continueButton, { backgroundColor: theme.primary }]}
                   onPress={handleDismiss}

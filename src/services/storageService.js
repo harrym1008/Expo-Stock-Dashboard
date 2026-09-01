@@ -100,7 +100,12 @@ export const storageService = {
   async getStoredActivePortfolioId() {
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_PORTFOLIO_ID);
-      return raw ? JSON.parse(raw) : null;
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return raw;
+      }
     } catch (e) {
       return null;
     }
@@ -109,7 +114,7 @@ export const storageService = {
   async setStoredActivePortfolioId(id) {
     try {
       if (id) {
-        await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_PORTFOLIO_ID, JSON.stringify(id));
+        await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_PORTFOLIO_ID, id);
       } else {
         await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_PORTFOLIO_ID);
       }

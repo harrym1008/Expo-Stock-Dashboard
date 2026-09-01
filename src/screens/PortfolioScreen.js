@@ -13,11 +13,12 @@ import { usePortfolio } from '../context/PortfolioContext';
 import { useMarketData } from '../context/MarketDataContext';
 import { spacing, borderRadius } from '../constants/theme';
 import { layoutStyles } from '../styles';
+import { formatMoney, formatStockQuote } from '../utils/formatters';
 
 export default function PortfolioScreen() {
   const { theme, isDark } = useTheme();
   const { isPaperTradingEnabled } = useTrading();
-  const { quotes, profiles } = useMarketData();
+  const { quotes, profiles, marketStatus } = useMarketData();
   const {
     portfolios,
     activePortfolioId,
@@ -89,13 +90,6 @@ export default function PortfolioScreen() {
     [reorderPortfolios]
   );
 
-  const formatMoney = (val) => {
-    return `$${Number(val || 0).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  };
-
   const handleOpenStockDetail = useCallback((position) => {
     setSelectedStock({
       symbol: position.symbol,
@@ -156,23 +150,15 @@ export default function PortfolioScreen() {
 
   const modalStock = useMemo(() => {
     if (!selectedStock) return null;
-    const sym = selectedStock.symbol;
-    const liveQuote = quotes[sym];
-    const liveProfile = profiles[sym];
-
-    return {
-      symbol: sym,
-      name: liveProfile?.name || selectedStock.name,
-      exchange: liveProfile?.exchange || '...',
-      logo: liveProfile?.logo || null,
-      price: (liveQuote?.isLiveWs ? liveQuote.price : null) ?? liveQuote?.price ?? null,
-      change: liveQuote?.change ?? null,
-      changePercent: liveQuote?.changePercent ?? null,
-      previousClose: liveQuote?.previousClose ?? null,
-      regularMarketPrice: liveQuote?.regularMarketPrice ?? null,
-      lastUpdated: liveQuote?.lastTickTime || liveQuote?.timestamp,
-    };
-  }, [selectedStock, quotes, profiles]);
+    const sym = selectedStock.symbol?.toUpperCase();
+    return formatStockQuote(
+      selectedStock,
+      quotes[sym],
+      profiles[sym],
+      null,
+      marketStatus
+    );
+  }, [selectedStock, quotes, profiles, marketStatus]);
 
   const isStartPos = portfolioMetrics.sinceStartChangePercent >= 0;
 

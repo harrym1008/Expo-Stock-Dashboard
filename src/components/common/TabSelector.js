@@ -15,39 +15,24 @@ import AppText from './AppText';
 
 export default function TabSelector({
   tabs = [],
-  watchlists = [], // backward compatibility alias
   activeTabId,
-  activeWatchlistId, // backward compatibility alias
   onSelectTab,
-  onSelectWatchlist, // backward compatibility alias
   onAddTab,
-  onAddWatchlist, // backward compatibility alias
   isEditMode = false,
   onReorderTabs,
-  onReorderWatchlists, // backward compatibility alias
   onDeleteTab,
-  onDeleteWatchlist, // backward compatibility alias
   onRenameTab,
-  onRenameWatchlist, // backward compatibility alias
-  itemTypeLabel = 'Item', // e.g. 'Watchlist' or 'Portfolio'
+  itemTypeLabel = 'Item',
 }) {
   const { theme, isDark } = useTheme();
-
-  const items = tabs.length > 0 ? tabs : watchlists;
-  const currentActiveId = activeTabId || activeWatchlistId;
-  const handleSelect = onSelectTab || onSelectWatchlist;
-  const handleAdd = onAddTab || onAddWatchlist;
-  const handleReorder = onReorderTabs || onReorderWatchlists;
-  const handleDelete = onDeleteTab || onDeleteWatchlist;
-  const handleRename = onRenameTab || onRenameWatchlist;
 
   const activeBg = isDark ? '#4A4A4A' : '#D0D5DD';
   const inactiveBg = isDark ? '#1C1F26' : '#E4E7EC';
 
   const handleDeleteItem = () => {
-    if (items.length <= 1) return;
+    if (tabs.length <= 1) return;
 
-    const activeItem = items.find((t) => t.id === currentActiveId);
+    const activeItem = tabs.find((t) => t.id === activeTabId);
     const title = activeItem?.title || `this ${itemTypeLabel.toLowerCase()}`;
 
     Alert.alert(
@@ -58,31 +43,31 @@ export default function TabSelector({
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => handleDelete?.(currentActiveId),
+          onPress: () => onDeleteTab?.(activeTabId),
         },
       ]
     );
   };
 
   const handleRenameItem = () => {
-    handleRename?.(currentActiveId);
+    onRenameTab?.(activeTabId);
   };
 
   // Move pill up in order (swap with previous)
   const handleMoveUp = useCallback((index) => {
-    if (index <= 0 || !handleReorder) return;
-    const reordered = [...items];
+    if (index <= 0 || !onReorderTabs) return;
+    const reordered = [...tabs];
     [reordered[index - 1], reordered[index]] = [reordered[index], reordered[index - 1]];
-    handleReorder(reordered);
-  }, [items, handleReorder]);
+    onReorderTabs(reordered);
+  }, [tabs, onReorderTabs]);
 
   // Move pill down in order (swap with next)
   const handleMoveDown = useCallback((index) => {
-    if (index >= items.length - 1 || !handleReorder) return;
-    const reordered = [...items];
+    if (index >= tabs.length - 1 || !onReorderTabs) return;
+    const reordered = [...tabs];
     [reordered[index], reordered[index + 1]] = [reordered[index + 1], reordered[index]];
-    handleReorder(reordered);
-  }, [items, handleReorder]);
+    onReorderTabs(reordered);
+  }, [tabs, onReorderTabs]);
 
   return (
     <View style={styles.wrapper}>
@@ -91,10 +76,10 @@ export default function TabSelector({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {items.map((tab, index) => {
-          const isActive = tab.id === currentActiveId;
+        {tabs.map((tab, index) => {
+          const isActive = tab.id === activeTabId;
           const isFirst = index === 0;
-          const isLast = index === items.length - 1;
+          const isLast = index === tabs.length - 1;
 
           return (
             <Animated.View
@@ -133,7 +118,7 @@ export default function TabSelector({
                     backgroundColor: isActive ? activeBg : inactiveBg,
                   },
                 ]}
-                onPress={() => handleSelect?.(tab.id)}
+                onPress={() => onSelectTab?.(tab.id)}
                 activeOpacity={0.8}
               >
                 <AppText
@@ -184,7 +169,7 @@ export default function TabSelector({
             style={styles.editActions}
           >
             {/* Bin: Delete active item */}
-            {items.length > 1 && (
+            {tabs.length > 1 && (
               <TouchableOpacity
                 style={styles.editActionBtn}
                 onPress={handleDeleteItem}
@@ -216,7 +201,7 @@ export default function TabSelector({
           <TouchableOpacity
             key="add-btn"
             style={[styles.addBtn, { backgroundColor: inactiveBg }]}
-            onPress={handleAdd}
+            onPress={onAddTab}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel={`Add new ${itemTypeLabel.toLowerCase()}`}

@@ -6,6 +6,31 @@ import { yahooFinanceService } from '../services/yahooFinanceService';
 import { getMarketSessionStatus } from '../utils/marketHours';
 import { ingestHolidayData } from '../utils/marketHolidays';
 
+function calculateTickUpdate(current, sym, newPrice, timestamp, sessionStatus) {
+  const currentQuote = current || {};
+  const refClose = sessionStatus.isOpen
+    ? (currentQuote.previousClose || newPrice)
+    : (currentQuote.regularMarketPrice || currentQuote.previousClose || newPrice);
+
+  const change = newPrice - refClose;
+  const changePercent = refClose !== 0 ? (change / refClose) * 100 : 0;
+
+  return {
+    ...currentQuote,
+    symbol: sym,
+    price: newPrice,
+    isLiveWs: true,
+    change,
+    changePercent,
+    previousClose: currentQuote.previousClose || refClose,
+    regularMarketPrice: currentQuote.regularMarketPrice || refClose,
+    lastTickTime: timestamp,
+    sparkline: currentQuote.sparkline
+      ? [...currentQuote.sparkline.slice(-30), newPrice]
+      : [newPrice],
+  };
+}
+
 const MarketDataContext = createContext(null);
 
 export function MarketDataProvider({ children }) {
@@ -31,7 +56,6 @@ export function MarketDataProvider({ children }) {
           prev.label !== current.label ||
           prev.sublabel !== current.sublabel
         ) {
-          console.log(`[Market Status] ⏱️ Market session flipped to: ${current.label} (${current.session})`);
           return current;
         }
         return prev;
@@ -72,7 +96,6 @@ export function MarketDataProvider({ children }) {
       finnhubRestService.fetchMarketHolidays(apiKey, 'US').then((res) => {
         if (res && Array.isArray(res.data)) {
           ingestHolidayData(res.data);
-          console.log(`[Finnhub Holidays] 📅 Ingested ${res.data.length} live market holidays from API for year >= 2028`);
         }
       });
     }
@@ -91,32 +114,13 @@ export function MarketDataProvider({ children }) {
 
         for (const tick of ticks) {
           const sym = tick.symbol;
-          const current = next[sym] || {};
-          const newPrice = tick.price;
-
-          // Out-of-hours return must be relative to the MOST RECENT close (regularMarketPrice)
-          // Intraday return during market open is relative to previous day close
-          const refClose = sessionStatus.isOpen
-            ? (current.previousClose || newPrice)
-            : (current.regularMarketPrice || current.previousClose || newPrice);
-
-          const change = newPrice - refClose;
-          const changePercent = refClose !== 0 ? (change / refClose) * 100 : 0;
-
-          next[sym] = {
-            ...current,
-            symbol: sym,
-            price: newPrice,
-            isLiveWs: true, // Mark verified real-time live WebSocket tick
-            change,
-            changePercent,
-            previousClose: current.previousClose || refClose,
-            regularMarketPrice: current.regularMarketPrice || refClose,
-            lastTickTime: tick.timestamp,
-            sparkline: current.sparkline
-              ? [...current.sparkline.slice(-30), newPrice]
-              : [newPrice],
-          };
+          next[sym] = calculateTickUpdate(
+            next[sym],
+            sym,
+            tick.price,
+            tick.timestamp,
+            sessionStatus
+          );
           hasChanges = true;
         }
 
@@ -185,10 +189,8 @@ export function MarketDataProvider({ children }) {
   // 9. Fetch Key Metrics (Finnhub)
   const fetchStockMetrics = useCallback(
     async (symbol) => {
-      if (!symbol) return null;
-      const key = apiKey || (await storageService.getApiKey());
-      if (!key) return null;
-      return await finnhubRestService.fetchStockMetrics(symbol, key);
+      if (!symbol || !apiKey) return null;
+      return await finnhubRestService.fetchStockMetrics(symbol, apiKey);
     },
     [apiKey]
   );
@@ -202,10 +204,8 @@ export function MarketDataProvider({ children }) {
   // 11. Fetch Recent Company News (Finnhub)
   const fetchCompanyNews = useCallback(
     async (symbol) => {
-      if (!symbol) return [];
-      const key = apiKey || (await storageService.getApiKey());
-      if (!key) return [];
-      return await finnhubRestService.fetchCompanyNews(symbol, key);
+      if (!symbol || !apiKey) return [];
+      return await finnhubRestService.fetchCompanyNews(symbol, apiKey);
     },
     [apiKey]
   );
@@ -213,9 +213,8 @@ export function MarketDataProvider({ children }) {
   // 12. Fetch Market News (Finnhub)
   const fetchMarketNews = useCallback(
     async (category = 'general', forceRefresh = false) => {
-      const key = apiKey || (await storageService.getApiKey());
-      if (!key) return [];
-      return await finnhubRestService.fetchMarketNews(key, category, forceRefresh);
+      if (!apiKey) return [];
+      return await finnhubRestService.fetchMarketNews(apiKey, category, forceRefresh);
     },
     [apiKey]
   );
@@ -251,33 +250,10 @@ export function MarketDataProvider({ children }) {
     const sym = symbol.toUpperCase();
     const sessionStatus = getMarketSessionStatus();
 
-    setQuotes((prev) => {
-      const current = prev[sym] || {};
-      const refClose = sessionStatus.isOpen
-        ? (current.previousClose || newPrice)
-        : (current.regularMarketPrice || current.previousClose || newPrice);
-
-      const change = newPrice - refClose;
-      const changePercent = refClose !== 0 ? (change / refClose) * 100 : 0;
-
-      return {
-        ...prev,
-        [sym]: {
-          ...current,
-          symbol: sym,
-          price: newPrice,
-          isLiveWs: true, // Marked as live tick so all screens and modals immediately reflect it
-          change,
-          changePercent,
-          previousClose: current.previousClose || refClose,
-          regularMarketPrice: current.regularMarketPrice || refClose,
-          lastTickTime: timestamp,
-          sparkline: current.sparkline
-            ? [...current.sparkline.slice(-30), newPrice]
-            : [newPrice],
-        },
-      };
-    });
+    setQuotes((prev) => ({
+      ...prev,
+      [sym]: calculateTickUpdate(prev[sym], sym, newPrice, timestamp, sessionStatus),
+    }));
   }, []);
 
   const value = {

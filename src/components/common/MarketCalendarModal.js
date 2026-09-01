@@ -15,11 +15,16 @@ import { getNextUpcomingHolidays } from '../../utils/marketHolidays';
 import { modalStyles } from '../../styles';
 import AppText from './AppText';
 
+const STANDARD_SESSIONS = [
+  { name: 'Pre-Market', time: '04:00 - 09:30 ET', color: '#FFA500' },
+  { name: 'Regular Market', time: '09:30 - 16:00 ET', color: '#00D084' },
+  { name: 'Post-Market', time: '16:00 - 20:00 ET', color: '#B872FF' },
+];
+
 export default function MarketCalendarModal({ visible, onClose }) {
   const { theme, isDark } = useTheme();
   const { marketStatus } = useMarketData();
 
-  // Live ticking clock for New York Time
   const [nyTimeStr, setNyTimeStr] = useState('');
   const [nyDateStr, setNyDateStr] = useState('');
 
@@ -53,7 +58,6 @@ export default function MarketCalendarModal({ visible, onClose }) {
     return () => clearInterval(interval);
   }, [visible]);
 
-  // Retrieve strictly the next 8 upcoming US exchange holidays
   const upcomingHolidays = useMemo(() => {
     if (!visible) return [];
     return getNextUpcomingHolidays(8);
@@ -70,14 +74,12 @@ export default function MarketCalendarModal({ visible, onClose }) {
       onRequestClose={onClose}
     >
       <View style={modalStyles.modalOverlay}>
-        {/* Top Gap - Tap to dismiss */}
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
           onPress={onClose}
         />
 
-        {/* Sheet Container */}
         <View
           style={[
             modalStyles.sheetContainer,
@@ -88,7 +90,6 @@ export default function MarketCalendarModal({ visible, onClose }) {
             style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
-            {/* Header */}
             <View
               style={[
                 modalStyles.header,
@@ -133,15 +134,14 @@ export default function MarketCalendarModal({ visible, onClose }) {
                   <View style={styles.liveClockLeftGroup}>
                     <Ionicons name="time-outline" size={18} color={theme.primary} />
                     <AppText bold style={styles.liveClockTime}>
-                      {nyTimeStr || '10:09:16 AM ET'}
+                      {nyTimeStr || '10:00:00 AM ET'}
                     </AppText>
                   </View>
                   <AppText style={[styles.liveClockDate, { color: theme.textSecondary }]}>
-                    {nyDateStr || 'Thu, Aug 27, 2026'}
+                    {nyDateStr}
                   </AppText>
                 </View>
 
-                {/* Active Session Badge */}
                 <View
                   style={[
                     styles.activeSessionBadge,
@@ -174,50 +174,26 @@ export default function MarketCalendarModal({ visible, onClose }) {
                 ]}
               >
                 <AppText bold style={styles.daysHeader}>
-                  Monday - Friday (US Eastern Time)
+                  Monday - Friday
                 </AppText>
 
-                {/* Session Rows with colored bullet points */}
-                <View style={styles.sessionItemRow}>
-                  <View style={styles.sessionLeftCol}>
-                    <View style={[styles.sessionBulletDot, { backgroundColor: '#FFA500' }]} />
-                    <AppText bold style={[styles.sessionItemName, { color: '#FFA500' }]}>
-                      Pre-Market
+                {STANDARD_SESSIONS.map((session) => (
+                  <View key={session.name} style={styles.sessionItemRow}>
+                    <View style={styles.sessionLeftCol}>
+                      <View style={[styles.sessionBulletDot, { backgroundColor: session.color }]} />
+                      <AppText bold style={[styles.sessionItemName, { color: session.color }]}>
+                        {session.name}
+                      </AppText>
+                    </View>
+                    <AppText bold style={styles.sessionItemTime}>
+                      {session.time}
                     </AppText>
                   </View>
-                  <AppText bold style={styles.sessionItemTime}>
-                    04:00 - 09:30 ET
-                  </AppText>
-                </View>
+                ))}
 
-                <View style={styles.sessionItemRow}>
-                  <View style={styles.sessionLeftCol}>
-                    <View style={[styles.sessionBulletDot, { backgroundColor: '#00D084' }]} />
-                    <AppText bold style={[styles.sessionItemName, { color: '#00D084' }]}>
-                      Regular Market
-                    </AppText>
-                  </View>
-                  <AppText bold style={styles.sessionItemTime}>
-                    09:30 - 16:00 ET
-                  </AppText>
-                </View>
-
-                <View style={styles.sessionItemRow}>
-                  <View style={styles.sessionLeftCol}>
-                    <View style={[styles.sessionBulletDot, { backgroundColor: '#B872FF' }]} />
-                    <AppText bold style={[styles.sessionItemName, { color: '#B872FF' }]}>
-                      Post-Market
-                    </AppText>
-                  </View>
-                  <AppText bold style={styles.sessionItemTime}>
-                    16:00 - 20:00 ET
-                  </AppText>
-                </View>
-
-                {/* Weekend row */}
                 <View style={styles.weekendRow}>
                   <AppText style={[styles.weekendLabel, { color: theme.textSecondary }]}>
-                    Saturday & Sunday:{' '}
+                    Saturday & Sunday:{'  '}
                     <AppText bold style={{ color: theme.textPrimary }}>
                       Closed
                     </AppText>
@@ -246,14 +222,10 @@ export default function MarketCalendarModal({ visible, onClose }) {
                   year: 'numeric',
                 }).format(dt);
 
-                const isFullyClosed = hol.isFullyClosed;
-
-                // Format early close time e.g. 13:00
                 const closeTime = hol.regularHours?.end
                   ? `${Math.floor(hol.regularHours.end / 3600)}:${String(Math.floor((hol.regularHours.end % 3600) / 60)).padStart(2, '0')}`
                   : '13:00';
 
-                // Format post-market close time e.g. 17:00
                 const postCloseTime = hol.postMarketHours?.end
                   ? `${Math.floor(hol.postMarketHours.end / 3600)}:${String(Math.floor((hol.postMarketHours.end % 3600) / 60)).padStart(2, '0')}`
                   : '17:00';
@@ -278,7 +250,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
                       </AppText>
                     </View>
 
-                    {isFullyClosed ? (
+                    {hol.isFullyClosed ? (
                       <View style={styles.closedPill}>
                         <AppText bold style={styles.closedPillText}>
                           Closed All Day

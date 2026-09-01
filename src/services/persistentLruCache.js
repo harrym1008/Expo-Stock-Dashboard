@@ -8,17 +8,31 @@ const DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const LOGO_SIZE = 128;
 const DATABASE_NAME = 'stock_cache.db';
 
-const STORAGE_ROOT = FileSystem.documentDirectory || FileSystem.cacheDirectory || '';
-const LEGACY_CACHE_FILE = `${STORAGE_ROOT}stock_lru_cache.json`;
-const LEGACY_CACHE_DIR = `${STORAGE_ROOT}stock_lru_cache/`;
+/**
+ * Accurate, zero-allocation UTF-8 byte size calculation for any string or serializable value.
+ */
+export function getByteSize(value) {
+  if (value == null) return 0;
+  const str = typeof value === 'string' ? value : JSON.stringify(value);
+  if (!str) return 0;
 
-function getByteSize(value) {
-  if (!value) return 0;
-  try {
-    return encodeURI(value).split(/%..|./).length - 1;
-  } catch (e) {
-    return value.length * 2;
+  let bytes = 0;
+  const len = str.length;
+  for (let i = 0; i < len; i++) {
+    const code = str.charCodeAt(i);
+    if (code <= 0x7f) {
+      bytes += 1;
+    } else if (code <= 0x7ff) {
+      bytes += 2;
+    } else if (code >= 0xd800 && code <= 0xdbff) {
+      // High surrogate, paired with low surrogate for 4-byte astral code point
+      bytes += 4;
+      i++;
+    } else {
+      bytes += 3;
+    }
   }
+  return bytes;
 }
 
 class PersistentLruCache {
@@ -36,9 +50,6 @@ class PersistentLruCache {
 
   touch(key, timestamp) {
     if (!this.db) return;
-
-    // LRU bookkeeping must never hold up a cache hit or a network response.
-    // SQLite serializes the individual statement safely on the shared connection.
     this.db
       .runAsync('UPDATE cache_entries SET last_accessed = ? WHERE key = ?', timestamp, key)
       .catch(() => {});
@@ -70,25 +81,10 @@ class PersistentLruCache {
       );
 
       this.db = db;
-      await this.removeLegacyCacheFiles();
       return db;
     })();
 
     return this.dbPromise;
-  }
-
-  async removeLegacyCacheFiles() {
-    for (const path of [LEGACY_CACHE_FILE, LEGACY_CACHE_DIR]) {
-      try {
-        const info = await FileSystem.getInfoAsync(path);
-        if (info.exists) {
-          await FileSystem.deleteAsync(path, { idempotent: true });
-          console.log(`[PersistentLRU] Removed legacy cache path: ${path}`);
-        }
-      } catch (err) {
-        console.warn('[PersistentLRU] Failed to remove legacy cache path:', err.message || err);
-      }
-    }
   }
 
   async getTotalBytes(db) {
@@ -111,13 +107,16 @@ class PersistentLruCache {
     }
   }
 
-  async getJson(key) {
+  async getItem(key, isJson = true) {
     const db = await this.init();
     const item = await db.getFirstAsync(
       'SELECT value, created_at, ttl_ms, type FROM cache_entries WHERE key = ?',
       key
     );
-    if (!item || item.type !== 'json') return null;
+    if (!item) return null;
+
+    const expectedType = isJson ? 'json' : 'logo';
+    if (item.type !== expectedType) return null;
 
     const now = Date.now();
     if (now - item.created_at > (item.ttl_ms || DEFAULT_TTL_MS)) {
@@ -125,20 +124,25 @@ class PersistentLruCache {
       return null;
     }
 
-    try {
-      const value = JSON.parse(item.value);
-      this.touch(key, now);
-      return value;
-    } catch (err) {
-      this.enqueueWrite(() => db.runAsync('DELETE FROM cache_entries WHERE key = ?', key));
-      return null;
+    if (isJson) {
+      try {
+        const parsed = JSON.parse(item.value);
+        this.touch(key, now);
+        return parsed;
+      } catch (err) {
+        this.enqueueWrite(() => db.runAsync('DELETE FROM cache_entries WHERE key = ?', key));
+        return null;
+      }
     }
+
+    this.touch(key, now);
+    return item.value;
   }
 
-  async setJson(key, data, ttl = DEFAULT_TTL_MS) {
+  async setItem(key, data, ttl = DEFAULT_TTL_MS, isJson = true) {
     return this.enqueueWrite(async () => {
       const db = await this.init();
-      const value = JSON.stringify(data);
+      const value = isJson ? JSON.stringify(data) : data;
       if (typeof value !== 'string') return;
 
       const byteSize = getByteSize(value);
@@ -158,59 +162,28 @@ class PersistentLruCache {
         now,
         now,
         ttl,
-        'json'
+        isJson ? 'json' : 'logo'
       );
     });
+  }
+
+  async getJson(key) {
+    return this.getItem(key, true);
+  }
+
+  async setJson(key, data, ttl = DEFAULT_TTL_MS) {
+    return this.setItem(key, data, ttl, true);
   }
 
   async getCachedLogo(symbol) {
     if (!symbol) return null;
-
-    const db = await this.init();
-    const key = `logo_${symbol.toUpperCase()}`;
-    const item = await db.getFirstAsync(
-      'SELECT value, created_at, ttl_ms, type FROM cache_entries WHERE key = ?',
-      key
-    );
-    if (!item || item.type !== 'logo') return null;
-
-    const now = Date.now();
-    if (now - item.created_at > (item.ttl_ms || DEFAULT_TTL_MS)) {
-      this.enqueueWrite(() => db.runAsync('DELETE FROM cache_entries WHERE key = ?', key));
-      return null;
-    }
-
-    this.touch(key, now);
-    return item.value;
+    return this.getItem(`logo_${symbol.toUpperCase()}`, false);
   }
 
   async cacheLogoData(symbol, dataUri) {
     if (!symbol || !dataUri) return false;
-
-    return this.enqueueWrite(async () => {
-      const db = await this.init();
-      const key = `logo_${symbol.toUpperCase()}`;
-      const byteSize = getByteSize(dataUri);
-      if (byteSize > MAX_CACHE_BYTES) return false;
-
-      await db.runAsync('DELETE FROM cache_entries WHERE key = ?', key);
-      await this.evictToFit(db, byteSize);
-
-      const now = Date.now();
-      await db.runAsync(
-        `INSERT INTO cache_entries
-          (key, value, size_bytes, last_accessed, created_at, ttl_ms, type)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        key,
-        dataUri,
-        byteSize,
-        now,
-        now,
-        DEFAULT_TTL_MS,
-        'logo'
-      );
-      return true;
-    });
+    await this.setItem(`logo_${symbol.toUpperCase()}`, dataUri, DEFAULT_TTL_MS, false);
+    return true;
   }
 
   async resizeAndEncodeImage(uri) {
@@ -260,7 +233,6 @@ class PersistentLruCache {
       resizedUri = resized.uri;
 
       await this.cacheLogoData(cleanSym, resized.dataUri);
-      console.log(`[PersistentLRU] Cached resized logo: "${cleanSym}" (128x128 PNG)`);
       return resized.dataUri;
     } catch (err) {
       console.warn(`[PersistentLRU] Image download or resize failed for ${symbol}:`, err.message || err);
@@ -293,8 +265,6 @@ class PersistentLruCache {
     return this.enqueueWrite(async () => {
       const db = await this.init();
       await db.runAsync('DELETE FROM cache_entries');
-      await this.removeLegacyCacheFiles();
-      console.log('[PersistentLRU] Cleared single SQLite cache');
     });
   }
 }

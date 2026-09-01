@@ -8,7 +8,6 @@ import {
   ScrollView,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Keyboard,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +17,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import { modalStyles, layoutStyles } from '../../styles';
+import { formatMoney, formatShares } from '../../utils/formatters';
 import AppText from '../common/AppText';
 import CompanyLogo from '../common/CompanyLogo';
 import StockInteractiveChart from './StockInteractiveChart';
@@ -27,33 +27,27 @@ export default function StockOrderModal({
   visible,
   onClose,
   stock,
-  mode = 'BUY', // 'BUY' | 'SELL'
+  mode = 'BUY',
 }) {
   const { theme, isDark } = useTheme();
   const { quotes, fetchHistoricalChart } = useMarketData();
   const { portfolios, activePortfolioId, getPosition } = usePortfolio();
 
   const scrollViewRef = useRef(null);
-  const [rowsYOffset, setRowsYOffset] = useState(80);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
-  // Selected portfolio state
   const [selectedPortfolioId, setSelectedPortfolioId] = useState(activePortfolioId);
   const [portfolioPickerVisible, setPortfolioPickerVisible] = useState(false);
 
-  // Separate toggle states for Row 2 (Owned) and Row 3 (Input)
   const [isOwnedUsdMode, setIsOwnedUsdMode] = useState(false);
   const [isInputUsdMode, setIsInputUsdMode] = useState(false);
   const [quantityInput, setQuantityInput] = useState('10');
   const [chartData, setChartData] = useState(null);
   const [isChartLoading, setIsChartLoading] = useState(true);
 
-  // Order Executed Modal states
   const [executedModalVisible, setExecutedModalVisible] = useState(false);
   const [pendingOrderParams, setPendingOrderParams] = useState(null);
   const [validationError, setValidationError] = useState('');
 
-  // Keep selected portfolio in sync
   useEffect(() => {
     if (activePortfolioId) {
       setSelectedPortfolioId(activePortfolioId);
@@ -68,7 +62,6 @@ export default function StockOrderModal({
     );
   }, [portfolios, selectedPortfolioId]);
 
-  // Live WebSocket price
   const cleanSymbol = (stock?.symbol || 'NVDA').toUpperCase();
   const wsQuote = quotes[cleanSymbol] || quotes[stock?.symbol];
   const liveWsPrice =
@@ -76,12 +69,10 @@ export default function StockOrderModal({
   const currentPrice =
     liveWsPrice ?? stock?.price ?? wsQuote?.price ?? 100.0;
 
-  // Real portfolio values
   const initialCash = selectedPortfolioObj?.cash ?? 10000.0;
   const positionObj = getPosition(selectedPortfolioId, cleanSymbol);
   const ownedShares = positionObj ? Number(positionObj.shares) || 0 : 0;
 
-  // Load 1D chart data on open
   useEffect(() => {
     if (!visible || !stock?.symbol) return;
     let isMounted = true;
@@ -101,59 +92,19 @@ export default function StockOrderModal({
     };
   }, [visible, stock?.symbol, fetchHistoricalChart]);
 
-  // Reset inputs when modal becomes visible
   useEffect(() => {
     if (visible) {
       setIsInputUsdMode(false);
       setIsOwnedUsdMode(false);
       setQuantityInput('10');
+      setValidationError('');
     }
   }, [visible]);
 
-  // Auto-scroll when keyboard opens so "Free Cash" is pinned at the top and all values stay visible
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSub = Keyboard.addListener(showEvent, () => {
-      setIsKeyboardVisible(true);
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({
-          y: Math.max(0, rowsYOffset - spacing.xs),
-          animated: true,
-        });
-      }, 50);
-    });
-
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setIsKeyboardVisible(false);
-      scrollViewRef.current?.scrollTo({
-        y: 0,
-        animated: true,
-      });
-    });
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [rowsYOffset]);
-
-  const handleInputFocus = useCallback(() => {
-    setTimeout(() => {
-      scrollViewRef.current?.scrollTo({
-        y: Math.max(0, rowsYOffset - spacing.xs),
-        animated: true,
-      });
-    }, 50);
-  }, [rowsYOffset]);
-
-  // Toggle Row 2 (Owned row) between shares and USD
   const handleToggleOwnedUnit = useCallback(() => {
     setIsOwnedUsdMode((prev) => !prev);
   }, []);
 
-  // Toggle Row 3 (Input row) between shares and USD: converts value while preserving order cost!
   const handleToggleInputUnit = useCallback(() => {
     setIsInputUsdMode((prev) => {
       const next = !prev;
@@ -164,21 +115,16 @@ export default function StockOrderModal({
       }
 
       if (next) {
-        // Converting from shares to USD: max 2 decimal places
         const usdValue = num * currentPrice;
-        const formattedUsd = parseFloat(usdValue.toFixed(2)).toString();
-        setQuantityInput(formattedUsd);
+        setQuantityInput(parseFloat(usdValue.toFixed(2)).toString());
       } else {
-        // Converting from USD to shares: max 4 decimal places
         const sharesValue = num / currentPrice;
-        const formattedShares = parseFloat(sharesValue.toFixed(4)).toString();
-        setQuantityInput(formattedShares);
+        setQuantityInput(parseFloat(sharesValue.toFixed(4)).toString());
       }
       return next;
     });
   }, [quantityInput, currentPrice]);
 
-  // Clean numeric / decimal input change enforcing max dp
   const handleInputChange = useCallback((text) => {
     let cleaned = text.replace(/[^0-9.]/g, '');
     const parts = cleaned.split('.');
@@ -193,7 +139,6 @@ export default function StockOrderModal({
     setQuantityInput(cleaned);
   }, [isInputUsdMode]);
 
-  // Calculations for order cost and after values
   const parsedInput = parseFloat(quantityInput) || 0;
   const orderShares = isInputUsdMode
     ? currentPrice > 0
@@ -207,23 +152,6 @@ export default function StockOrderModal({
   const afterShares = isBuy
     ? ownedShares + orderShares
     : Math.max(0, ownedShares - orderShares);
-
-  // Formatting helpers
-  const formatMoney = (val) => {
-    return `$${Number(val || 0).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  };
-
-  const formatShares = (val) => {
-    const num = Number(val || 0);
-    const formatted = num.toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 4,
-    });
-    return `${formatted} shares`;
-  };
 
   const chartPoints = useMemo(() => {
     if (chartData?.points && chartData.points.length > 0) {
@@ -278,14 +206,12 @@ export default function StockOrderModal({
         onRequestClose={onClose}
       >
         <View style={modalStyles.modalOverlayLight}>
-          {/* Top Backdrop Gap */}
           <TouchableOpacity
             style={modalStyles.topBackdropGap}
             activeOpacity={1}
             onPress={onClose}
           />
 
-          {/* Modal Sheet Container */}
           <View
             style={[
               modalStyles.sheetContainer,
@@ -296,7 +222,6 @@ export default function StockOrderModal({
               style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
               edges={['bottom', 'left', 'right']}
             >
-              {/* Header */}
               <View
                 style={[
                   modalStyles.header,
@@ -326,10 +251,7 @@ export default function StockOrderModal({
                   ref={scrollViewRef}
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
-                  contentContainerStyle={[
-                    styles.scrollContainer,
-                    isKeyboardVisible && { paddingBottom: 240 },
-                  ]}
+                  contentContainerStyle={styles.scrollContainer}
                 >
                   {/* 1. SELECT PORTFOLIO */}
                   <View style={styles.portfolioSection}>
@@ -362,7 +284,6 @@ export default function StockOrderModal({
                     </TouchableOpacity>
                   </View>
 
-                  {/* Divider Line */}
                   <View
                     style={[
                       styles.divider,
@@ -370,14 +291,8 @@ export default function StockOrderModal({
                     ]}
                   />
 
-                  {/* 2. FINANCIAL ROWS */}
-                  <View
-                    style={styles.dataRowsContainer}
-                    onLayout={(e) => {
-                      const y = e.nativeEvent.layout.y;
-                      if (y > 0) setRowsYOffset(y);
-                    }}
-                  >
+                  {/* 2. FINANCIAL DATA ROWS */}
+                  <View style={styles.dataRowsContainer}>
                     {/* Row 1: FREE CASH */}
                     <View style={styles.dataRow}>
                       <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
@@ -396,7 +311,7 @@ export default function StockOrderModal({
                       </View>
                     </View>
 
-                    {/* Row 2: OWNED [SYMBOL] <--> (Toggles Row 2 values between shares and USD) */}
+                    {/* Row 2: OWNED */}
                     <View style={styles.dataRow}>
                       <View style={styles.labelWithToggle}>
                         <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
@@ -437,7 +352,7 @@ export default function StockOrderModal({
                       </View>
                     </View>
 
-                    {/* Row 3: BUY/SELL SHARES <--> with Input (Toggles input between shares and USD) */}
+                    {/* Row 3: INPUT */}
                     <View style={styles.dataRow}>
                       <View style={styles.labelWithToggle}>
                         <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
@@ -473,7 +388,6 @@ export default function StockOrderModal({
                           returnKeyType="done"
                           value={quantityInput}
                           onChangeText={handleInputChange}
-                          onFocus={handleInputFocus}
                         />
                         <AppText bold style={styles.unitText}>
                           {isInputUsdMode ? 'USD' : 'shares'}
@@ -481,7 +395,7 @@ export default function StockOrderModal({
                       </View>
                     </View>
 
-                    {/* Row 4: ORDER COST / PROCEEDS */}
+                    {/* Row 4: ORDER COST */}
                     <View style={styles.dataRow}>
                       <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
                         {isBuy ? 'ORDER COST' : 'ORDER PROCEEDS'}
@@ -491,7 +405,6 @@ export default function StockOrderModal({
                       </AppText>
                     </View>
 
-                    {/* Validation Error Alert */}
                     {validationError ? (
                       <AppText style={styles.errorText}>
                         {validationError}
@@ -499,9 +412,8 @@ export default function StockOrderModal({
                     ) : null}
                   </View>
 
-                  {/* 3. BOTTOM SECTION: Latest Price + Horizontal Submit Button, with full-width 1D Chart below */}
+                  {/* 3. BOTTOM SECTION: Latest Price + Submit & 1D Mini Chart */}
                   <View style={styles.bottomSection}>
-                    {/* Top Row: Latest Price & Horizontal Submit Button */}
                     <View style={styles.priceAndSubmitRow}>
                       <View style={styles.latestPriceRow}>
                         <CompanyLogo
@@ -520,7 +432,6 @@ export default function StockOrderModal({
                         </View>
                       </View>
 
-                      {/* Horizontal Submit Button */}
                       <TouchableOpacity
                         style={[
                           styles.horizontalSubmitButton,
@@ -537,7 +448,6 @@ export default function StockOrderModal({
                       </TouchableOpacity>
                     </View>
 
-                    {/* Full-width Mini 1D Interactive Chart */}
                     <View
                       style={[
                         styles.miniChartContainer,
@@ -623,7 +533,6 @@ export default function StockOrderModal({
         )}
       </Modal>
 
-      {/* Order Executed Modal Confirmation */}
       <OrderExecutedModal
         visible={executedModalVisible}
         orderParams={pendingOrderParams}
@@ -711,7 +620,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     textAlign: 'center',
     fontSize: 18,
-    fontFamily: 'TangoSans-Bold',
   },
   unitText: {
     fontSize: 20,
@@ -767,7 +675,6 @@ const styles = StyleSheet.create({
   horizontalSubmitButtonText: {
     color: '#FFFFFF',
     fontSize: 19,
-    fontFamily: 'TangoSans-Bold',
   },
   miniChartContainer: {
     flex: 1,

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, TouchableOpacity, Image, Linking } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
-import { formatTimeAgo } from '../../utils/formatTimeAgo';
+import { formatTimeAgo } from '../../utils/formatters';
 import { newsStyles } from '../../styles';
 import AppText from './AppText';
 
