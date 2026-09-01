@@ -297,18 +297,32 @@ export function PortfolioProvider({ children }) {
     [activePortfolioId]
   );
 
-  const value = {
-    portfolios,
-    activePortfolioId,
-    setActivePortfolioId,
-    activePortfolio,
-    getPosition,
-    createPortfolio,
-    renamePortfolio,
-    deletePortfolio,
-    reorderPortfolios,
-    executeOrder,
-  };
+  const value = useMemo(
+    () => ({
+      portfolios,
+      activePortfolioId,
+      setActivePortfolioId,
+      activePortfolio,
+      getPosition,
+      createPortfolio,
+      renamePortfolio,
+      deletePortfolio,
+      reorderPortfolios,
+      executeOrder,
+    }),
+    [
+      portfolios,
+      activePortfolioId,
+      setActivePortfolioId,
+      activePortfolio,
+      getPosition,
+      createPortfolio,
+      renamePortfolio,
+      deletePortfolio,
+      reorderPortfolios,
+      executeOrder,
+    ]
+  );
 
   return (
     <PortfolioContext.Provider value={value}>

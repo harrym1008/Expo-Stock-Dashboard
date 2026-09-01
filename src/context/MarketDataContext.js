@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { storageService } from '../services/storageService';
 import { finnhubRestService } from '../services/finnhubRestService';
 import { finnhubWebSocketService } from '../services/finnhubWebSocketService';
@@ -256,25 +256,48 @@ export function MarketDataProvider({ children }) {
     }));
   }, []);
 
-  const value = {
-    apiKey,
-    hasValidKey: Boolean(apiKey && apiKey.length > 5),
-    updateApiKey,
-    quotes,
-    profiles,
-    marketStatus,
-    fetchQuote,
-    fetchProfile,
-    fetchHistoricalChart,
-    fetchStockMetrics,
-    fetchCompanyDescription,
-    fetchCompanyNews,
-    fetchMarketNews,
-    setWatchlistSymbols,
-    setPortfolioSymbols,
-    setActiveModalSymbol,
-    injectLivePrice,
-  };
+  const hasValidKey = Boolean(apiKey && apiKey.length > 5);
+
+  const value = useMemo(
+    () => ({
+      apiKey,
+      hasValidKey,
+      updateApiKey,
+      quotes,
+      profiles,
+      marketStatus,
+      fetchQuote,
+      fetchProfile,
+      fetchHistoricalChart,
+      fetchStockMetrics,
+      fetchCompanyDescription,
+      fetchCompanyNews,
+      fetchMarketNews,
+      setWatchlistSymbols,
+      setPortfolioSymbols,
+      setActiveModalSymbol,
+      injectLivePrice,
+    }),
+    [
+      apiKey,
+      hasValidKey,
+      updateApiKey,
+      quotes,
+      profiles,
+      marketStatus,
+      fetchQuote,
+      fetchProfile,
+      fetchHistoricalChart,
+      fetchStockMetrics,
+      fetchCompanyDescription,
+      fetchCompanyNews,
+      fetchMarketNews,
+      setWatchlistSymbols,
+      setPortfolioSymbols,
+      setActiveModalSymbol,
+      injectLivePrice,
+    ]
+  );
 
   return (
     <MarketDataContext.Provider value={value}>

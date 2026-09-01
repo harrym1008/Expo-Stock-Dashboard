@@ -47,7 +47,7 @@ function RightActionButton({ progress, onDelete }) {
  * @param {Function} props.onDelete - Callback invoked when delete button is tapped
  * @param {string|number} props.itemId - Optional ID identifier for the item
  */
-export default function SwipeableStockItem({ children, onDelete, itemId }) {
+function SwipeableStockItem({ children, onDelete, itemId }) {
   const handleDelete = () => {
     if (onDelete) {
       onDelete(itemId);
@@ -75,6 +75,8 @@ export default function SwipeableStockItem({ children, onDelete, itemId }) {
   );
 }
 
+export default React.memo(SwipeableStockItem);
+
 const styles = StyleSheet.create({
   deleteAction: {
     width: 80,
@@ -89,3 +91,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
+

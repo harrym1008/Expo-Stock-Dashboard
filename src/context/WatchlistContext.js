@@ -236,23 +236,42 @@ export function WatchlistProvider({ children }) {
     );
   }, [watchlists, activeWatchlistId]);
 
-  const value = {
-    watchlists,
-    activeWatchlistId,
-    setActiveWatchlistId,
-    activeWatchlist,
-    isStockInWatchlist,
-    isStockInAnyWatchlist,
-    addStockToWatchlist,
-    removeStockFromWatchlist,
-    toggleStockInWatchlist,
-    deleteStock,
-    reorderStocks,
-    createWatchlist,
-    renameWatchlist,
-    deleteWatchlist,
-    reorderWatchlists,
-  };
+  const value = useMemo(
+    () => ({
+      watchlists,
+      activeWatchlistId,
+      setActiveWatchlistId,
+      activeWatchlist,
+      isStockInWatchlist,
+      isStockInAnyWatchlist,
+      addStockToWatchlist,
+      removeStockFromWatchlist,
+      toggleStockInWatchlist,
+      deleteStock,
+      reorderStocks,
+      createWatchlist,
+      renameWatchlist,
+      deleteWatchlist,
+      reorderWatchlists,
+    }),
+    [
+      watchlists,
+      activeWatchlistId,
+      setActiveWatchlistId,
+      activeWatchlist,
+      isStockInWatchlist,
+      isStockInAnyWatchlist,
+      addStockToWatchlist,
+      removeStockFromWatchlist,
+      toggleStockInWatchlist,
+      deleteStock,
+      reorderStocks,
+      createWatchlist,
+      renameWatchlist,
+      deleteWatchlist,
+      reorderWatchlists,
+    ]
+  );
 
   return (
     <WatchlistContext.Provider value={value}>

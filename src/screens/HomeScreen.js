@@ -107,15 +107,15 @@ export default function HomeScreen() {
   }, [activeWatchlistId, marketStatus.session, hasValidKey, fetchQuote, fetchProfile, fetchHistoricalChart, activeWatchlist?.items]);
 
   // --- Stock detail modal ---
-  const handleOpenStockDetail = (item) => {
+  const handleOpenStockDetail = useCallback((item) => {
     setSelectedStock(item);
-    setActiveModalSymbol(item.symbol);
-  };
+    setActiveModalSymbol(item?.symbol);
+  }, [setActiveModalSymbol]);
 
-  const handleCloseStockDetail = () => {
+  const handleCloseStockDetail = useCallback(() => {
     setSelectedStock(null);
     setActiveModalSymbol(null);
-  };
+  }, [setActiveModalSymbol]);
 
   // --- Edit Mode ---
   const handleToggleEditMode = useCallback(() => {
@@ -218,9 +218,14 @@ export default function HomeScreen() {
     ]
   );
 
-  // Merge dynamic quotes, 1D historical candles, and profiles into items
+  // Freeze background list items while the StockDetailModal is open to prevent
+  // WebSocket price ticks from triggering 300ms background DraggableFlatList reconciliations
+  const displayItemsRef = useRef([]);
   const displayItems = useMemo(() => {
-    return (activeWatchlist?.items || []).map((item) => {
+    if (selectedStock && displayItemsRef.current.length > 0) {
+      return displayItemsRef.current;
+    }
+    const items = (activeWatchlist?.items || []).map((item) => {
       const sym = item.symbol?.toUpperCase();
       return formatStockQuote(
         item,
@@ -230,29 +235,51 @@ export default function HomeScreen() {
         marketStatus
       );
     });
-  }, [activeWatchlist, quotes, profiles, sparklines1D, marketStatus]);
+    displayItemsRef.current = items;
+    return items;
+  }, [
+    activeWatchlist,
+    selectedStock ? null : quotes,
+    profiles,
+    sparklines1D,
+    marketStatus,
+    selectedStock,
+  ]);
+
+  // Memoize formatted selected stock specifically on its own quote/profile/sparkline
+  const selectedSymbol = selectedStock?.symbol?.toUpperCase();
+  const selectedQuote = selectedSymbol ? (quotes[selectedSymbol] || quotes[selectedStock?.symbol]) : null;
+  const selectedProfile = selectedSymbol ? profiles[selectedSymbol] : null;
+  const selectedSparkline = selectedSymbol ? sparklines1D[selectedSymbol] : null;
+
+  const formattedSelectedStock = useMemo(() => {
+    if (!selectedStock) return null;
+    return formatStockQuote(
+      selectedStock,
+      selectedQuote,
+      selectedProfile,
+      selectedSparkline,
+      marketStatus
+    );
+  }, [selectedStock, selectedQuote, selectedProfile, selectedSparkline, marketStatus]);
 
   const renderStockItem = useCallback(
     ({ item, drag, isActive }) => {
-      const stockContent = (
-        <WatchlistItem
-          item={item}
-          onPress={() => handleOpenStockDetail(item)}
-          isEditMode={isEditMode}
-          drag={drag}
-        />
-      );
-
       return (
         <SwipeableStockItem
           itemId={item.id}
-          onDelete={() => handleDeleteStock(item.id)}
+          onDelete={handleDeleteStock}
         >
-          {stockContent}
+          <WatchlistItem
+            item={item}
+            onPress={handleOpenStockDetail}
+            isEditMode={isEditMode}
+            drag={drag}
+          />
         </SwipeableStockItem>
       );
     },
-    [isEditMode, handleDeleteStock]
+    [isEditMode, handleDeleteStock, handleOpenStockDetail]
   );
 
   return (
@@ -328,17 +355,7 @@ export default function HomeScreen() {
         {/* Fullscreen Stock Detail Slide-Up Modal */}
         <StockDetailModal
           visible={!!selectedStock}
-          stock={
-            selectedStock
-              ? formatStockQuote(
-                  selectedStock,
-                  quotes[selectedStock.symbol?.toUpperCase()],
-                  profiles[selectedStock.symbol?.toUpperCase()],
-                  sparklines1D[selectedStock.symbol?.toUpperCase()],
-                  marketStatus
-                )
-              : null
-          }
+          stock={formattedSelectedStock}
           onClose={handleCloseStockDetail}
         />
 

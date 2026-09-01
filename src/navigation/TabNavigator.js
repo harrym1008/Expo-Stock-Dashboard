@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as NavigationBar from 'expo-navigation-bar';
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
 import PortfolioScreen from '../screens/PortfolioScreen';
@@ -12,7 +14,31 @@ import { spacing, fonts } from '../constants/theme';
 const Tab = createBottomTabNavigator();
 
 export default function TabNavigator() {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      if (typeof NavigationBar?.setBackgroundColorAsync === 'function') {
+        NavigationBar.setBackgroundColorAsync(theme.tabBarBackground).catch(() => {});
+      }
+      if (typeof NavigationBar?.setButtonStyleAsync === 'function') {
+        NavigationBar.setButtonStyleAsync(isDark ? 'light' : 'dark').catch(() => {});
+      }
+    }
+  }, [theme.tabBarBackground, isDark]);
+
+  const bottomInset = insets.bottom;
+  const tabBarHeight = Platform.select({
+    ios: 52 + bottomInset,
+    android: 60 + bottomInset,
+    default: 64,
+  });
+  const tabBarPaddingBottom = Platform.select({
+    ios: bottomInset > 0 ? bottomInset : spacing.xs,
+    android: bottomInset > 0 ? bottomInset + 2 : spacing.xs,
+    default: spacing.xs,
+  });
 
   return (
     <Tab.Navigator
@@ -29,6 +55,8 @@ export default function TabNavigator() {
           {
             backgroundColor: theme.tabBarBackground,
             borderTopColor: theme.tabBarBorder,
+            height: tabBarHeight,
+            paddingBottom: tabBarPaddingBottom,
           },
         ],
         tabBarLabelStyle: styles.tabBarLabel,
@@ -45,9 +73,7 @@ export default function TabNavigator() {
 const styles = StyleSheet.create({
   tabBar: {
     borderTopWidth: 1,
-    height: Platform.OS === 'android' ? 68 : 88,
     paddingTop: spacing.xs,
-    paddingBottom: Platform.OS === 'android' ? spacing.sm : spacing.lg,
     elevation: 0,
   },
   tabBarLabel: {
@@ -55,3 +81,4 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 });
+

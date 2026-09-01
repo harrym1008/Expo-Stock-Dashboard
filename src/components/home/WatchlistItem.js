@@ -13,17 +13,23 @@ import AppText from '../common/AppText';
 import Sparkline from './Sparkline';
 import CompanyLogo from '../common/CompanyLogo';
 
-export default function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
+function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
   const { theme } = useTheme();
 
-  const isPositive = (item.changePercent ?? 0) >= 0;
+  const isPositive = (item?.changePercent ?? 0) >= 0;
   const trendColor = isPositive ? '#00D084' : '#FF4D4F';
+
+  const handlePress = () => {
+    if (onPress) {
+      onPress(item);
+    }
+  };
 
   return (
     <Animated.View layout={LinearTransition.duration(200)}>
       <TouchableOpacity
         style={stockItemStyles.itemContainer}
-        onPress={onPress}
+        onPress={handlePress}
         activeOpacity={0.7}
         accessibilityRole="button"
         disabled={isEditMode}
@@ -52,20 +58,20 @@ export default function WatchlistItem({ item, onPress, isEditMode = false, drag 
           style={styles.leftSection}
         >
           <CompanyLogo
-            symbol={item.symbol}
-            logoUri={item.logo}
+            symbol={item?.symbol}
+            logoUri={item?.logo}
             size={32}
           />
 
           <View style={styles.titleWrapper}>
             <AppText bold style={stockItemStyles.symbolText}>
-              {item.symbol}
+              {item?.symbol}
             </AppText>
             <AppText
               style={[stockItemStyles.nameText, styles.nameText, { color: theme.textSecondary }]}
               numberOfLines={1}
             >
-              {item.name}
+              {item?.name}
             </AppText>
           </View>
         </Animated.View>
@@ -73,7 +79,7 @@ export default function WatchlistItem({ item, onPress, isEditMode = false, drag 
         {/* Middle: Sparkline Chart with smoothing 4 */}
         <View style={styles.chartSection}>
           <Sparkline
-            data={item.sparkline}
+            data={item?.sparkline}
             color={trendColor}
             strokeWidth={2}
             smoothing={4}
@@ -83,21 +89,44 @@ export default function WatchlistItem({ item, onPress, isEditMode = false, drag 
         {/* Right: Price & Percent Change */}
         <View style={styles.rightSection}>
           <AppText style={stockItemStyles.priceText}>
-            {item.currency || '$'}
-            {(item.price ?? 0).toLocaleString('en-GB', {
+            {item?.currency || '$'}
+            {(item?.price ?? 0).toLocaleString('en-GB', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}
           </AppText>
           <AppText style={[stockItemStyles.changeText, { color: trendColor }]}>
             {isPositive ? '+' : '-'}
-            {Math.abs(item.changePercent ?? 0).toFixed(2)}%
+            {Math.abs(item?.changePercent ?? 0).toFixed(2)}%
           </AppText>
         </View>
       </TouchableOpacity>
     </Animated.View>
   );
 }
+
+function areEqual(prevProps, nextProps) {
+  if (prevProps.isEditMode !== nextProps.isEditMode) return false;
+  if (prevProps.onPress !== nextProps.onPress) return false;
+  if (prevProps.drag !== nextProps.drag) return false;
+
+  const prevItem = prevProps.item;
+  const nextItem = nextProps.item;
+  if (prevItem === nextItem) return true;
+  if (!prevItem || !nextItem) return false;
+
+  return (
+    prevItem.symbol === nextItem.symbol &&
+    prevItem.price === nextItem.price &&
+    prevItem.changePercent === nextItem.changePercent &&
+    prevItem.name === nextItem.name &&
+    prevItem.logo === nextItem.logo &&
+    prevItem.currency === nextItem.currency &&
+    prevItem.sparkline === nextItem.sparkline
+  );
+}
+
+export default React.memo(WatchlistItem, areEqual);
 
 const styles = StyleSheet.create({
   dragHandle: {
@@ -131,4 +160,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
 

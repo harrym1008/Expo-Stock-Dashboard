@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Modal,
   View,
@@ -26,7 +26,7 @@ import { storageService } from '../../services/storageService';
 import { useWatchlist } from '../../context/WatchlistContext';
 import { modalStyles, layoutStyles, newsStyles } from '../../styles';
 import AppText from '../common/AppText';
-import StockInteractiveChart, { formatCandleDate } from './StockInteractiveChart';
+import StockDetailChartSection from './StockDetailChartSection';
 import MarketCalendarModal from '../common/MarketCalendarModal';
 import CompanyLogo from '../common/CompanyLogo';
 import AddToWatchlistModal from './AddToWatchlistModal';
@@ -85,11 +85,28 @@ function RangeBar({ label, low, high, position, isDark, theme, curSymbol }) {
   );
 }
 
-export default function StockDetailModal({ visible, stock, onClose }) {
+const LastUpdatedFreshness = React.memo(function LastUpdatedFreshness({ timestamp, textStyle, textColor }) {
+  const [text, setText] = useState(() => formatTimeAgo(timestamp));
+
+  useEffect(() => {
+    setText(formatTimeAgo(timestamp));
+    const interval = setInterval(() => {
+      setText(formatTimeAgo(timestamp));
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [timestamp]);
+
+  return (
+    <AppText style={[textStyle, { color: textColor }]}>
+      Latest price updated {text}
+    </AppText>
+  );
+});
+
+function StockDetailModal({ visible, stock, onClose }) {
   const { theme, isDark } = useTheme();
   const {
     fetchHistoricalChart,
-    quotes,
     profiles,
     fetchQuote,
     fetchProfile,
@@ -108,9 +125,8 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   const [orderMode, setOrderMode] = useState('BUY');
   const [selectedTimeframe, setSelectedTimeframe] = useState('1D');
   const [chartData, setChartData] = useState(null);
-  const [scrubData, setScrubData] = useState(null);
   const [isInitialStockLoading, setIsInitialStockLoading] = useState(true);
-  const [timeAgoText, setTimeAgoText] = useState('just now');
+  const [isTimeframeLoading, setIsTimeframeLoading] = useState(false);
   const [calendarVisible, setCalendarVisible] = useState(false);
 
   const [metrics, setMetrics] = useState(null);
@@ -125,12 +141,12 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   useEffect(() => {
     latestExtendedPriceRef.current = null;
     setChartData(null);
-    setScrubData(null);
     setMetrics(null);
     setCompanyDesc(null);
     setCompanyNews([]);
     setIsDescExpanded(false);
     setIsInitialStockLoading(true);
+    setIsTimeframeLoading(false);
 
     if (stock?.symbol) {
       const sym = stock.symbol.toUpperCase();
@@ -140,7 +156,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
 
   const handleSelectTimeframe = (tf) => {
     if (tf === selectedTimeframe) return;
-    setScrubData(null);
+    setIsTimeframeLoading(true);
     setSelectedTimeframe(tf);
     if (stock?.symbol) {
       const sym = stock.symbol.toUpperCase();
@@ -149,9 +165,14 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     }
   };
 
+  const handleOpenCalendar = useCallback(() => {
+    setCalendarVisible(true);
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
     if (visible && stock?.symbol) {
+      setIsTimeframeLoading(true);
       fetchHistoricalChart(stock.symbol, selectedTimeframe)
         .then((data) => {
           if (isMounted) {
@@ -162,13 +183,18 @@ export default function StockDetailModal({ visible, stock, onClose }) {
               }
             }
             setIsInitialStockLoading(false);
+            setIsTimeframeLoading(false);
           }
         })
         .catch(() => {
-          if (isMounted) setIsInitialStockLoading(false);
+          if (isMounted) {
+            setIsInitialStockLoading(false);
+            setIsTimeframeLoading(false);
+          }
         });
     } else {
       setIsInitialStockLoading(false);
+      setIsTimeframeLoading(false);
     }
     return () => {
       isMounted = false;
@@ -203,21 +229,6 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     };
   }, [visible, stock?.symbol, apiKey, marketStatus.session, fetchQuote, fetchProfile, fetchStockMetrics, fetchCompanyDescription, fetchCompanyNews]);
 
-  useEffect(() => {
-    if (!visible) return;
-
-    const updateFreshness = () => {
-      const cleanSym = stock?.symbol?.toUpperCase();
-      const wsQuote = quotes[cleanSym] || quotes[stock?.symbol];
-      const ts = wsQuote?.lastTickTime || wsQuote?.timestamp || stock?.lastUpdated || chartData?.lastUpdated;
-      setTimeAgoText(formatTimeAgo(ts));
-    };
-
-    updateFreshness();
-    const interval = setInterval(updateFreshness, 1000);
-    return () => clearInterval(interval);
-  }, [visible, stock?.lastUpdated, stock?.symbol, quotes, chartData?.lastUpdated]);
-
   const isTimeframeDisabled = useMemo(() => {
     const firstTrade = chartData?.firstTradeDate || null;
     if (!firstTrade) return () => false;
@@ -242,8 +253,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
 
   const activeDisplayedTimeframe = chartData?.timeframe || selectedTimeframe;
   const cleanSymbol = stock?.symbol?.toUpperCase() || '';
-  const wsQuote = cleanSymbol ? (quotes[cleanSymbol] || quotes[stock?.symbol]) : null;
-  const liveWsPrice = (wsQuote?.isLiveWs && typeof wsQuote?.price === 'number') ? wsQuote.price : null;
+  const liveWsPrice = (typeof stock?.price === 'number') ? stock.price : null;
 
   if (liveWsPrice) {
     latestExtendedPriceRef.current = liveWsPrice;
@@ -256,40 +266,6 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     ? (liveWsPrice ?? stock?.price ?? chartData?.currentPrice ?? regularClosePrice)
     : regularClosePrice;
 
-  const baseComparison =
-    activeDisplayedTimeframe === '1D'
-      ? (chartData?.previousClose || stock?.previousClose || regularClosePrice)
-      : (chartData?.startPrice || chartData?.sparkline?.[0] || stock?.sparkline?.[0] || regularClosePrice);
-
-  const displayedMainPrice = scrubData?.current?.price ?? leftPrice;
-  const periodChange = chartData?.priceChange ?? stock?.change ?? (leftPrice - baseComparison);
-  const periodChangePercent =
-    baseComparison !== 0
-      ? (periodChange / baseComparison) * 100
-      : (chartData?.priceChangePercent ?? stock?.changePercent ?? 0);
-
-  const isPeriodPositive = (periodChange ?? 0) >= 0;
-  const timeframeTrendColor = isPeriodPositive ? '#00D084' : '#FF4D4F';
-
-  let scrubDelta = 0;
-  let scrubDeltaPercent = 0;
-  let isScrubPositive = true;
-
-  if (scrubData?.current) {
-    const currP = scrubData.current.price;
-    const prevP = scrubData.prev ? scrubData.prev.price : currP;
-    scrubDelta = currP - prevP;
-    scrubDeltaPercent = prevP !== 0 ? (scrubDelta / prevP) * 100 : 0;
-    isScrubPositive = scrubDelta >= 0;
-  }
-
-  const scrubTrendColor = isScrubPositive ? '#00D084' : '#FF4D4F';
-
-  const timeframeSuffix =
-    activeDisplayedTimeframe === '1D'
-      ? marketStatus.suffix
-      : TIMEFRAME_SUFFIXES[activeDisplayedTimeframe] || 'since start';
-
   const outOfHoursPriceVal =
     liveWsPrice ??
     latestExtendedPriceRef.current ??
@@ -297,55 +273,20 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     (typeof stock?.postMarketPrice === 'number' ? stock.postMarketPrice : null) ??
     regularClosePrice;
 
-  const outOfHoursChangeVal = outOfHoursPriceVal - regularClosePrice;
-  const outOfHoursChangePercentVal =
-    regularClosePrice !== 0 ? (outOfHoursChangeVal / regularClosePrice) * 100 : 0;
-
-  const isOutOfHoursPositive = outOfHoursChangeVal >= 0;
-  const outOfHoursTrendColor = isOutOfHoursPositive ? '#00D084' : '#FF4D4F';
-
-  const afterHoursPriceStr = outOfHoursPriceVal.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-
-  const afterHoursChangeStr = `${isOutOfHoursPositive ? '+' : '-'}$${Math.abs(
-    outOfHoursChangeVal
-  ).toFixed(2)} (${Math.abs(outOfHoursChangePercentVal).toFixed(2)}%) since close`;
-
-  const baseSparklineData = chartData?.sparkline || stock?.sparkline || [];
-  const activeEndPrice = marketStatus.isOpen ? leftPrice : outOfHoursPriceVal;
-
-  const sparklineData =
-    typeof activeEndPrice === 'number' && baseSparklineData.length > 0
-      ? [...baseSparklineData.slice(0, -1), activeEndPrice]
-      : baseSparklineData;
-
-  const chartPointsWithLiveOverlay =
-    chartData?.points && chartData.points.length > 0 && typeof activeEndPrice === 'number'
-      ? [
-          ...chartData.points.slice(0, -1),
-          {
-            ...chartData.points[chartData.points.length - 1],
-            price: activeEndPrice,
-          },
-        ]
-      : chartData?.points || [];
-
   const curSymbol = stock?.currency === 'USD' || !stock?.currency ? '$' : stock.currency;
   const profileData = cleanSymbol ? profiles[cleanSymbol] : null;
   const companyName = profileData?.name || stock?.name || stock?.symbol || '';
 
   const currentStatPrice = leftPrice;
-  const dayLow = wsQuote?.low ?? chartData?.regularMarketDayLow ?? (chartData?.timeframe === '1D' ? chartData?.minPrice : null) ?? stock?.low ?? null;
-  const dayHigh = wsQuote?.high ?? chartData?.regularMarketDayHigh ?? (chartData?.timeframe === '1D' ? chartData?.maxPrice : null) ?? stock?.high ?? null;
+  const dayLow = chartData?.regularMarketDayLow ?? (chartData?.timeframe === '1D' ? chartData?.minPrice : null) ?? stock?.low ?? null;
+  const dayHigh = chartData?.regularMarketDayHigh ?? (chartData?.timeframe === '1D' ? chartData?.maxPrice : null) ?? stock?.high ?? null;
   const dayRangePos = getRangePosition(currentStatPrice, dayLow, dayHigh);
 
   const fiftyTwoLow = metrics?.['52WeekLow'] ?? metrics?.fiftyTwoWeekLow ?? chartData?.fiftyTwoWeekLow ?? null;
   const fiftyTwoHigh = metrics?.['52WeekHigh'] ?? metrics?.fiftyTwoWeekHigh ?? chartData?.fiftyTwoWeekHigh ?? null;
   const fiftyTwoRangePos = getRangePosition(currentStatPrice, fiftyTwoLow, fiftyTwoHigh);
 
-  const prevCloseVal = wsQuote?.previousClose ?? (chartData?.timeframe === '1D' ? chartData?.previousClose : null) ?? stock?.previousClose ?? chartData?.previousClose ?? null;
+  const prevCloseVal = (chartData?.timeframe === '1D' ? chartData?.previousClose : null) ?? stock?.previousClose ?? chartData?.previousClose ?? null;
   const prevCloseStr = prevCloseVal !== null && prevCloseVal !== undefined && !isNaN(prevCloseVal) && prevCloseVal > 0
     ? `${curSymbol}${Number(prevCloseVal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : '-';
@@ -355,7 +296,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     ? formatLargeNum(marketCapVal * 1e6, curSymbol)
     : '-';
 
-  const volumeVal = chartData?.regularMarketVolume ?? wsQuote?.volume ?? null;
+  const volumeVal = chartData?.regularMarketVolume ?? stock?.volume ?? null;
   const volumeStr = volumeVal !== null && volumeVal !== undefined && !isNaN(volumeVal) && volumeVal > 0
     ? formatLargeNum(volumeVal)
     : '-';
@@ -535,126 +476,18 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 </View>
               </View>
 
-              {/* 2. Price & Market Status Row (Adaptive Dual Column) */}
-              <View style={styles.priceRow}>
-                {/* Left: Official Regular Session Price (or Scrubbed Candle Price) */}
-                <View
-                  style={
-                    marketStatus.isOpen
-                      ? styles.mainPriceColOpen
-                      : styles.mainPriceColClosed
-                  }
-                >
-                  <AppText
-                    style={[
-                      styles.mainPriceText,
-                      !marketStatus.isOpen && !scrubData && { color: theme.textSecondary },
-                    ]}
-                  >
-                    {curSymbol}
-                    {displayedMainPrice.toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </AppText>
-
-                  <View style={styles.mainReturnRow}>
-                    {scrubData?.current ? (
-                      <>
-                        <AppText bold style={[styles.changeText, { color: scrubTrendColor }]}>
-                          {isScrubPositive ? '+' : '-'}
-                          {curSymbol}
-                          {Math.abs(scrubDelta).toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}{' '}
-                          ({Math.abs(scrubDeltaPercent).toFixed(2)}%)
-                        </AppText>
-                        <AppText style={[styles.scrubTimeLabel, { color: theme.textSecondary }]}>
-                          {formatCandleDate(scrubData.current.time, activeDisplayedTimeframe)}
-                        </AppText>
-                      </>
-                    ) : (
-                      <>
-                        <AppText bold style={[styles.changeText, { color: timeframeTrendColor }]}>
-                          {isPeriodPositive ? '+' : '-'}
-                          {curSymbol}
-                          {Math.abs(periodChange).toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}{' '}
-                          ({Math.abs(periodChangePercent).toFixed(2)}%)
-                        </AppText>
-                        <AppText style={[styles.timeframeSuffixLabel, { color: theme.textSecondary }]}>
-                          {timeframeSuffix}
-                        </AppText>
-                      </>
-                    )}
-                  </View>
-                </View>
-
-                {/* Right: Extended Session or Market Open Indicator (Tap to open Market Calendar) */}
-                <TouchableOpacity
-                  style={
-                    marketStatus.isOpen
-                      ? styles.afterHoursColOpen
-                      : styles.afterHoursColClosed
-                  }
-                  onPress={() => setCalendarVisible(true)}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel="View US Market Calendar & Holidays"
-                >
-                  {marketStatus.isOpen ? (
-                    <View style={styles.marketOpenBadgeContainer}>
-                      <AppText bold style={[styles.afterHoursLabel, { color: marketStatus.color }]}>
-                        {marketStatus.label}
-                      </AppText>
-                    </View>
-                  ) : (
-                    <>
-                      <AppText style={styles.afterHoursPriceText}>
-                        {curSymbol}{afterHoursPriceStr}
-                      </AppText>
-                      <AppText
-                        numberOfLines={1}
-                        style={[styles.afterHoursChangeText, { color: outOfHoursTrendColor }]}
-                      >
-                        {afterHoursChangeStr}
-                      </AppText>
-                      <AppText italic bold style={[styles.afterHoursLabel, { color: marketStatus.color }]}>
-                        {marketStatus.label}
-                      </AppText>
-                    </>
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              {/* 3. Interactive SVG Chart Area */}
-              <View
-                style={[
-                  styles.chartCard,
-                  {
-                    backgroundColor: theme.surface,
-                    borderColor: theme.border,
-                  },
-                ]}
-              >
-                {isInitialStockLoading ? (
-                  <View style={[layoutStyles.flex1, layoutStyles.center]}>
-                    <ActivityIndicator size="small" color={theme.primary} />
-                  </View>
-                ) : (
-                  <StockInteractiveChart
-                    points={chartPointsWithLiveOverlay}
-                    sparkline={sparklineData}
-                    color={timeframeTrendColor}
-                    timeframe={activeDisplayedTimeframe}
-                    onScrub={(curr, prev) => setScrubData(curr ? { current: curr, prev } : null)}
-                    onScrubEnd={() => setScrubData(null)}
-                  />
-                )}
-              </View>
+              {/* 2 & 3. Interactive Price Header & Chart Area (Isolated Scrub Rendering) */}
+              <StockDetailChartSection
+                stock={stock}
+                chartData={chartData}
+                liveWsPrice={liveWsPrice}
+                latestExtendedPrice={latestExtendedPriceRef.current}
+                marketStatus={marketStatus}
+                activeDisplayedTimeframe={activeDisplayedTimeframe}
+                isInitialStockLoading={isInitialStockLoading}
+                isTimeframeLoading={isTimeframeLoading}
+                onOpenCalendar={handleOpenCalendar}
+              />
 
               {/* 4. Timeframe Selector Pills */}
               <View style={styles.timeframeSelectorRow}>
@@ -920,9 +753,11 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 </View>
               )}
 
-              <AppText style={[styles.lastUpdatedText, { color: theme.textMuted }]}>
-                Latest price updated {timeAgoText}
-              </AppText>
+              <LastUpdatedFreshness
+                timestamp={stock?.lastUpdated || chartData?.lastUpdated}
+                textStyle={styles.lastUpdatedText}
+                textColor={theme.textMuted}
+              />
             </View>
           </SafeAreaView>
 
@@ -1271,3 +1106,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
+
+export default React.memo(StockDetailModal);
+

@@ -366,6 +366,8 @@ export default function StockInteractiveChart({
     }));
   }, [neatY.ticks, chartHeight, minVal, yRange, usableHeight, paddingBottom]);
 
+  const lastScrubIdxRef = useRef(null);
+
   // Touch & Scrub Handler - uses coordinate lookup arrays instead of functions
   const updateTouch = useCallback(
     (evt, gestureState) => {
@@ -379,13 +381,15 @@ export default function StockInteractiveChart({
       const idx = Math.round(ratio * (len - 1));
       const clampedIdx = Math.max(0, Math.min(len - 1, idx));
 
-      setScrubIndex(clampedIdx);
+      if (lastScrubIdxRef.current === clampedIdx) return;
+      lastScrubIdxRef.current = clampedIdx;
 
-      
+      setScrubIndex((prev) => (prev === clampedIdx ? prev : clampedIdx));
+
       const cb = onScrubRef.current;
       if (cb) {
         const now = Date.now();
-        if (now - lastScrubCallTimeRef.current >= 50) {
+        if (now - lastScrubCallTimeRef.current >= 50) {   // Throttle to 20 fps
           lastScrubCallTimeRef.current = now;
           const curr = chartPoints[clampedIdx];
           const prev = clampedIdx > 0 ? chartPoints[clampedIdx - 1] : null;
@@ -412,6 +416,7 @@ export default function StockInteractiveChart({
       cancelAnimationFrame(pendingScrubRafRef.current);
       pendingScrubRafRef.current = null;
     }
+    lastScrubIdxRef.current = null;
     setScrubIndex(null);
     onScrubEndRef.current?.();
   }, []);
