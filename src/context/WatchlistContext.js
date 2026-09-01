@@ -7,17 +7,22 @@ import React, {
   useMemo,
   useRef,
 } from 'react';
-import { mockWatchlists } from '../constants/mockData';
 import { storageService } from '../services/storageService';
 import { useMarketData } from './MarketDataContext';
 
 const WatchlistContext = createContext(null);
 
+const DEFAULT_WATCHLISTS = [
+  {
+    id: 'watchlist-1',
+    title: 'My Watchlist',
+    items: [],
+  },
+];
+
 export function WatchlistProvider({ children }) {
-  const [watchlists, setWatchlists] = useState(mockWatchlists);
-  const [activeWatchlistId, setActiveWatchlistId] = useState(
-    mockWatchlists[0]?.id || 'watchlist-1'
-  );
+  const [watchlists, setWatchlists] = useState(DEFAULT_WATCHLISTS);
+  const [activeWatchlistId, setActiveWatchlistId] = useState('watchlist-1');
   const hasLoadedFromStorage = useRef(false);
   const { setWatchlistSymbols } = useMarketData();
 

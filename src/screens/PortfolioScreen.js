@@ -9,57 +9,26 @@ import TextInputModal from '../components/common/TextInputModal';
 import CreatePortfolioModal from '../components/common/CreatePortfolioModal';
 import { useTheme } from '../context/ThemeContext';
 import { useTrading } from '../context/TradingContext';
+import { usePortfolio } from '../context/PortfolioContext';
 import { useMarketData } from '../context/MarketDataContext';
 import { spacing, borderRadius } from '../constants/theme';
 import { layoutStyles } from '../styles';
-
-const initialPortfolios = [
-  {
-    id: 'portfolio-1',
-    title: 'Portfolio 1',
-    cash: 32430.43,
-    totalValue: 36642.61,
-    todayChangePercent: 0.46,
-    sinceStartChangePercent: 5.54,
-    positions: [
-      {
-        id: 'pos-1',
-        symbol: 'NVDA',
-        name: 'NVIDIA Corporation',
-        shares: '4.4832',
-        avgCost: 108.56,
-        totalValue: 4212.18,
-        changePercent: 7.54,
-      },
-      {
-        id: 'pos-2',
-        symbol: 'SPCX',
-        name: 'Space Exploration Technologies',
-        shares: '4.4832',
-        avgCost: 108.56,
-        totalValue: 4212.18,
-        changePercent: 7.54,
-      },
-    ],
-  },
-  {
-    id: 'portfolio-2',
-    title: 'Portfolio 2',
-    cash: 10000.0,
-    totalValue: 10000.0,
-    todayChangePercent: 0.0,
-    sinceStartChangePercent: 0.0,
-    positions: [],
-  },
-];
 
 export default function PortfolioScreen() {
   const { theme, isDark } = useTheme();
   const { isPaperTradingEnabled } = useTrading();
   const { quotes, profiles } = useMarketData();
+  const {
+    portfolios,
+    activePortfolioId,
+    setActivePortfolioId,
+    activePortfolio,
+    createPortfolio,
+    renamePortfolio,
+    deletePortfolio,
+    reorderPortfolios,
+  } = usePortfolio();
 
-  const [portfolios, setPortfolios] = useState(initialPortfolios);
-  const [activePortfolioId, setActivePortfolioId] = useState('portfolio-1');
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedStock, setSelectedStock] = useState(null);
 
@@ -68,14 +37,6 @@ export default function PortfolioScreen() {
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [renameTargetId, setRenameTargetId] = useState(null);
   const [renameInitialValue, setRenameInitialValue] = useState('');
-
-  const activePortfolio = useMemo(() => {
-    return (
-      portfolios.find((p) => p.id === activePortfolioId) ||
-      portfolios[0] ||
-      null
-    );
-  }, [portfolios, activePortfolioId]);
 
   const handleToggleEditMode = useCallback(() => {
     setIsEditMode((prev) => !prev);
@@ -87,21 +48,10 @@ export default function PortfolioScreen() {
 
   const handleCreatePortfolioSubmit = useCallback(
     ({ title, cash }) => {
-      const newId = `portfolio-${Date.now()}`;
-      const newPortfolio = {
-        id: newId,
-        title,
-        cash: cash || 10000.0,
-        totalValue: cash || 10000.0,
-        todayChangePercent: 0.0,
-        sinceStartChangePercent: 0.0,
-        positions: [],
-      };
-      setPortfolios((prev) => [...prev, newPortfolio]);
-      setActivePortfolioId(newId);
+      createPortfolio({ title, cash });
       setCreateModalVisible(false);
     },
-    []
+    [createPortfolio]
   );
 
   const handleOpenRenamePortfolio = useCallback(
@@ -119,36 +69,25 @@ export default function PortfolioScreen() {
     (text) => {
       const trimmed = text.trim();
       if (!trimmed || !renameTargetId) return;
-
-      setPortfolios((prev) =>
-        prev.map((p) =>
-          p.id === renameTargetId ? { ...p, title: trimmed } : p
-        )
-      );
+      renamePortfolio(renameTargetId, trimmed);
       setRenameModalVisible(false);
     },
-    [renameTargetId]
+    [renamePortfolio, renameTargetId]
   );
 
   const handleDeletePortfolio = useCallback(
     (id) => {
-      if (portfolios.length <= 1) return;
-      setPortfolios((prev) => {
-        const filtered = prev.filter((p) => p.id !== id);
-        if (id === activePortfolioId && filtered.length > 0) {
-          setActivePortfolioId(filtered[0].id);
-        }
-        return filtered;
-      });
+      deletePortfolio(id);
     },
-    [portfolios.length, activePortfolioId]
+    [deletePortfolio]
   );
 
-  const handleReorderPortfolios = useCallback((reordered) => {
-    if (Array.isArray(reordered)) {
-      setPortfolios(reordered);
-    }
-  }, []);
+  const handleReorderPortfolios = useCallback(
+    (reordered) => {
+      reorderPortfolios(reordered);
+    },
+    [reorderPortfolios]
+  );
 
   const formatMoney = (val) => {
     return `$${Number(val || 0).toLocaleString('en-US', {
@@ -163,6 +102,57 @@ export default function PortfolioScreen() {
       name: position.name,
     });
   }, []);
+
+  // 1. Live Position Valuations & Returns (updated on every WebSocket trade tick)
+  const positionsWithLiveMetrics = useMemo(() => {
+    if (!activePortfolio || !Array.isArray(activePortfolio.positions)) return [];
+    return activePortfolio.positions.map((pos) => {
+      const sym = pos.symbol?.toUpperCase();
+      const quote = quotes[sym] || quotes[pos.symbol] || {};
+      const livePrice =
+        (quote.isLiveWs && typeof quote.price === 'number')
+          ? quote.price
+          : quote.price ?? pos.avgCost;
+      const sharesNum = Number(pos.shares) || 0;
+      const totalVal = sharesNum * livePrice;
+      const avgCost = Number(pos.avgCost) || livePrice;
+      const totalCost = pos.totalCost ?? sharesNum * avgCost;
+      const gainLoss = totalVal - totalCost;
+      const gainLossPercent = totalCost > 0 ? (gainLoss / totalCost) * 100 : 0;
+      const todayChange = (quote.change || 0) * sharesNum;
+
+      return {
+        ...pos,
+        livePrice,
+        totalValue: totalVal,
+        changePercent: gainLossPercent,
+        gainLoss,
+        todayChange,
+        quoteChangePercent: quote.changePercent || 0,
+      };
+    });
+  }, [activePortfolio, quotes]);
+
+  // 2. Real-time Total Portfolio Value & Overall Returns
+  const portfolioMetrics = useMemo(() => {
+    const cash = activePortfolio?.cash || 0;
+    const startingCash = activePortfolio?.startingCash || cash || 10000;
+    const positionsValue = positionsWithLiveMetrics.reduce(
+      (sum, p) => sum + p.totalValue,
+      0
+    );
+    const totalValue = cash + positionsValue;
+
+    // Return since start
+    const sinceStartChange = totalValue - startingCash;
+    const sinceStartChangePercent =
+      startingCash > 0 ? (sinceStartChange / startingCash) * 100 : 0;
+
+    return {
+      totalValue,
+      sinceStartChangePercent,
+    };
+  }, [activePortfolio, positionsWithLiveMetrics]);
 
   const modalStock = useMemo(() => {
     if (!selectedStock) return null;
@@ -183,6 +173,8 @@ export default function PortfolioScreen() {
       lastUpdated: liveQuote?.lastTickTime || liveQuote?.timestamp,
     };
   }, [selectedStock, quotes, profiles]);
+
+  const isStartPos = portfolioMetrics.sinceStartChangePercent >= 0;
 
   return (
     <ScreenContainer
@@ -221,7 +213,7 @@ export default function PortfolioScreen() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.contentScroll}
             >
-              {/* 1. PORTFOLIO VALUE SECTION: Left (Total Value) & Right (Change Today / Since Start) */}
+              {/* 1. PORTFOLIO VALUE SECTION: Left (Total Value) & Right (Change Since Start) */}
               <View style={styles.portfolioValueRow}>
                 {/* Left stats */}
                 <View style={styles.portfolioValueLeft}>
@@ -232,18 +224,21 @@ export default function PortfolioScreen() {
                     PORTFOLIO VALUE
                   </AppText>
 
-                  <AppText bold style={styles.totalValueText}>
-                    {formatMoney(activePortfolio?.totalValue || 36642.61)}
+                  <AppText bold style={styles.totalValueText} adjustsFontSizeToFit={true} numberOfLines={1}>
+                    {formatMoney(portfolioMetrics.totalValue)}
                   </AppText>
                 </View>
 
-                {/* Right stats (Change Today / Since Start) */}
+                {/* Right stats (Change Since Start) */}
                 <View style={styles.portfolioValueRight}>
-                  <AppText bold style={styles.returnGreenText}>
-                    ↗ {(activePortfolio?.todayChangePercent ?? 0.46).toFixed(2)}% today
-                  </AppText>
-                  <AppText bold style={styles.returnGreenText}>
-                    ↗ {(activePortfolio?.sinceStartChangePercent ?? 5.54).toFixed(2)}% since start
+                  <AppText
+                    bold
+                    style={[
+                      styles.returnText,
+                      { color: isStartPos ? '#00D084' : '#FF4D4F' },
+                    ]}
+                  >
+                    {isStartPos ? '+' : '-'}{Math.abs(portfolioMetrics.sinceStartChangePercent).toFixed(2)}% since start
                   </AppText>
                 </View>
               </View>
@@ -257,7 +252,7 @@ export default function PortfolioScreen() {
                   FREE CASH
                 </AppText>
                 <AppText bold style={styles.freeCashValue}>
-                  {formatMoney(activePortfolio?.cash || 32430.43)}
+                  {formatMoney(activePortfolio?.cash || 0)}
                 </AppText>
               </View>
 
@@ -270,42 +265,59 @@ export default function PortfolioScreen() {
                   POSITIONS
                 </AppText>
 
-                <View style={styles.positionsList}>
-                  {(activePortfolio?.positions || []).map((pos) => (
-                    <TouchableOpacity
-                      key={pos.id || pos.symbol}
-                      style={[
-                        styles.positionItemRow,
-                        { borderBottomColor: theme.borderSubtle },
-                      ]}
-                      onPress={() => handleOpenStockDetail(pos)}
-                      activeOpacity={0.7}
-                    >
-                      {/* Left: Logo & Symbol */}
-                      <View style={styles.positionLeftCol}>
-                        <CompanyLogo symbol={pos.symbol} size={32} />
-                        <AppText bold style={styles.positionSymbolText}>
-                          {pos.symbol}
-                        </AppText>
-                      </View>
+                {positionsWithLiveMetrics.length === 0 ? (
+                  <View style={[styles.noPositionsContainer]}>
+                    <AppText style={[styles.noPositionsText, { color: theme.textSecondary }]}>
+                      No open positions in this portfolio yet.
+                    </AppText>
+                  </View>
+                ) : (
+                  <View style={styles.positionsList}>
+                    {positionsWithLiveMetrics.map((pos) => {
+                      const isPosGain = pos.changePercent >= 0;
+                      return (
+                        <TouchableOpacity
+                          key={pos.id || pos.symbol}
+                          style={[
+                            styles.positionItemRow,
+                            { borderBottomColor: theme.borderSubtle },
+                          ]}
+                          onPress={() => handleOpenStockDetail(pos)}
+                          activeOpacity={0.7}
+                        >
+                          {/* Left: Logo & Symbol */}
+                          <View style={styles.positionLeftCol}>
+                            <CompanyLogo symbol={pos.symbol} size={32} />
+                            <AppText bold style={styles.positionSymbolText}>
+                              {pos.symbol}
+                            </AppText>
+                          </View>
 
-                      {/* Middle: Shares count */}
-                      <AppText bold style={styles.positionSharesText}>
-                        {pos.shares} shares
-                      </AppText>
+                          {/* Middle: Shares count */}
+                          <AppText bold style={styles.positionSharesText}>
+                            {pos.shares} shares
+                          </AppText>
 
-                      {/* Right: Value & Return */}
-                      <View style={styles.positionRightCol}>
-                        <AppText bold style={styles.positionTotalValueText}>
-                          {formatMoney(pos.totalValue)}
-                        </AppText>
-                        <AppText bold style={styles.positionChangeText}>
-                          ↗ {Number(pos.changePercent || 0).toFixed(2)}%
-                        </AppText>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                          {/* Right: Value & Return */}
+                          <View style={styles.positionRightCol}>
+                            <AppText bold style={styles.positionTotalValueText}>
+                              {formatMoney(pos.totalValue)}
+                            </AppText>
+                            <AppText
+                              bold
+                              style={[
+                                styles.positionChangeText,
+                                { color: isPosGain ? '#00D084' : '#FF4D4F' },
+                              ]}
+                            >
+                              {isPosGain ? '+' : '-'}{Math.abs(pos.changePercent || 0).toFixed(2)}%
+                            </AppText>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
               </View>
             </ScrollView>
           </View>
@@ -389,8 +401,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 4,
   },
-  returnGreenText: {
-    color: '#00D084',
+  returnText: {
     fontSize: 13.5,
   },
   freeCashRow: {
@@ -406,6 +417,20 @@ const styles = StyleSheet.create({
   },
   positionsSection: {
     gap: spacing.sm + 2,
+  },
+  noPositionsContainer: {
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginTop: spacing.xs,
+  },
+  noPositionsText: {
+    fontSize: 14,
+    marginBottom: 4,
   },
   positionsList: {
     gap: spacing.xs,
@@ -441,6 +466,6 @@ const styles = StyleSheet.create({
   },
   positionChangeText: {
     fontSize: 12,
-    color: '#00D084',
   },
 });
+

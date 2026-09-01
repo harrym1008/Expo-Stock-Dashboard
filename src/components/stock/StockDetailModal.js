@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useTrading } from '../../context/TradingContext';
+import { usePortfolio } from '../../context/PortfolioContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import { formatTimeAgo } from '../../utils/formatTimeAgo';
 import { storageService } from '../../services/storageService';
@@ -91,6 +92,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     fetchHistoricalChart,
     quotes,
     profiles,
+    fetchQuote,
     fetchProfile,
     fetchStockMetrics,
     fetchCompanyDescription,
@@ -100,6 +102,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   } = useMarketData();
   const { isStockInAnyWatchlist } = useWatchlist();
   const { isPaperTradingEnabled } = useTrading();
+  const { activePortfolioId, getPosition } = usePortfolio();
   const [watchlistModalVisible, setWatchlistModalVisible] = useState(false);
   const [orderModalVisible, setOrderModalVisible] = useState(false);
   const [orderMode, setOrderMode] = useState('BUY');
@@ -152,7 +155,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     }
   };
 
-  // Fetch real historical chart data from Yahoo Finance on modal open or timeframe switch
+  // Fetch real historical chart data from Yahoo Finance on modal open, timeframe switch, or session change
   useEffect(() => {
     let isMounted = true;
     if (visible && stock?.symbol) {
@@ -177,7 +180,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     return () => {
       isMounted = false;
     };
-  }, [visible, stock?.symbol, selectedTimeframe, fetchHistoricalChart]);
+  }, [visible, stock?.symbol, selectedTimeframe, marketStatus.session, fetchHistoricalChart]);
 
   // Fetch company profile, stock metrics, description, and news
   useEffect(() => {
@@ -187,11 +190,12 @@ export default function StockDetailModal({ visible, stock, onClose }) {
       setIsLoadingDetails(true);
 
       Promise.all([
+        fetchQuote(sym).catch(() => null),
         fetchProfile(sym).catch(() => null),
         fetchStockMetrics(sym).catch(() => null),
         fetchCompanyDescription(sym).catch(() => null),
         fetchCompanyNews(sym).catch(() => []),
-      ]).then(([prof, met, desc, news]) => {
+      ]).then(([quote, prof, met, desc, news]) => {
         if (isMounted) {
           if (met) setMetrics(met);
           if (desc) setCompanyDesc(desc);
@@ -205,7 +209,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
     return () => {
       isMounted = false;
     };
-  }, [visible, stock?.symbol, apiKey, fetchProfile, fetchStockMetrics, fetchCompanyDescription, fetchCompanyNews]);
+  }, [visible, stock?.symbol, apiKey, marketStatus.session, fetchQuote, fetchProfile, fetchStockMetrics, fetchCompanyDescription, fetchCompanyNews]);
 
   // 1-second live ticking timer for price freshness indicator
   useEffect(() => {
@@ -369,8 +373,8 @@ export default function StockDetailModal({ visible, stock, onClose }) {
   const fiftyTwoHigh = metrics?.['52WeekHigh'] ?? metrics?.fiftyTwoWeekHigh ?? chartData?.fiftyTwoWeekHigh ?? null;
   const fiftyTwoRangePos = getRangePosition(currentStatPrice, fiftyTwoLow, fiftyTwoHigh);
 
-  // 1. Previous Close
-  const prevCloseVal = chartData?.previousClose ?? wsQuote?.previousClose ?? stock.previousClose ?? null;
+  // 1. Previous Close (official prior trading day close)
+  const prevCloseVal = wsQuote?.previousClose ?? (chartData?.timeframe === '1D' ? chartData?.previousClose : null) ?? stock.previousClose ?? chartData?.previousClose ?? null;
   const prevCloseStr = prevCloseVal !== null && prevCloseVal !== undefined && !isNaN(prevCloseVal) && prevCloseVal > 0
     ? `${curSymbol}${Number(prevCloseVal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : '-';
@@ -579,7 +583,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 >
                   {marketStatus.isOpen ? (
                     <View style={styles.marketOpenBadgeContainer}>
-                      <View style={[styles.statusDot, { backgroundColor: marketStatus.color }]} />
+                      {/* <View style={[styles.statusDot, { backgroundColor: marketStatus.color }]} /> */}
                       <AppText bold style={[styles.afterHoursLabel, { color: marketStatus.color }]}>
                         {marketStatus.label}
                       </AppText>
@@ -694,7 +698,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                           styles.rangeFill,
                           {
                             width: `${dayRangePos}%`,
-                            backgroundColor: timeframeTrendColor,
+                            backgroundColor: theme.primary,
                           },
                         ]}
                       />
@@ -726,7 +730,7 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                           styles.rangeFill,
                           {
                             width: `${fiftyTwoRangePos}%`,
-                            backgroundColor: timeframeTrendColor,
+                            backgroundColor: theme.primary,
                           },
                         ]}
                       />
@@ -882,11 +886,9 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                       }}
                       activeOpacity={0.7}
                     >
-                      <Ionicons name="globe-outline" size={16} color={theme.primary} style={{ marginRight: 6 }} />
                       <AppText bold style={[styles.websiteButtonText, { color: theme.primary }]}>
                         Visit Website
                       </AppText>
-                      <Ionicons name="open-outline" size={14} color={theme.primary} style={{ marginLeft: 4 }} />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -919,67 +921,85 @@ export default function StockDetailModal({ visible, stock, onClose }) {
                 },
               ]}
             >
-              {isPaperTradingEnabled && (
-                <View style={styles.positionContainer}>
-                  <AppText bold style={styles.positionTitle}>
-                    Your Position
-                  </AppText>
-                  <View style={styles.positionDataRow}>
-                    <View style={styles.positionLeftGroup}>
-                      <AppText bold style={styles.positionSharesText}>
-                        4.4832 shares
-                      </AppText>
-                      <AppText style={[styles.positionAvgCostLabel, { color: theme.textSecondary }]}>
-                        Avg cost:{' '}
-                        <AppText bold style={{ color: theme.textPrimary }}>
-                          $108.56
+              {isPaperTradingEnabled && (() => {
+                const positionObj = stock?.symbol ? getPosition(activePortfolioId, stock.symbol) : null;
+                const heldShares = positionObj ? Number(positionObj.shares) || 0 : 0;
+                const hasPosition = heldShares > 0;
+                const avgCost = positionObj ? Number(positionObj.avgCost) || 0 : 0;
+                const currentValuationPrice = marketStatus.isOpen ? leftPrice : outOfHoursPriceVal;
+                const positionTotalValue = heldShares * currentValuationPrice;
+                const posReturnPercent = avgCost > 0 ? ((currentValuationPrice - avgCost) / avgCost) * 100 : 0;
+                const isPosReturnPositive = posReturnPercent >= 0;
+                const posReturnColor = isPosReturnPositive ? '#00D084' : '#FF4D4F';
+
+                return (
+                  <View style={styles.positionContainer}>
+                    {hasPosition && (
+                      <>
+                        <AppText bold style={styles.positionTitle}>
+                          Your Position
                         </AppText>
-                      </AppText>
-                    </View>
+                        <View style={styles.positionDataRow}>
+                          <View style={styles.positionLeftGroup}>
+                            <AppText bold style={styles.positionSharesText}>
+                              {heldShares.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })} shares
+                            </AppText>
+                            <AppText style={[styles.positionAvgCostLabel, { color: theme.textSecondary }]}>
+                              Avg cost:{' '}
+                              <AppText bold style={{ color: theme.textPrimary }}>
+                                {curSymbol}{avgCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </AppText>
+                            </AppText>
+                          </View>
 
-                    <View style={styles.positionRightGroup}>
-                      <AppText bold style={styles.positionValueText}>
-                        $4,212.18
-                      </AppText>
-                      <AppText bold style={styles.positionReturnText}>
-                        ↗ 7.54%
-                      </AppText>
+                          <View style={styles.positionRightGroup}>
+                            <AppText bold style={styles.positionValueText}>
+                              {curSymbol}{positionTotalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </AppText>
+                            <AppText bold style={[styles.positionReturnText, { color: posReturnColor }]}>
+                              {isPosReturnPositive ? '+' : '-'}{Math.abs(posReturnPercent).toFixed(2)}%
+                            </AppText>
+                          </View>
+                        </View>
+                      </>
+                    )}
+
+                    <View style={styles.paperTradeButtonRow}>
+                      <TouchableOpacity
+                        style={[styles.paperTradeBtn, styles.paperBuyBtn]}
+                        onPress={() => {
+                          setOrderMode('BUY');
+                          setOrderModalVisible(true);
+                        }}
+                        activeOpacity={0.8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Paper Buy"
+                      >
+                        <AppText bold style={styles.paperTradeBtnText}>
+                          Paper Buy
+                        </AppText>
+                      </TouchableOpacity>
+
+                      {hasPosition && (
+                        <TouchableOpacity
+                          style={[styles.paperTradeBtn, styles.paperSellBtn]}
+                          onPress={() => {
+                            setOrderMode('SELL');
+                            setOrderModalVisible(true);
+                          }}
+                          activeOpacity={0.8}
+                          accessibilityRole="button"
+                          accessibilityLabel="Paper Sell"
+                        >
+                          <AppText bold style={styles.paperTradeBtnText}>
+                            Paper Sell
+                          </AppText>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   </View>
-
-                  <View style={styles.paperTradeButtonRow}>
-                    <TouchableOpacity
-                      style={[styles.paperTradeBtn, styles.paperBuyBtn]}
-                      onPress={() => {
-                        setOrderMode('BUY');
-                        setOrderModalVisible(true);
-                      }}
-                      activeOpacity={0.8}
-                      accessibilityRole="button"
-                      accessibilityLabel="Paper Buy"
-                    >
-                      <AppText bold style={styles.paperTradeBtnText}>
-                        Paper Buy
-                      </AppText>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[styles.paperTradeBtn, styles.paperSellBtn]}
-                      onPress={() => {
-                        setOrderMode('SELL');
-                        setOrderModalVisible(true);
-                      }}
-                      activeOpacity={0.8}
-                      accessibilityRole="button"
-                      accessibilityLabel="Paper Sell"
-                    >
-                      <AppText bold style={styles.paperTradeBtnText}>
-                        Paper Sell
-                      </AppText>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
+                );
+              })()}
 
               <AppText style={[styles.lastUpdatedText, { color: theme.textMuted }]}>
                 Latest price updated {timeAgoText}

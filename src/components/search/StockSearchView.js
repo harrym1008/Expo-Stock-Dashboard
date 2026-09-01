@@ -233,25 +233,10 @@ export default function StockSearchView({
             </View>
           ) : (
             <View style={[emptyStateStyles.container, styles.emptyState]}>
-              <View
-                style={[
-                  emptyStateStyles.iconContainer,
-                  { backgroundColor: theme.surfaceSubtle },
-                ]}
-              >
-                <Ionicons
-                  name="search-outline"
-                  size={32}
-                  color={theme.textMuted}
-                />
-              </View>
-              <AppText bold style={emptyStateStyles.title}>
-                No stocks found
-              </AppText>
               <AppText
                 style={[emptyStateStyles.subtitle, { color: theme.textSecondary }]}
               >
-                No results matching "{searchQuery}". Try searching for another ticker symbol or company name.
+                No results matching that search term. Try searching for another ticker symbol or company name.
               </AppText>
             </View>
           )

@@ -9,6 +9,7 @@ import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { MarketDataProvider } from './src/context/MarketDataContext';
 import { TradingProvider } from './src/context/TradingContext';
 import { WatchlistProvider } from './src/context/WatchlistContext';
+import { PortfolioProvider } from './src/context/PortfolioContext';
 
 function AppContent() {
   const { theme, isDark } = useTheme();
@@ -53,9 +54,11 @@ export default function App() {
         <ThemeProvider>
           <MarketDataProvider>
             <TradingProvider>
-              <WatchlistProvider>
-                <AppContent />
-              </WatchlistProvider>
+              <PortfolioProvider>
+                <WatchlistProvider>
+                  <AppContent />
+                </WatchlistProvider>
+              </PortfolioProvider>
             </TradingProvider>
           </MarketDataProvider>
         </ThemeProvider>

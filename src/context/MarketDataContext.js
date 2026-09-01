@@ -220,9 +220,21 @@ export function MarketDataProvider({ children }) {
     [apiKey]
   );
 
-  // 13. Watchlist & Active Modal Symbol Subscriptions
+  // 13. Watchlist, Portfolio & Active Modal Symbol Subscriptions
+  const [watchlistSymbolsList, setWatchlistSymbolsList] = useState([]);
+  const [portfolioSymbolsList, setPortfolioSymbolsList] = useState([]);
+
+  useEffect(() => {
+    const combined = Array.from(new Set([...watchlistSymbolsList, ...portfolioSymbolsList]));
+    finnhubWebSocketService.setWatchlistSymbols(combined);
+  }, [watchlistSymbolsList, portfolioSymbolsList]);
+
   const setWatchlistSymbols = useCallback((symbols) => {
-    finnhubWebSocketService.setWatchlistSymbols(symbols);
+    setWatchlistSymbolsList(Array.isArray(symbols) ? symbols : []);
+  }, []);
+
+  const setPortfolioSymbols = useCallback((symbols) => {
+    setPortfolioSymbolsList(Array.isArray(symbols) ? symbols : []);
   }, []);
 
   const setActiveModalSymbol = useCallback((symbol) => {
@@ -231,6 +243,41 @@ export function MarketDataProvider({ children }) {
     } else {
       finnhubWebSocketService.setActiveViewSymbols([]);
     }
+  }, []);
+
+  // 14. Programmatic Live Price Injection (e.g. from Yahoo Finance order fill)
+  const injectLivePrice = useCallback((symbol, newPrice, timestamp = Date.now()) => {
+    if (!symbol || typeof newPrice !== 'number' || newPrice <= 0) return;
+    const sym = symbol.toUpperCase();
+    const sessionStatus = getMarketSessionStatus();
+
+    setQuotes((prev) => {
+      const current = prev[sym] || {};
+      const refClose = sessionStatus.isOpen
+        ? (current.previousClose || newPrice)
+        : (current.regularMarketPrice || current.previousClose || newPrice);
+
+      const change = newPrice - refClose;
+      const changePercent = refClose !== 0 ? (change / refClose) * 100 : 0;
+
+      return {
+        ...prev,
+        [sym]: {
+          ...current,
+          symbol: sym,
+          price: newPrice,
+          isLiveWs: true, // Marked as live tick so all screens and modals immediately reflect it
+          change,
+          changePercent,
+          previousClose: current.previousClose || refClose,
+          regularMarketPrice: current.regularMarketPrice || refClose,
+          lastTickTime: timestamp,
+          sparkline: current.sparkline
+            ? [...current.sparkline.slice(-30), newPrice]
+            : [newPrice],
+        },
+      };
+    });
   }, []);
 
   const value = {
@@ -248,7 +295,9 @@ export function MarketDataProvider({ children }) {
     fetchCompanyNews,
     fetchMarketNews,
     setWatchlistSymbols,
+    setPortfolioSymbols,
     setActiveModalSymbol,
+    injectLivePrice,
   };
 
   return (

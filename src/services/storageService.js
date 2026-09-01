@@ -6,6 +6,8 @@ const STORAGE_KEYS = {
   WATCHLISTS: '@stock_dashboard_watchlists',
   STOCK_TIMEFRAMES: '@stock_dashboard_stock_timeframes',
   PAPER_TRADING_ENABLED: '@stock_dashboard_paper_trading_enabled',
+  PORTFOLIOS: '@stock_dashboard_portfolios',
+  ACTIVE_PORTFOLIO_ID: '@stock_dashboard_active_portfolio_id',
 };
 
 // 30 Days (1 Month) TTL for company profiles and logos
@@ -73,6 +75,46 @@ export const storageService = {
       await AsyncStorage.setItem(STORAGE_KEYS.WATCHLISTS, JSON.stringify(watchlists));
     } catch (e) {
       console.warn('Failed to save watchlists to storage:', e);
+    }
+  },
+
+  // --- Portfolios Persistence ---
+
+  async getStoredPortfolios() {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEYS.PORTFOLIOS);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async setStoredPortfolios(portfolios) {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.PORTFOLIOS, JSON.stringify(portfolios));
+    } catch (e) {
+      console.warn('Failed to save portfolios to storage:', e);
+    }
+  },
+
+  async getStoredActivePortfolioId() {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_PORTFOLIO_ID);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  async setStoredActivePortfolioId(id) {
+    try {
+      if (id) {
+        await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_PORTFOLIO_ID, JSON.stringify(id));
+      } else {
+        await AsyncStorage.removeItem(STORAGE_KEYS.ACTIVE_PORTFOLIO_ID);
+      }
+    } catch (e) {
+      console.warn('Failed to save active portfolio id:', e);
     }
   },
 

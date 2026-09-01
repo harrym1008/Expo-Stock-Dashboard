@@ -15,11 +15,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
+import { usePortfolio } from '../../context/PortfolioContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import { modalStyles, layoutStyles } from '../../styles';
 import AppText from '../common/AppText';
 import CompanyLogo from '../common/CompanyLogo';
 import StockInteractiveChart from './StockInteractiveChart';
+import OrderExecutedModal from './OrderExecutedModal';
 
 export default function StockOrderModal({
   visible,
@@ -29,18 +31,42 @@ export default function StockOrderModal({
 }) {
   const { theme, isDark } = useTheme();
   const { quotes, fetchHistoricalChart } = useMarketData();
+  const { portfolios, activePortfolioId, getPosition } = usePortfolio();
 
   const scrollViewRef = useRef(null);
   const [rowsYOffset, setRowsYOffset] = useState(80);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
+  // Selected portfolio state
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState(activePortfolioId);
+  const [portfolioPickerVisible, setPortfolioPickerVisible] = useState(false);
+
   // Separate toggle states for Row 2 (Owned) and Row 3 (Input)
   const [isOwnedUsdMode, setIsOwnedUsdMode] = useState(false);
   const [isInputUsdMode, setIsInputUsdMode] = useState(false);
   const [quantityInput, setQuantityInput] = useState('10');
-  const [selectedPortfolio, setSelectedPortfolio] = useState('Portfolio 1');
   const [chartData, setChartData] = useState(null);
   const [isChartLoading, setIsChartLoading] = useState(true);
+
+  // Order Executed Modal states
+  const [executedModalVisible, setExecutedModalVisible] = useState(false);
+  const [pendingOrderParams, setPendingOrderParams] = useState(null);
+  const [validationError, setValidationError] = useState('');
+
+  // Keep selected portfolio in sync
+  useEffect(() => {
+    if (activePortfolioId) {
+      setSelectedPortfolioId(activePortfolioId);
+    }
+  }, [activePortfolioId, visible]);
+
+  const selectedPortfolioObj = useMemo(() => {
+    return (
+      portfolios.find((p) => p.id === selectedPortfolioId) ||
+      portfolios[0] ||
+      null
+    );
+  }, [portfolios, selectedPortfolioId]);
 
   // Live WebSocket price
   const cleanSymbol = (stock?.symbol || 'NVDA').toUpperCase();
@@ -48,11 +74,12 @@ export default function StockOrderModal({
   const liveWsPrice =
     wsQuote?.isLiveWs && typeof wsQuote?.price === 'number' ? wsQuote.price : null;
   const currentPrice =
-    liveWsPrice ?? stock?.price ?? wsQuote?.price ?? 1000.0;
+    liveWsPrice ?? stock?.price ?? wsQuote?.price ?? 100.0;
 
-  // Placeholder portfolio values
-  const initialCash = 32430.43;
-  const ownedShares = 4.54;
+  // Real portfolio values
+  const initialCash = selectedPortfolioObj?.cash ?? 10000.0;
+  const positionObj = getPosition(selectedPortfolioId, cleanSymbol);
+  const ownedShares = positionObj ? Number(positionObj.shares) || 0 : 0;
 
   // Load 1D chart data on open
   useEffect(() => {
@@ -210,293 +237,400 @@ export default function StockOrderModal({
 
   const buttonBgColor = isBuy ? '#38C172' : '#FF4D4F';
 
+  const handleSubmitOrder = () => {
+    setValidationError('');
+    if (orderShares <= 0) {
+      setValidationError('Please enter a valid quantity.');
+      return;
+    }
+    if (isBuy && orderCost > initialCash) {
+      setValidationError(`Order cost exceeds free cash (${formatMoney(initialCash)})`);
+      return;
+    }
+    if (!isBuy && orderShares > ownedShares && Math.abs(orderShares - ownedShares) > 0.0001) {
+      setValidationError(`You only own ${formatShares(ownedShares)}`);
+      return;
+    }
+
+    setPendingOrderParams({
+      portfolioId: selectedPortfolioId,
+      symbol: cleanSymbol,
+      name: stock?.name || cleanSymbol,
+      mode,
+      shares: Number(orderShares.toFixed(4)),
+      fallbackPrice: currentPrice,
+    });
+    setExecutedModalVisible(true);
+  };
+
+  const handleOrderCompleted = () => {
+    setExecutedModalVisible(false);
+    setPendingOrderParams(null);
+    onClose();
+  };
+
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
-      <View style={modalStyles.modalOverlayLight}>
-        {/* Top Backdrop Gap */}
-        <TouchableOpacity
-          style={modalStyles.topBackdropGap}
-          activeOpacity={1}
-          onPress={onClose}
-        />
+    <>
+      <Modal
+        visible={visible && !executedModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={onClose}
+      >
+        <View style={modalStyles.modalOverlayLight}>
+          {/* Top Backdrop Gap */}
+          <TouchableOpacity
+            style={modalStyles.topBackdropGap}
+            activeOpacity={1}
+            onPress={onClose}
+          />
 
-        {/* Modal Sheet Container */}
-        <View
-          style={[
-            modalStyles.sheetContainer,
-            { backgroundColor: theme.background },
-          ]}
-        >
-          <SafeAreaView
-            style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
-            edges={['bottom', 'left', 'right']}
+          {/* Modal Sheet Container */}
+          <View
+            style={[
+              modalStyles.sheetContainer,
+              { backgroundColor: theme.background },
+            ]}
           >
-            {/* Header */}
-            <View
-              style={[
-                modalStyles.header,
-                { borderBottomColor: theme.borderSubtle },
-              ]}
+            <SafeAreaView
+              style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
+              edges={['bottom', 'left', 'right']}
             >
-              <AppText bold style={styles.modalTitle}>
-                Execute Paper Order
-              </AppText>
-
-              <TouchableOpacity
-                onPress={onClose}
-                style={modalStyles.closeBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Close Order Modal"
-                hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
-              >
-                <Ionicons name="close" size={24} color={theme.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-              style={layoutStyles.flex1}
-            >
-              <ScrollView
-                ref={scrollViewRef}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={[
-                  styles.scrollContainer,
-                  isKeyboardVisible && { paddingBottom: 240 },
+              {/* Header */}
+              <View
+                style={[
+                  modalStyles.header,
+                  { borderBottomColor: theme.borderSubtle },
                 ]}
               >
-                {/* 1. SELECT PORTFOLIO */}
-                <View style={styles.portfolioSection}>
-                  <AppText
-                    bold
-                    style={[modalStyles.sectionLabel, { color: theme.textSecondary }]}
-                  >
-                    SELECT PORTFOLIO
-                  </AppText>
+                <AppText bold style={styles.modalTitle}>
+                  Execute Paper Order
+                </AppText>
 
-                  <View
-                    style={[
-                      styles.portfolioSelector,
-                      {
-                        backgroundColor: theme.surface,
-                        borderColor: theme.border,
-                      },
-                    ]}
-                  >
-                    <AppText bold style={styles.portfolioText}>
-                      {selectedPortfolio}
-                    </AppText>
-                    <Ionicons
-                      name="chevron-down"
-                      size={16}
-                      color={theme.textSecondary}
-                    />
-                  </View>
-                </View>
-
-                {/* Divider Line */}
-                <View
-                  style={[
-                    styles.divider,
-                    { borderBottomColor: theme.borderSubtle },
-                  ]}
-                />
-
-                {/* 2. FINANCIAL ROWS */}
-                <View
-                  style={styles.dataRowsContainer}
-                  onLayout={(e) => {
-                    const y = e.nativeEvent.layout.y;
-                    if (y > 0) setRowsYOffset(y);
-                  }}
+                <TouchableOpacity
+                  onPress={onClose}
+                  style={modalStyles.closeBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close Order Modal"
+                  hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                 >
-                  {/* Row 1: FREE CASH */}
-                  <View style={styles.dataRow}>
-                    <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
-                      FREE CASH
+                  <Ionicons name="close" size={24} color={theme.textPrimary} />
+                </TouchableOpacity>
+              </View>
+
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={layoutStyles.flex1}
+              >
+                <ScrollView
+                  ref={scrollViewRef}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={[
+                    styles.scrollContainer,
+                    isKeyboardVisible && { paddingBottom: 240 },
+                  ]}
+                >
+                  {/* 1. SELECT PORTFOLIO */}
+                  <View style={styles.portfolioSection}>
+                    <AppText
+                      bold
+                      style={[modalStyles.sectionLabel, { color: theme.textSecondary }]}
+                    >
+                      SELECT PORTFOLIO
                     </AppText>
-                    <View style={styles.rowValueGroup}>
-                      <AppText bold style={styles.primaryValueText}>
-                        {formatMoney(initialCash)}
-                      </AppText>
-                      <AppText style={[styles.subValueText, { color: theme.textSecondary }]}>
-                        After:{' '}
-                        <AppText style={{ color: theme.textPrimary }}>
-                          {formatMoney(afterCash)}
-                        </AppText>
-                      </AppText>
-                    </View>
-                  </View>
 
-                  {/* Row 2: OWNED [SYMBOL] <--> (Toggles Row 2 values between shares and USD) */}
-                  <View style={styles.dataRow}>
-                    <View style={styles.labelWithToggle}>
-                      <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
-                        OWNED{' '}
-                        <AppText bold style={{ color: theme.textPrimary }}>
-                          {cleanSymbol}
-                        </AppText>
-                      </AppText>
-                      <TouchableOpacity
-                        style={styles.swapBtn}
-                        onPress={handleToggleOwnedUnit}
-                        activeOpacity={0.7}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        accessibilityLabel="Toggle owned shares or USD"
-                      >
-                        <Ionicons
-                          name="swap-horizontal"
-                          size={20}
-                          color={theme.primary}
-                        />
-                      </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.rowValueGroup}>
-                      <AppText bold style={styles.primaryValueText}>
-                        {isOwnedUsdMode
-                          ? formatMoney(ownedShares * currentPrice)
-                          : formatShares(ownedShares)}
-                      </AppText>
-                      <AppText style={[styles.subValueText, { color: theme.textSecondary }]}>
-                        After:{' '}
-                        <AppText style={{ color: theme.textPrimary }}>
-                          {isOwnedUsdMode
-                            ? formatMoney(afterShares * currentPrice)
-                            : formatShares(afterShares)}
-                        </AppText>
-                      </AppText>
-                    </View>
-                  </View>
-
-                  {/* Row 3: BUY/SELL SHARES <--> with Input (Toggles input between shares and USD) */}
-                  <View style={styles.dataRow}>
-                    <View style={styles.labelWithToggle}>
-                      <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
-                        {isBuy ? 'BUY' : 'SELL'}{' '}
-                        {isInputUsdMode ? 'USD' : 'SHARES'}
-                      </AppText>
-                      <TouchableOpacity
-                        style={styles.swapBtn}
-                        onPress={handleToggleInputUnit}
-                        activeOpacity={0.7}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        accessibilityLabel="Toggle input shares or USD"
-                      >
-                        <Ionicons
-                          name="swap-horizontal"
-                          size={20}
-                          color={theme.primary}
-                        />
-                      </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.inputAndUnitRow}>
-                      <TextInput
-                        style={[
-                          styles.quantityInput,
-                          {
-                            color: theme.textPrimary,
-                            backgroundColor: isDark ? '#181E29' : '#E8ECF2',
-                            borderColor: theme.border,
-                          },
-                        ]}
-                        keyboardType="numeric"
-                        returnKeyType="done"
-                        value={quantityInput}
-                        onChangeText={handleInputChange}
-                        onFocus={handleInputFocus}
-                      />
-                      <AppText bold style={styles.unitText}>
-                        {isInputUsdMode ? 'USD' : 'shares'}
-                      </AppText>
-                    </View>
-                  </View>
-
-                  {/* Row 4: ORDER COST / PROCEEDS */}
-                  <View style={styles.dataRow}>
-                    <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
-                      {isBuy ? 'ORDER COST' : 'ORDER PROCEEDS'}
-                    </AppText>
-                    <AppText bold style={styles.orderCostText}>
-                      {formatMoney(orderCost)}
-                    </AppText>
-                  </View>
-                </View>
-
-                {/* 3. BOTTOM SECTION: Latest Price + Horizontal Submit Button, with full-width 1D Chart below */}
-                <View style={styles.bottomSection}>
-                  {/* Top Row: Latest Price & Horizontal Submit Button */}
-                  <View style={styles.priceAndSubmitRow}>
-                    <View style={styles.latestPriceRow}>
-                      <CompanyLogo
-                        symbol={cleanSymbol}
-                        size={42}
-                        logoUri={stock?.logo}
-                        style={styles.companyLogo}
-                      />
-                      <View style={styles.priceTextGroup}>
-                        <AppText style={[styles.latestPriceLabel, { color: theme.textSecondary }]}>
-                          Latest price:
-                        </AppText>
-                        <AppText bold style={styles.latestPriceValue}>
-                          {formatMoney(currentPrice)}
-                        </AppText>
-                      </View>
-                    </View>
-
-                    {/* Horizontal Submit Button */}
                     <TouchableOpacity
                       style={[
-                        styles.horizontalSubmitButton,
-                        { backgroundColor: buttonBgColor },
+                        styles.portfolioSelector,
+                        {
+                          backgroundColor: theme.surface,
+                          borderColor: theme.border,
+                        },
                       ]}
-                      activeOpacity={0.85}
-                      accessibilityRole="button"
-                      accessibilityLabel="Submit Order"
+                      onPress={() => setPortfolioPickerVisible(true)}
+                      activeOpacity={0.7}
                     >
-                      <AppText bold style={styles.horizontalSubmitButtonText}>
-                        Submit
+                      <AppText bold style={styles.portfolioText}>
+                        {selectedPortfolioObj?.title || 'Portfolio 1'}
                       </AppText>
+                      <Ionicons
+                        name="chevron-down"
+                        size={16}
+                        color={theme.textSecondary}
+                      />
                     </TouchableOpacity>
                   </View>
 
-                  {/* Full-width Mini 1D Interactive Chart */}
+                  {/* Divider Line */}
                   <View
                     style={[
-                      styles.miniChartContainer,
-                      {
-                        backgroundColor: theme.surface,
-                        borderColor: theme.border,
-                      },
+                      styles.divider,
+                      { borderBottomColor: theme.borderSubtle },
                     ]}
+                  />
+
+                  {/* 2. FINANCIAL ROWS */}
+                  <View
+                    style={styles.dataRowsContainer}
+                    onLayout={(e) => {
+                      const y = e.nativeEvent.layout.y;
+                      if (y > 0) setRowsYOffset(y);
+                    }}
                   >
-                    {isChartLoading && chartPoints.length === 0 ? (
-                      <View style={layoutStyles.center}>
-                        <ActivityIndicator size="small" color={theme.primary} />
+                    {/* Row 1: FREE CASH */}
+                    <View style={styles.dataRow}>
+                      <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
+                        FREE CASH
+                      </AppText>
+                      <View style={styles.rowValueGroup}>
+                        <AppText bold style={styles.primaryValueText}>
+                          {formatMoney(initialCash)}
+                        </AppText>
+                        <AppText style={[styles.subValueText, { color: theme.textSecondary }]}>
+                          After:{' '}
+                          <AppText style={{ color: theme.textPrimary }}>
+                            {formatMoney(afterCash)}
+                          </AppText>
+                        </AppText>
                       </View>
-                    ) : (
-                      <StockInteractiveChart
-                        points={chartData?.points || []}
-                        sparkline={stock?.sparkline || []}
-                        timeframe="1D"
-                        color="#00D084"
-                      />
-                    )}
+                    </View>
+
+                    {/* Row 2: OWNED [SYMBOL] <--> (Toggles Row 2 values between shares and USD) */}
+                    <View style={styles.dataRow}>
+                      <View style={styles.labelWithToggle}>
+                        <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
+                          OWNED{' '}
+                          <AppText bold style={{ color: theme.textPrimary }}>
+                            {cleanSymbol}
+                          </AppText>
+                        </AppText>
+                        <TouchableOpacity
+                          style={styles.swapBtn}
+                          onPress={handleToggleOwnedUnit}
+                          activeOpacity={0.7}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityLabel="Toggle owned shares or USD"
+                        >
+                          <Ionicons
+                            name="swap-horizontal"
+                            size={20}
+                            color={theme.primary}
+                          />
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.rowValueGroup}>
+                        <AppText bold style={styles.primaryValueText}>
+                          {isOwnedUsdMode
+                            ? formatMoney(ownedShares * currentPrice)
+                            : formatShares(ownedShares)}
+                        </AppText>
+                        <AppText style={[styles.subValueText, { color: theme.textSecondary }]}>
+                          After:{' '}
+                          <AppText style={{ color: theme.textPrimary }}>
+                            {isOwnedUsdMode
+                              ? formatMoney(afterShares * currentPrice)
+                              : formatShares(afterShares)}
+                          </AppText>
+                        </AppText>
+                      </View>
+                    </View>
+
+                    {/* Row 3: BUY/SELL SHARES <--> with Input (Toggles input between shares and USD) */}
+                    <View style={styles.dataRow}>
+                      <View style={styles.labelWithToggle}>
+                        <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
+                          {isBuy ? 'BUY' : 'SELL'}{' '}
+                          {isInputUsdMode ? 'USD' : 'SHARES'}
+                        </AppText>
+                        <TouchableOpacity
+                          style={styles.swapBtn}
+                          onPress={handleToggleInputUnit}
+                          activeOpacity={0.7}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityLabel="Toggle input shares or USD"
+                        >
+                          <Ionicons
+                            name="swap-horizontal"
+                            size={20}
+                            color={theme.primary}
+                          />
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.inputAndUnitRow}>
+                        <TextInput
+                          style={[
+                            styles.quantityInput,
+                            {
+                              color: theme.textPrimary,
+                              backgroundColor: isDark ? '#181E29' : '#E8ECF2',
+                              borderColor: theme.border,
+                            },
+                          ]}
+                          keyboardType="numeric"
+                          returnKeyType="done"
+                          value={quantityInput}
+                          onChangeText={handleInputChange}
+                          onFocus={handleInputFocus}
+                        />
+                        <AppText bold style={styles.unitText}>
+                          {isInputUsdMode ? 'USD' : 'shares'}
+                        </AppText>
+                      </View>
+                    </View>
+
+                    {/* Row 4: ORDER COST / PROCEEDS */}
+                    <View style={styles.dataRow}>
+                      <AppText bold style={[styles.rowLabel, { color: theme.textSecondary }]}>
+                        {isBuy ? 'ORDER COST' : 'ORDER PROCEEDS'}
+                      </AppText>
+                      <AppText bold style={styles.orderCostText}>
+                        {formatMoney(orderCost)}
+                      </AppText>
+                    </View>
+
+                    {/* Validation Error Alert */}
+                    {validationError ? (
+                      <AppText style={styles.errorText}>
+                        {validationError}
+                      </AppText>
+                    ) : null}
                   </View>
-                </View>
-              </ScrollView>
-            </KeyboardAvoidingView>
-          </SafeAreaView>
+
+                  {/* 3. BOTTOM SECTION: Latest Price + Horizontal Submit Button, with full-width 1D Chart below */}
+                  <View style={styles.bottomSection}>
+                    {/* Top Row: Latest Price & Horizontal Submit Button */}
+                    <View style={styles.priceAndSubmitRow}>
+                      <View style={styles.latestPriceRow}>
+                        <CompanyLogo
+                          symbol={cleanSymbol}
+                          size={42}
+                          logoUri={stock?.logo}
+                          style={styles.companyLogo}
+                        />
+                        <View style={styles.priceTextGroup}>
+                          <AppText style={[styles.latestPriceLabel, { color: theme.textSecondary }]}>
+                            Latest price:
+                          </AppText>
+                          <AppText bold style={styles.latestPriceValue}>
+                            {formatMoney(currentPrice)}
+                          </AppText>
+                        </View>
+                      </View>
+
+                      {/* Horizontal Submit Button */}
+                      <TouchableOpacity
+                        style={[
+                          styles.horizontalSubmitButton,
+                          { backgroundColor: buttonBgColor },
+                        ]}
+                        onPress={handleSubmitOrder}
+                        activeOpacity={0.85}
+                        accessibilityRole="button"
+                        accessibilityLabel="Submit Order"
+                      >
+                        <AppText bold style={styles.horizontalSubmitButtonText}>
+                          Submit
+                        </AppText>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Full-width Mini 1D Interactive Chart */}
+                    <View
+                      style={[
+                        styles.miniChartContainer,
+                        {
+                          backgroundColor: theme.surface,
+                          borderColor: theme.border,
+                        },
+                      ]}
+                    >
+                      {isChartLoading && chartPoints.length === 0 ? (
+                        <View style={layoutStyles.center}>
+                          <ActivityIndicator size="small" color={theme.primary} />
+                        </View>
+                      ) : (
+                        <StockInteractiveChart
+                          points={chartData?.points || []}
+                          sparkline={stock?.sparkline || []}
+                          timeframe="1D"
+                          color="#00D084"
+                        />
+                      )}
+                    </View>
+                  </View>
+                </ScrollView>
+              </KeyboardAvoidingView>
+            </SafeAreaView>
+          </View>
         </View>
-      </View>
-    </Modal>
+
+        {/* Portfolio Selection Dialog */}
+        {portfolioPickerVisible && (
+          <Modal
+            visible={portfolioPickerVisible}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setPortfolioPickerVisible(false)}
+          >
+            <TouchableOpacity
+              style={styles.pickerOverlay}
+              activeOpacity={1}
+              onPress={() => setPortfolioPickerVisible(false)}
+            >
+              <View
+                style={[
+                  styles.pickerCard,
+                  {
+                    backgroundColor: isDark ? '#1C1F26' : '#FFFFFF',
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                <AppText bold style={styles.pickerTitle}>
+                  Select Portfolio
+                </AppText>
+                {portfolios.map((p) => {
+                  const isSelected = p.id === selectedPortfolioId;
+                  return (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={[
+                        styles.pickerOption,
+                        isSelected && {
+                          backgroundColor: isDark ? '#252C3A' : '#E8ECF2',
+                        },
+                      ]}
+                      onPress={() => {
+                        setSelectedPortfolioId(p.id);
+                        setPortfolioPickerVisible(false);
+                      }}
+                    >
+                      <AppText bold={isSelected} style={styles.pickerOptionText}>
+                        {p.title}
+                      </AppText>
+                      <AppText style={[styles.pickerOptionCash, { color: theme.textSecondary }]}>
+                        {formatMoney(p.cash)}
+                      </AppText>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </TouchableOpacity>
+          </Modal>
+        )}
+      </Modal>
+
+      {/* Order Executed Modal Confirmation */}
+      <OrderExecutedModal
+        visible={executedModalVisible}
+        orderParams={pendingOrderParams}
+        onComplete={handleOrderCompleted}
+        onClose={handleOrderCompleted}
+      />
+    </>
   );
 }
 
@@ -586,6 +720,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     letterSpacing: 0.2,
   },
+  errorText: {
+    fontSize: 13,
+    color: '#FF4D4F',
+    marginTop: 4,
+    textAlign: 'right',
+  },
   bottomSection: {
     flex: 1,
     gap: spacing.md,
@@ -636,5 +776,39 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
     justifyContent: 'center',
+  },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  pickerCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    padding: spacing.md,
+  },
+  pickerTitle: {
+    fontSize: 18,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.sm,
+    marginBottom: spacing.xs,
+  },
+  pickerOptionText: {
+    fontSize: 15,
+  },
+  pickerOptionCash: {
+    fontSize: 14,
   },
 });

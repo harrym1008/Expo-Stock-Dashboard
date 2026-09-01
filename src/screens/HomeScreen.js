@@ -61,7 +61,7 @@ export default function HomeScreen() {
   // Fetch real 1D sparklines & Finnhub profiles/quotes for active watchlist stocks
   useEffect(() => {
     fetchedSparklinesRef.current.clear();
-  }, [activeWatchlistId]);
+  }, [activeWatchlistId, marketStatus.session]);
 
   useEffect(() => {
     if (!activeWatchlist?.items) return;
@@ -70,7 +70,7 @@ export default function HomeScreen() {
       const sym = item.symbol?.toUpperCase();
       if (!sym) continue;
 
-      // Fetch 1D intraday sparkline only once per symbol per watchlist
+      // Fetch 1D intraday sparkline only once per symbol per watchlist/session
       if (!fetchedSparklinesRef.current.has(sym)) {
         fetchedSparklinesRef.current.add(sym);
         fetchHistoricalChart(sym, '1D').then((chart) => {
@@ -103,7 +103,7 @@ export default function HomeScreen() {
         fetchProfile(sym);
       }
     }
-  }, [activeWatchlistId, hasValidKey, fetchQuote, fetchProfile, fetchHistoricalChart, activeWatchlist?.items]);
+  }, [activeWatchlistId, marketStatus.session, hasValidKey, fetchQuote, fetchProfile, fetchHistoricalChart, activeWatchlist?.items]);
 
   // --- Stock detail modal ---
   const handleOpenStockDetail = (item) => {

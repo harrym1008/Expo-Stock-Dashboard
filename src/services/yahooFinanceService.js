@@ -192,9 +192,12 @@ export const yahooFinanceService = {
         }
 
         const prices = points.map((p) => p.price);
-        const previousClose = meta.previousClose || meta.chartPreviousClose || prices[0];
         const startPrice = prices[0];
         const endmostPrice = prices[prices.length - 1];
+        const chartPreviousClose = typeof meta.chartPreviousClose === 'number' ? meta.chartPreviousClose : startPrice;
+        const previousClose = typeof meta.previousClose === 'number'
+          ? meta.previousClose
+          : (timeframe === '1D' || timeframe === '1H' ? chartPreviousClose : null);
         const minPrice = Math.min(...prices);
         const maxPrice = Math.max(...prices);
 
@@ -225,7 +228,7 @@ export const yahooFinanceService = {
         const preMarketChangePercent = regularMarketPrice !== 0 ? (preMarketChange / regularMarketPrice) * 100 : 0;
 
         // Price comparison base: 1D compares against previousClose, 1H/1W/3M/1Y/5Y/ALL compares against startPrice
-        const baseComparison = timeframe === '1D' ? previousClose : startPrice;
+        const baseComparison = timeframe === '1D' ? (previousClose || chartPreviousClose) : startPrice;
         const priceChange = regularMarketPrice - baseComparison;
         const priceChangePercent = baseComparison !== 0 ? (priceChange / baseComparison) * 100 : 0;
 
@@ -237,6 +240,7 @@ export const yahooFinanceService = {
           timeframe,
           currency: meta.currency || 'USD',
           previousClose,
+          chartPreviousClose,
           startPrice,
           currentPrice: endmostPrice,
           regularMarketPrice,
@@ -438,6 +442,60 @@ export const yahooFinanceService = {
         return data;
       } catch (err) {
         console.warn(`[Yahoo Finance] Error fetching description for ${cleanSymbol}:`, err.message || err);
+        return null;
+      }
+    });
+  },
+
+  /**
+   * Fetches the single most recent 1-minute trade/close price for instant order execution.
+   * Mirrors: curl -s "https://query1.finance.yahoo.com/v8/finance/chart/SYMBOL?range=1d&interval=1m&includePrePost=true" | jq '.chart.result[0].indicators.quote[0].close | map(select(. != null)) | last'
+   */
+  async getMostRecentPrice(symbol) {
+    if (!symbol) return null;
+    const cleanSymbol = symbol.trim().toUpperCase();
+    const yahooSymbol = cleanSymbol.replace(/\./g, '-');
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+      yahooSymbol
+    )}?range=1d&interval=1m&includePrePost=true`;
+
+    return yahooRateLimiter.schedule(async () => {
+      try {
+        console.log(`[Yahoo Finance] ⚡ Fetching most recent price for ${cleanSymbol} (API symbol: ${yahooSymbol})`);
+        const res = await fetch(url, {
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+          },
+        });
+
+        if (!res.ok) {
+          console.warn(`[Yahoo Finance] Failed to fetch most recent price for ${cleanSymbol}: HTTP ${res.status}`);
+          return null;
+        }
+
+        const json = await res.json();
+        const result = json?.chart?.result?.[0];
+        if (!result) return null;
+
+        const rawCloses = result.indicators?.quote?.[0]?.close || [];
+        const validCloses = rawCloses.filter(
+          (c) => typeof c === 'number' && !isNaN(c) && c > 0
+        );
+
+        if (validCloses.length > 0) {
+          const lastClose = validCloses[validCloses.length - 1];
+          return Number(lastClose.toFixed(2));
+        }
+
+        // Fallback to meta prices
+        const meta = result.meta || {};
+        const metaPrice = meta.regularMarketPrice ?? meta.previousClose ?? null;
+        return typeof metaPrice === 'number' && metaPrice > 0
+          ? Number(metaPrice.toFixed(2))
+          : null;
+      } catch (err) {
+        console.warn(`[Yahoo Finance] Error getting most recent price for ${cleanSymbol}:`, err.message || err);
         return null;
       }
     });
