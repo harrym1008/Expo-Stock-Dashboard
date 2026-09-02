@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -7,7 +6,7 @@ import { stockItemStyles } from '../../styles';
 import AppText from '../common/AppText';
 import CompanyLogo from '../common/CompanyLogo';
 
-// Single search-result row: logo + symbol/name left, chevron right
+// Single search-result row: logo and symbol/name left, chevron right
 export default function SearchResultItem({ item, onPress }) {
   const { theme } = useTheme();
 
@@ -29,7 +28,6 @@ export default function SearchResultItem({ item, onPress }) {
       accessibilityRole="button"
       accessibilityLabel={`Select ${displaySymbol}, ${displayName}`}
     >
-      {/* Left: Cached Static Logo & Info */}
       <View style={styles.leftSection}>
         <CompanyLogo
           symbol={displaySymbol}
@@ -50,7 +48,6 @@ export default function SearchResultItem({ item, onPress }) {
         </View>
       </View>
 
-      {/* Right: Chevron Arrow */}
       <View style={styles.rightSection}>
         <Ionicons
           name="chevron-forward"
@@ -62,7 +59,6 @@ export default function SearchResultItem({ item, onPress }) {
   );
 }
 
-// Row layout: left section, text wrapper, right chevron
 const styles = StyleSheet.create({
   leftSection: {
     flexDirection: 'row',

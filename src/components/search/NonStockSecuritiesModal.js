@@ -1,25 +1,18 @@
-import React from 'react';
-import {
-  Modal,
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  SectionList,
-} from 'react-native';
+import {Modal, View, StyleSheet, TouchableOpacity, SectionList} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
 import { spacing } from '../../constants/theme';
-import { modalStyles, layoutStyles } from '../../styles';
+import { modalStyles } from '../../styles';
 import AppText from '../common/AppText';
 import SearchResultItem from './SearchResultItem';
 import { getGroupedNonStockSecurities } from '../../utils/securityUtils';
 
-// Grouped non-stock securities (forex, crypto, commodities, indices, bonds)
+// load the grouped non-stock securities data once at startup
 const GROUPED_NON_STOCK_DATA = getGroupedNonStockSecurities();
 
-// Slide-up modal listing non-stock securities grouped by category
+// Slide-up modal listing non-stock securities grouped by category accessed in the search page
 export default function NonStockSecuritiesModal({
   visible,
   onSelectStock,
@@ -28,7 +21,6 @@ export default function NonStockSecuritiesModal({
   const { theme } = useTheme();
   const { profiles } = useMarketData();
 
-  // Render nothing while hidden
   if (!visible) return null;
 
   // Close then hand the selected security back to caller
@@ -45,7 +37,6 @@ export default function NonStockSecuritiesModal({
       onRequestClose={onClose}
     >
       <View style={modalStyles.modalOverlay}>
-        {/* Top Gap - Tap to dismiss */}
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
@@ -54,7 +45,6 @@ export default function NonStockSecuritiesModal({
           accessibilityLabel="Close modal"
         />
 
-        {/* Sheet Container */}
         <View
           style={[
             modalStyles.sheetContainer,
@@ -65,7 +55,6 @@ export default function NonStockSecuritiesModal({
             style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
-            {/* Header: Title and Close Button */}
             <View
               style={[
                 modalStyles.header,
