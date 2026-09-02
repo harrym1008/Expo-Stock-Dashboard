@@ -1,4 +1,4 @@
-// Custom font family names (must match .ttf files loaded in App.js)
+// Custom font family names found in assets/fonts
 export const fonts = {
   regular: 'TangoSans',
   bold: 'TangoSans-Bold',
@@ -16,7 +16,7 @@ export const spacing = {
   xxl: 32,
 };
 
-// Border radius scale; full = pill/chip shape
+// Border radius scale (full = circular element)
 export const borderRadius = {
   sm: 8,
   md: 12,

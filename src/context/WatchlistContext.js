@@ -1,24 +1,12 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  useRef,
-} from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { storageService } from '../services/storageService';
 import { useMarketData } from './MarketDataContext';
-import {
-  getSecurityBySymbol,
-  getDisplaySymbol,
-  getDecimals,
-} from '../utils/securityUtils';
+import { getSecurityBySymbol, getDisplaySymbol, getDecimals } from '../utils/securityUtils';
 
-// Context holding watchlists + active id
+// Context holding watchlists and the active id
 const WatchlistContext = createContext(null);
 
-// Seed watchlist (used until storage loads)
+// First time boot default watchlist with no items at all
 const DEFAULT_WATCHLISTS = [
   {
     id: 'watchlist-1',
@@ -27,6 +15,7 @@ const DEFAULT_WATCHLISTS = [
   },
 ];
 
+// Provider component that wraps the app and provides watchlist state
 export function WatchlistProvider({ children }) {
   const [watchlists, setWatchlists] = useState(DEFAULT_WATCHLISTS);
   const [activeWatchlistId, setActiveWatchlistId] = useState('watchlist-1');
@@ -34,7 +23,7 @@ export function WatchlistProvider({ children }) {
   // Push watchlist symbols into the WS subscription manager
   const { setWatchlistSymbols } = useMarketData();
 
-  // 1. Persistence: Load watchlists from AsyncStorage on mount
+  // Load watchlists from AsyncStorage on mount
   useEffect(() => {
     storageService.getStoredWatchlists().then((stored) => {
       if (stored && Array.isArray(stored) && stored.length > 0) {
@@ -48,14 +37,15 @@ export function WatchlistProvider({ children }) {
     });
   }, []);
 
-  // 2. Persistence: Save watchlists to AsyncStorage on every change
+  // Save watchlists to AsyncStorage on every change
   useEffect(() => {
     if (hasLoadedFromStorage.current) {
       storageService.setStoredWatchlists(watchlists);
     }
   }, [watchlists]);
 
-  // 3. Sync all unique symbols across all watchlists to WebSocket manager
+
+  // Sync all unique symbols across all watchlists into the WebSocket manager
   const allUniqueSymbols = useMemo(() => {
     const syms = new Set();
     for (const wl of watchlists) {
@@ -75,7 +65,8 @@ export function WatchlistProvider({ children }) {
     }
   }, [allUniqueSymbols, setWatchlistSymbols]);
 
-  // 4. Helper queries
+
+  // Helper queries (is stock in watchlist, is stock in any watchlist)
   const isStockInWatchlist = useCallback(
     (watchlistId, symbol) => {
       if (!symbol) return false;
@@ -88,7 +79,6 @@ export function WatchlistProvider({ children }) {
     },
     [watchlists]
   );
-
   const isStockInAnyWatchlist = useCallback(
     (symbol) => {
       if (!symbol) return false;
@@ -109,7 +99,7 @@ export function WatchlistProvider({ children }) {
     [watchlists]
   );
 
-  // 5. Stock mutations
+  // 5. Stock mutations (add, remove, toggle, delete, reorder into watchlist)
   const addStockToWatchlist = useCallback((watchlistId, stockData) => {
     if (!stockData?.symbol) return;
     const cleanSym = getDisplaySymbol(stockData.displaySymbol || stockData.symbol);
@@ -216,7 +206,7 @@ export function WatchlistProvider({ children }) {
     );
   }, []);
 
-  // 6. Watchlist mutations
+  // 6. Watchlist mutations (create, rename, delete, reorder watchlists)
   const createWatchlist = useCallback((title) => {
     const trimmed = (title || '').trim();
     if (!trimmed) return null;
@@ -259,6 +249,8 @@ export function WatchlistProvider({ children }) {
     }
   }, []);
 
+
+  // Compute the active watchlist object based on the active id
   const activeWatchlist = useMemo(() => {
     return (
       watchlists.find((wl) => wl.id === activeWatchlistId) ||
@@ -267,6 +259,7 @@ export function WatchlistProvider({ children }) {
     );
   }, [watchlists, activeWatchlistId]);
 
+  // Memoize the context value to avoid unnecessary re-renders
   const value = useMemo(
     () => ({
       watchlists,
@@ -305,7 +298,6 @@ export function WatchlistProvider({ children }) {
   );
 
   return (
-    {/* Provider exposes watchlists + all mutations */}
     <WatchlistContext.Provider value={value}>
       {children}
     </WatchlistContext.Provider>
@@ -313,7 +305,6 @@ export function WatchlistProvider({ children }) {
 }
 
 export function useWatchlist() {
-  // Hook to consume watchlist state; throws if used outside provider
   const context = useContext(WatchlistContext);
   if (!context) {
     throw new Error('useWatchlist must be used within a WatchlistProvider');

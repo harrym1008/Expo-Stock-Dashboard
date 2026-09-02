@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { storageService } from '../services/storageService';
 import { finnhubRestService } from '../services/finnhubRestService';
 import { finnhubWebSocketService } from '../services/finnhubWebSocketService';
@@ -7,7 +7,8 @@ import { getMarketSessionStatus } from '../utils/marketHours';
 import { ingestHolidayData } from '../utils/marketHolidays';
 import { getDisplaySymbol, getFinnhubSymbol, isNonStockSecurity } from '../utils/securityUtils';
 
-// Recompute change/percent + append live price to sparkline for a single tick
+
+// Recompute change/percent + append live price to sparkline for a single tick from the websocket feed
 function calculateTickUpdate(current, sym, newPrice, timestamp, sessionStatus) {
   if (typeof newPrice !== 'number' || newPrice <= 0) {
     return current;
@@ -20,6 +21,7 @@ function calculateTickUpdate(current, sym, newPrice, timestamp, sessionStatus) {
   const change = newPrice - refClose;
   const changePercent = refClose !== 0 ? (change / refClose) * 100 : 0;
 
+  // Return a new quote object with updated price, change, and sparkline
   return {
     ...currentQuote,
     symbol: sym,
@@ -31,13 +33,16 @@ function calculateTickUpdate(current, sym, newPrice, timestamp, sessionStatus) {
     regularMarketPrice: currentQuote.regularMarketPrice || refClose,
     lastTickTime: timestamp,
     sparkline: currentQuote.sparkline
-      ? [...currentQuote.sparkline.slice(-30), newPrice]
+      ? [...currentQuote.sparkline.slice(-30), newPrice] 
       : [newPrice],
   };
 }
 
+// A global context for market data, including quotes, profiles, and market status
 const MarketDataContext = createContext(null);
 
+
+// MarketDataProvider wraps the app and provides market data state and methods to children components
 export function MarketDataProvider({ children }) {
   const [apiKey, setApiKey] = useState('');
   const [quotes, setQuotes] = useState({});
@@ -51,7 +56,7 @@ export function MarketDataProvider({ children }) {
   const quotesRef = useRef(quotes);
   quotesRef.current = quotes;
 
-  // 1. 1s timer: detect market-session transitions (NY time) and bump status
+  // 3s timer checks market session changes and updates marketStatus state if needed
   useEffect(() => {
     const checkStatus = () => {
       const current = getMarketSessionStatus();
@@ -69,11 +74,12 @@ export function MarketDataProvider({ children }) {
     };
 
     checkStatus();
-    const interval = setInterval(checkStatus, 1000);
+    const interval = setInterval(checkStatus, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  // 2. Load stored API key on mount; tear down WS on unmount
+
+  //  Load stored API key on mount and destroy websocket on unmount
   useEffect(() => {
     storageService.getApiKey().then((key) => {
       if (key) {
@@ -87,15 +93,16 @@ export function MarketDataProvider({ children }) {
     };
   }, []);
 
-  // 3. Persist + propagate an updated API key
+  // Update the API key when the user changes it inside the settings
   const updateApiKey = useCallback(async (newKey) => {
     const cleanKey = (newKey || '').trim();
     setApiKey(cleanKey);
-    await storageService.setApiKey(cleanKey);
+    await storageService.setApiKey(cleanKey);   // Persist the new key in storage
     finnhubWebSocketService.setApiKey(cleanKey);
   }, []);
 
-  // 4. Fetch live Finnhub market holidays if year >= 2028
+  // Local cache of US market holidays is only fetched up to 2027
+  // If the current year is 2028 (unlikely) or later, fetch the latest holidays from Finnhub REST API
   useEffect(() => {
     const currentYear = new Date().getFullYear();
     if (currentYear >= 2028 && apiKey) {
@@ -107,7 +114,8 @@ export function MarketDataProvider({ children }) {
     }
   }, [apiKey]);
 
-  // 5. Apply 2Hz WebSocket trade ticks to the quotes map (keyed by both symbols)
+  
+  // 2Hz websocket trade messages update quote map with live price, change, percent, and sparkline for each symbol
   useEffect(() => {
     const unsubscribe = finnhubWebSocketService.addListener((ticks) => {
       if (!Array.isArray(ticks) || ticks.length === 0) return;
@@ -142,7 +150,7 @@ export function MarketDataProvider({ children }) {
     return unsubscribe;
   }, []);
 
-  // 6. Fetch Stock Quote via Yahoo Finance (accurate pre/post-market, no API key required)
+  // Func to fetch Stock Quote via Yahoo Finance  (no API key and better pre/post accuracy)
   const fetchQuote = useCallback(
     async (symbol) => {
       if (!symbol) return null;
@@ -177,7 +185,7 @@ export function MarketDataProvider({ children }) {
     []
   );
 
-  // 7. Fetch Company Profile & Logo via REST (Cached)
+  // Func to fetch Company Profile & Logo via Finnhub REST (data is cached and accessed from this cache if it exists)
   const fetchProfile = useCallback(
     async (symbol) => {
       if (!symbol || !apiKey) return null;
@@ -198,7 +206,7 @@ export function MarketDataProvider({ children }) {
     [apiKey]
   );
 
-  // 8. Fetch Historical Chart via Yahoo Finance with verified live WebSocket tick overlay only
+  // Func to fetch Historical Chart via Yahoo Finance
   const fetchHistoricalChart = useCallback(async (symbol, timeframe = '1D') => {
     if (!symbol) return null;
     const cleanSym = getDisplaySymbol(symbol);
@@ -207,7 +215,7 @@ export function MarketDataProvider({ children }) {
     return await yahooFinanceService.fetchHistoricalData(cleanSym, timeframe, livePrice);
   }, []);
 
-  // 9. Fetch Key Metrics (Finnhub)
+  // Func to fetch company metrics from Finnhub (such as PE ratio, EPS, market cap, etc.)
   const fetchStockMetrics = useCallback(
     async (symbol) => {
       if (!symbol || !apiKey) return null;
@@ -217,14 +225,14 @@ export function MarketDataProvider({ children }) {
     [apiKey]
   );
 
-  // 10. Fetch Company Description & Overview (Yahoo Finance)
+  // Func to fetch Company Description via Yahoo Finance
   const fetchCompanyDescription = useCallback(async (symbol) => {
     if (!symbol) return null;
     const cleanSym = getDisplaySymbol(symbol);
     return await yahooFinanceService.fetchCompanyDescription(cleanSym);
   }, []);
 
-  // 11. Fetch Recent Company News (Finnhub)
+  // Func to fetch Company News via Finnhub REST (also cached)
   const fetchCompanyNews = useCallback(
     async (symbol) => {
       if (!symbol || !apiKey) return [];
@@ -234,7 +242,7 @@ export function MarketDataProvider({ children }) {
     [apiKey]
   );
 
-  // 12. Fetch Market News (Finnhub)
+  // Func to download Market News via Finnhub REST (cached)
   const fetchMarketNews = useCallback(
     async (category = 'general', forceRefresh = false) => {
       if (!apiKey) return [];
@@ -243,7 +251,8 @@ export function MarketDataProvider({ children }) {
     [apiKey]
   );
 
-  // 13. Watchlist, Portfolio & Active Modal Symbol Subscriptions
+
+  // Watchlist, portfolio & active modal symbol subscriptions
   const [watchlistSymbolsList, setWatchlistSymbolsList] = useState([]);
   const [portfolioSymbolsList, setPortfolioSymbolsList] = useState([]);
 
@@ -268,7 +277,8 @@ export function MarketDataProvider({ children }) {
     }
   }, []);
 
-  // 14. Programmatic Live Price Injection (e.g. from Yahoo Finance order fill)
+
+  // Inject a live price update into the quotes state (used after quoting for a paper trade)
   const injectLivePrice = useCallback((symbol, newPrice, timestamp = Date.now()) => {
     if (!symbol || !(newPrice > 0)) return;
     const displaySym = getDisplaySymbol(symbol);
@@ -329,7 +339,6 @@ export function MarketDataProvider({ children }) {
   );
 
   return (
-    {/* Provider exposes market-data state + all fetch/inject methods */}
     <MarketDataContext.Provider value={value}>
       {children}
     </MarketDataContext.Provider>

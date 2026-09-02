@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { StyleSheet, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as NavigationBar from 'expo-navigation-bar';
+
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
 import PortfolioScreen from '../screens/PortfolioScreen';
@@ -13,11 +14,13 @@ import { spacing, fonts } from '../constants/theme';
 
 const Tab = createBottomTabNavigator();
 
+
+// Main tab navigator which sits at the bottom of the screen (toggles between home, search, portfolio and news)
 export default function TabNavigator() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
-  // Android: match the NavigationBar background + icon contrast to the theme
+  // On Android: match the NavigationBar background + icon contrast to the theme
   useEffect(() => {
     if (Platform.OS === 'android') {
       if (typeof NavigationBar?.setBackgroundColorAsync === 'function') {
@@ -43,7 +46,6 @@ export default function TabNavigator() {
   });
 
   return (
-    {/* Bottom tab shell: 4 tabs, theme-colored bar, per-route icons */}
     <Tab.Navigator
       initialRouteName="Home"
       screenOptions={({ route }) => ({

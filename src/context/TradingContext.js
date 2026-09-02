@@ -1,14 +1,9 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-} from 'react';
+import {createContext, useContext, useState, useEffect, useCallback} from 'react';
 import { storageService } from '../services/storageService';
 
-// Context holding paper-trading state
+// Context holding simple on/off paper trading state
 const TradingContext = createContext(null);
+
 
 export function TradingProvider({ children }) {
   const [isPaperTradingEnabled, setIsPaperTradingEnabledState] = useState(false);
@@ -22,14 +17,15 @@ export function TradingProvider({ children }) {
     });
   }, []);
 
-  // Persist + set the paper-trading flag (coerced to boolean)
+  // Persist and set the paper-trading flag
   const setPaperTradingEnabled = useCallback(async (enabled) => {
     const value = Boolean(enabled);
     setIsPaperTradingEnabledState(value);
     await storageService.setPaperTradingEnabled(value);
   }, []);
 
-  // Flip the flag; persist best-effort inside the updater
+
+  // Toggle flag and persist it
   const togglePaperTrading = useCallback(async () => {
     setIsPaperTradingEnabledState((prev) => {
       const next = !prev;
@@ -46,7 +42,6 @@ export function TradingProvider({ children }) {
   };
 
   return (
-    {/* Provider exposes paper-trading state + setters */}
     <TradingContext.Provider value={value}>
       {children}
     </TradingContext.Provider>
@@ -54,7 +49,6 @@ export function TradingProvider({ children }) {
 }
 
 export function useTrading() {
-  // Hook to consume paper-trading state; throws if used outside provider
   const context = useContext(TradingContext);
   if (!context) {
     throw new Error('useTrading must be used within a TradingProvider');

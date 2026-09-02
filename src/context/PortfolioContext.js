@@ -1,19 +1,11 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  useRef,
-} from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { storageService } from '../services/storageService';
 import { useMarketData } from './MarketDataContext';
 
-// Context holding portfolios + active id
+// A global context holding all portfolios, active portfolio ID, and order execution logic
 const PortfolioContext = createContext(null);
 
-// Seed portfolio (used until storage loads)
+// Default portfolio data incase no portfolios are found in storage (first time users)
 const defaultPortfolios = [
   {
     id: 'portfolio-1',
@@ -25,6 +17,8 @@ const defaultPortfolios = [
   },
 ];
 
+
+// Provider component that wraps the app and provides portfolio state and actions
 export function PortfolioProvider({ children }) {
   const [portfolios, setPortfolios] = useState(defaultPortfolios);
   const [activePortfolioId, setActivePortfolioIdState] = useState('portfolio-1');
@@ -38,7 +32,7 @@ export function PortfolioProvider({ children }) {
     hasValidKey,
   } = useMarketData();
 
-  // 1. Load portfolios from AsyncStorage on mount
+  // Load portfolios from persistent storage on mount
   useEffect(() => {
     Promise.all([
       storageService.getStoredPortfolios(),
@@ -59,20 +53,20 @@ export function PortfolioProvider({ children }) {
     });
   }, []);
 
-  // 2. Persist portfolios & active ID whenever state changes
+  // Set the portfolios & active ID inside persistent storage whenever state changes
   useEffect(() => {
     if (hasLoadedFromStorage.current) {
       storageService.setStoredPortfolios(portfolios);
     }
   }, [portfolios]);
-
   useEffect(() => {
     if (hasLoadedFromStorage.current) {
       storageService.setStoredActivePortfolioId(activePortfolioId);
     }
   }, [activePortfolioId]);
 
-  // 3. Sync all symbols across all portfolios to WebSocket manager
+
+  // Set list of unique symbols across all portfolios for market data WS subscription 
   const allUniqueSymbols = useMemo(() => {
     const syms = new Set();
     for (const p of portfolios) {
@@ -91,7 +85,8 @@ export function PortfolioProvider({ children }) {
     }
   }, [allUniqueSymbols, setPortfolioSymbols]);
 
-  // 4. Auto-refresh portfolio stock quotes every 3 minutes (matching watchlists rate)
+
+  // Automatically refresh portfolio quotes and profiles every 3 minutes (in case WS quotes are not available)
   const [portfolioRefreshTrigger, setPortfolioRefreshTrigger] = useState(0);
 
   useEffect(() => {
@@ -102,6 +97,7 @@ export function PortfolioProvider({ children }) {
 
     return () => clearInterval(timer);
   }, []);
+
 
   // Download live quotes and company profiles for all portfolio positions
   useEffect(() => {
@@ -134,13 +130,14 @@ export function PortfolioProvider({ children }) {
     );
   }, [portfolios, activePortfolioId]);
 
-  // 4. Query a symbol's position within a portfolio (defaults to active)
+
+  // Query a symbol's position within a portfolio
   const getPosition = useCallback(
     (portfolioId, symbol) => {
       if (!symbol) return null;
       const cleanSym = symbol.toUpperCase();
       const targetP = portfolios.find(
-        (p) => p.id === (portfolioId || activePortfolioId)
+        (p) => p.id === (portfolioId || activePortfolioId)  // Default to active portfolio
       );
       if (!targetP || !Array.isArray(targetP.positions)) return null;
       return (
@@ -152,7 +149,7 @@ export function PortfolioProvider({ children }) {
     [portfolios, activePortfolioId]
   );
 
-  // 5. Portfolio CRUD
+  // Portfolio Create Rename Update/Reorder Delete actions (CRUD)
   const createPortfolio = useCallback(({ title, cash = 10000 }) => {
     const trimmed = (title || '').trim();
     if (!trimmed) return null;
@@ -199,7 +196,7 @@ export function PortfolioProvider({ children }) {
     }
   }, []);
 
-  // 6. Zero-Fee Instant Order Execution (mutates cash + positions for the target portfolio)
+  // Order execution logic to buy and sell shares and update cash/positions accordingly
   const executeOrder = useCallback(
     ({
       portfolioId,
@@ -236,10 +233,10 @@ export function PortfolioProvider({ children }) {
 
         let newCash = currentCash;
         let newPositions = [...currentPositions];
-        let resultPosition = null;
+        let resultantPosition = null;
 
         if (mode === 'BUY') {
-          // Reject if cash can't cover the trade
+          // Reject... cash can't cover the trade
           if (currentCash < orderCost) {
             throw new Error(`Insufficient funds: Required $${orderCost.toFixed(2)}, Available $${currentCash.toFixed(2)}`);
           }
@@ -256,17 +253,17 @@ export function PortfolioProvider({ children }) {
             const updatedTotalCost = oldTotalCost + orderCost;
             const updatedAvgCost = updatedTotalCost / updatedShares;
 
-            resultPosition = {
+            resultantPosition = {
               ...existingPos,
               shares: Number(updatedShares.toFixed(4)),
               avgCost: Number(updatedAvgCost.toFixed(2)),
               totalCost: Number(updatedTotalCost.toFixed(2)),
               name: name || existingPos.name || cleanSym,
             };
-            newPositions[existingPosIndex] = resultPosition;
+            newPositions[existingPosIndex] = resultantPosition;
           } else {
             // Open a new position at the fill price
-            resultPosition = {
+            resultantPosition = {
               id: `pos-${cleanSym}-${Date.now()}`,
               symbol: cleanSym,
               name: name || cleanSym,
@@ -274,22 +271,23 @@ export function PortfolioProvider({ children }) {
               avgCost: Number(numPrice.toFixed(2)),
               totalCost: Number(orderCost.toFixed(2)),
             };
-            newPositions.push(resultPosition);
+            newPositions.push(resultantPosition);
           }
         } else {
           // SELL
           const ownedShares = existingPos ? Number(existingPos.shares) || 0 : 0;
           if (ownedShares < numShares && Math.abs(ownedShares - numShares) > 0.0001) {
+            // Reject... can't sell more shares than owned
             throw new Error(`Insufficient shares: Owned ${ownedShares}, Attempted to sell ${numShares}`);
           }
 
           newCash = currentCash + orderCost;
           const remainingShares = Math.max(0, ownedShares - numShares);
 
-          if (remainingShares <= 0.0001) {
+          if (remainingShares < 0.0001) {
             // Position fully closed: drop it from the list
             newPositions = newPositions.filter((_, idx) => idx !== existingPosIndex);
-            resultPosition = {
+            resultantPosition = {
               symbol: cleanSym,
               name: name || existingPos?.name || cleanSym,
               shares: 0,
@@ -300,16 +298,17 @@ export function PortfolioProvider({ children }) {
             const avgCost = Number(existingPos.avgCost) || numPrice;
             const updatedTotalCost = remainingShares * avgCost;
 
-            resultPosition = {
+            resultantPosition = {
               ...existingPos,
               shares: Number(remainingShares.toFixed(4)),
               avgCost: Number(avgCost.toFixed(2)),
               totalCost: Number(updatedTotalCost.toFixed(2)),
             };
-            newPositions[existingPosIndex] = resultPosition;
+            newPositions[existingPosIndex] = resultantPosition;
           }
         }
 
+        // Return summary of the order ready to be shown in the order receipt modal
         executionSummary = {
           success: true,
           mode,
@@ -318,7 +317,7 @@ export function PortfolioProvider({ children }) {
           shares: numShares,
           fillPrice: numPrice,
           orderCost,
-          newPosition: resultPosition,
+          newPosition: resultantPosition,
           newCash,
           portfolioId: targetId,
           portfolioTitle: targetPortfolio.title,
@@ -372,7 +371,6 @@ export function PortfolioProvider({ children }) {
   );
 
   return (
-    {/* Provider exposes portfolios + order execution */}
     <PortfolioContext.Provider value={value}>
       {children}
     </PortfolioContext.Provider>
