@@ -15,12 +15,14 @@ import { getNextUpcomingHolidays } from '../../utils/marketHolidays';
 import { modalStyles } from '../../styles';
 import AppText from './AppText';
 
+// Fixed weekday session schedule with color codes
 const STANDARD_SESSIONS = [
   { name: 'Pre-Market', time: '04:00 - 09:30 ET', color: '#FFA500' },
   { name: 'Regular Market', time: '09:30 - 16:00 ET', color: '#00D084' },
   { name: 'Post-Market', time: '16:00 - 20:00 ET', color: '#B872FF' },
 ];
 
+// Slide-up sheet: live NY clock, current session, standard sessions, upcoming holidays
 export default function MarketCalendarModal({ visible, onClose }) {
   const { theme, isDark } = useTheme();
   const { marketStatus } = useMarketData();
@@ -31,6 +33,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
   useEffect(() => {
     if (!visible) return;
 
+    // 1-second NY-time clock (24h format) + date string
     const updateClock = () => {
       const now = new Date();
       const timeFmt = new Intl.DateTimeFormat('en-US', {
@@ -58,11 +61,13 @@ export default function MarketCalendarModal({ visible, onClose }) {
     return () => clearInterval(interval);
   }, [visible]);
 
+  // Next 8 holidays (only when visible)
   const upcomingHolidays = useMemo(() => {
     if (!visible) return [];
     return getNextUpcomingHolidays(8);
   }, [visible]);
 
+  // Theme-aware card colors
   const cardBg = isDark ? '#161920' : '#FFFFFF';
   const cardBorder = isDark ? 'rgba(255, 255, 255, 0.08)' : theme.border;
 
@@ -277,6 +282,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
   );
 }
 
+// Calendar sheet layout styles
 const styles = StyleSheet.create({
   title: {
     fontSize: 20,

@@ -6,6 +6,7 @@
  * - Adaptive ease-off and exponential backoff when HTTP 429 Too Many Requests responses are encountered
  * - Queue freeze during cooldown and throttled pacing during recovery
  */
+// Async queue rate limiter w/ sliding windows + 429 backoff (see file-header JSDoc)
 export class RateLimiter {
   constructor({
     maxPerSecond,
@@ -28,12 +29,13 @@ export class RateLimiter {
     this.easeOffMinSpacingMs = easeOffMinSpacingMs;
     this.recoverySuccessThreshold = recoverySuccessThreshold;
 
+    // Pending jobs + sliding-window timestamps (per-second + per-minute)
     this.queue = [];
     this.secondTimestamps = [];
     this.minuteTimestamps = [];
     this.processing = false;
 
-    // 429 ease-off state
+    // 429 cooldown/ease-off tracking
     this.cooldownUntil = 0;
     this.consecutive429Count = 0;
     this.last429Timestamp = 0;
@@ -41,10 +43,7 @@ export class RateLimiter {
     this.successCountSince429 = 0;
   }
 
-  /**
-   * Schedule an async function through the rate limiter.
-   * Returns a promise that resolves when the function executes.
-   */
+  // Queue a job; resolves when it actually runs (after any pacing/waiting)
   async schedule(fn) {
     return new Promise((resolve, reject) => {
       this.queue.push({ fn, resolve, reject });
@@ -59,10 +58,11 @@ export class RateLimiter {
    * @param {number|null} retryAfterSeconds Optional retry-after duration from response header
    * @returns {number} Backoff delay in milliseconds
    */
+  // Mark a 429: compute backoff, enter cooldown + ease-off mode (debounced)
   handle429(retryAfterSeconds = null) {
     const now = Date.now();
 
-    // Debounce: only bump consecutive strike if last 429 was over 2 seconds ago
+    // Only count a new strike if the last 429 was >2s ago (avoids cascade)
     if (now - this.last429Timestamp > 2000) {
       this.consecutive429Count++;
     }
@@ -72,7 +72,7 @@ export class RateLimiter {
     if (typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0) {
       backoffMs = Math.max(retryAfterSeconds * 1000, 1000);
     } else {
-      // Exponential backoff: baseBackoffMs * 2^(strike - 1) + random jitter (0-500ms)
+      // Exponential backoff: base * 2^(strike-1) + jitter (0-500ms), capped
       const exponent = Math.max(0, this.consecutive429Count - 1);
       const rawBackoff = this.baseBackoffMs * Math.pow(2, exponent);
       const jitter = Math.floor(Math.random() * 500);
@@ -90,10 +90,7 @@ export class RateLimiter {
     return backoffMs;
   }
 
-  /**
-   * Report a successful request (HTTP 200).
-   * Gradually recovers from ease-off mode once enough consecutive successes occur.
-   */
+  // Count a 200; clear ease-off once enough consecutive successes accrue
   notifySuccess() {
     if (!this.isEasedOff && this.consecutive429Count === 0) return;
 
@@ -106,21 +103,11 @@ export class RateLimiter {
     }
   }
 
-  getStatus() {
-    const now = Date.now();
-    return {
-      queueLength: this.queue.length,
-      isEasedOff: this.isEasedOff,
-      consecutive429Count: this.consecutive429Count,
-      inCooldown: now < this.cooldownUntil,
-      cooldownRemainingMs: Math.max(0, this.cooldownUntil - now),
-    };
-  }
-
+  // Drain the queue respecting per-second/per-minute windows + cooldowns
   async processQueue() {
     if (this.processing || this.queue.length === 0) return;
     this.processing = true;
-    // Yield to microtask queue so any synchronous batch of schedule() calls is queued
+    // Yield so a synchronous batch of schedule() calls all queue first
     await Promise.resolve();
 
     while (this.queue.length > 0) {
@@ -194,10 +181,6 @@ export class RateLimiter {
     }
 
     this.processing = false;
-  }
-
-  get queueLength() {
-    return this.queue.length;
   }
 }
 

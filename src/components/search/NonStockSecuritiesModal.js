@@ -16,8 +16,10 @@ import AppText from '../common/AppText';
 import SearchResultItem from './SearchResultItem';
 import { getGroupedNonStockSecurities } from '../../utils/securityUtils';
 
+// Grouped non-stock securities (forex, crypto, commodities, indices, bonds)
 const GROUPED_NON_STOCK_DATA = getGroupedNonStockSecurities();
 
+// Slide-up modal listing non-stock securities grouped by category
 export default function NonStockSecuritiesModal({
   visible,
   onSelectStock,
@@ -26,8 +28,10 @@ export default function NonStockSecuritiesModal({
   const { theme } = useTheme();
   const { profiles } = useMarketData();
 
+  // Render nothing while hidden
   if (!visible) return null;
 
+  // Close then hand the selected security back to caller
   const handleSelect = (item) => {
     if (onClose) onClose();
     if (onSelectStock) onSelectStock(item);
@@ -129,6 +133,7 @@ export default function NonStockSecuritiesModal({
   );
 }
 
+// Modal layout: header, section headers, list padding
 const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,

@@ -7,9 +7,11 @@ import { stockItemStyles } from '../../styles';
 import AppText from '../common/AppText';
 import CompanyLogo from '../common/CompanyLogo';
 
+// Single search-result row: logo + symbol/name left, chevron right
 export default function SearchResultItem({ item, onPress }) {
   const { theme } = useTheme();
 
+  // Fall back gracefully when display fields are missing
   const displaySymbol = item?.displaySymbol || item?.symbol || '';
   const displayName = item?.displayName || item?.name || displaySymbol;
 
@@ -60,6 +62,7 @@ export default function SearchResultItem({ item, onPress }) {
   );
 }
 
+// Row layout: left section, text wrapper, right chevron
 const styles = StyleSheet.create({
   leftSection: {
     flexDirection: 'row',

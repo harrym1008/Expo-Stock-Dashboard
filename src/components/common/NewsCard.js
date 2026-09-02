@@ -5,12 +5,14 @@ import { formatTimeAgo } from '../../utils/formatters';
 import { newsStyles } from '../../styles';
 import AppText from './AppText';
 
+// News row: meta line, headline, optional summary + thumbnail; tappable to open URL
 export default function NewsCard({ item }) {
   const { theme, isDark } = useTheme();
   const [imageError, setImageError] = useState(false);
 
   if (!item) return null;
 
+  // Reuters/Bloomberg/Yahoo omit the thumbnail
   const sourceLower = (item.source || '').toLowerCase();
   const isReuters = sourceLower.includes('reuters');
   const isBloomberg = sourceLower.includes('bloomberg');
@@ -21,6 +23,7 @@ export default function NewsCard({ item }) {
   const hasValidImage = Boolean(item.image && typeof item.image === 'string' && item.image.trim().length > 0);
   const showImage = !hideImageBySource && hasValidImage && !imageError;
 
+  // Open the article URL on press
   const handlePress = () => {
     if (item.url) {
       Linking.openURL(item.url).catch(() => {});
@@ -28,6 +31,7 @@ export default function NewsCard({ item }) {
   };
 
   return (
+    {/* Tappable card: content block + optional thumbnail */}
     <TouchableOpacity
       style={[
         newsStyles.newsCard,
@@ -40,6 +44,7 @@ export default function NewsCard({ item }) {
       onPress={handlePress}
     >
       <View style={newsStyles.newsContent}>
+        {/* Source • time meta row */}
         <View style={newsStyles.newsMetaRow}>
           <AppText bold style={[newsStyles.newsSource, { color: theme.textSecondary }]}>
             {item.source}
@@ -60,6 +65,7 @@ export default function NewsCard({ item }) {
       </View>
 
       {showImage && (
+        {/* Thumbnail; hides on image error */}
         <Image
           source={{ uri: item.image }}
           style={newsStyles.newsThumbnail}

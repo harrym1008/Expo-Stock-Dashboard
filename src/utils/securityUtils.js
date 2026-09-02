@@ -1,12 +1,15 @@
+// Non-stock securities (forex/crypto/indices/etc.) lookup table, loaded from JSON
 import nonStockSecuritiesData from '../constants/nonStockSecurities.json';
 
-// Build lookup maps for fast access by any symbol representation
+// Fast symbol->security maps, keyed by each of the 3 symbol formats
 const nonStockByDisplaySymbol = new Map();
 const nonStockByFinnhubSymbol = new Map();
 const nonStockByYahooSymbol = new Map();
 
+// Flat list of all non-stock securities (for search indexing)
 const ALL_NON_STOCK_SECURITIES = [];
 
+// Human-readable uppercase titles for grouping non-stocks by category
 const CATEGORY_TITLES = {
   forex: 'FOREX',
   indices: 'INDICES',
@@ -15,10 +18,11 @@ const CATEGORY_TITLES = {
   crypto: 'CRYPTO',
 };
 
-// Populate maps from categories in nonStockSecurities.json
+// Normalize each JSON entry once at load, index it under all symbol forms
 Object.entries(nonStockSecuritiesData || {}).forEach(([category, list]) => {
   if (Array.isArray(list)) {
     list.forEach((sec) => {
+      // Flatten: set both raw + display forms, mark isStock=false
       const item = {
         ...sec,
         category,
@@ -35,6 +39,7 @@ Object.entries(nonStockSecuritiesData || {}).forEach(([category, list]) => {
 
       ALL_NON_STOCK_SECURITIES.push(item);
 
+      // Index under each symbol variant for cross-format lookup
       if (sec.displaySymbol) {
         nonStockByDisplaySymbol.set(sec.displaySymbol.toUpperCase(), item);
       }
@@ -48,9 +53,7 @@ Object.entries(nonStockSecuritiesData || {}).forEach(([category, list]) => {
   }
 });
 
-/**
- * Returns security item matching the symbol across display, finnhub, or yahoo formats.
- */
+// Look up security item by any of its symbol forms
 export function getSecurityBySymbol(symbol) {
   if (!symbol || typeof symbol !== 'string') return null;
   const upper = symbol.trim().toUpperCase();
@@ -62,30 +65,23 @@ export function getSecurityBySymbol(symbol) {
   );
 }
 
-/**
- * Checks if the given symbol belongs to a non-stock security.
- */
+// True when symbol maps to a non-stock (forex/crypto/etc.)
 export function isNonStockSecurity(symbol) {
   return Boolean(getSecurityBySymbol(symbol));
 }
 
-/**
- * Resolves the Yahoo Finance ticker symbol for network calls.
- * E.g., 'EUR/USD' -> 'EURUSD=X', 'US500' -> '^GSPC', 'BRK.B' -> 'BRK-B'
- */
+// Resolve Yahoo Finance API ticker (adds '=X', '-' for dots, etc.)
 export function getYahooSymbol(symbol) {
   if (!symbol || typeof symbol !== 'string') return '';
   const sec = getSecurityBySymbol(symbol);
   if (sec?.yahooSymbol) {
     return sec.yahooSymbol;
   }
+  // Stocks: uppercase, turn dots into dashes (BRK.B -> BRK-B)
   return symbol.trim().toUpperCase().replace(/\./g, '-');
 }
 
-/**
- * Resolves the Finnhub ticker symbol for WebSocket subscriptions.
- * E.g., 'EUR/USD' -> 'OANDA:EUR_USD', 'BTC' -> 'BINANCE:BTCUSDT', 'AAPL' -> 'AAPL'
- */
+// Resolve Finnhub API ticker (adds exchange prefix like OANDA:/BINANCE:)
 export function getFinnhubSymbol(symbol) {
   if (!symbol || typeof symbol !== 'string') return '';
   const sec = getSecurityBySymbol(symbol);
@@ -95,10 +91,7 @@ export function getFinnhubSymbol(symbol) {
   return symbol.trim().toUpperCase();
 }
 
-/**
- * Resolves the display symbol to show in the app UI.
- * E.g., 'OANDA:EUR_USD' -> 'EUR/USD', 'BINANCE:BTCUSDT' -> 'BTC', 'AAPL' -> 'AAPL'
- */
+// Resolve the symbol shown in the UI (e.g. OANDA:EUR_USD -> EUR/USD)
 export function getDisplaySymbol(symbol) {
   if (!symbol || typeof symbol !== 'string') return '';
   const sec = getSecurityBySymbol(symbol);
@@ -108,20 +101,14 @@ export function getDisplaySymbol(symbol) {
   return symbol.trim().toUpperCase();
 }
 
-/**
- * Resolves the display name to show in the app UI.
- * E.g., 'EUR/USD' -> 'Euro / US Dollar', 'BTC' -> 'Bitcoin'
- */
+// Resolve the human-readable company/asset name
 export function getDisplayName(symbol) {
   if (!symbol || typeof symbol !== 'string') return null;
   const sec = getSecurityBySymbol(symbol);
   return sec?.displayName || null;
 }
 
-/**
- * Resolves the currency prefix string.
- * E.g., Forex -> '', DAX -> '€', US500 -> '$', Stocks -> '$'
- */
+// Currency prefix for a security (forex often '' or '€', stocks '$')
 export function getCurrency(symbol, fallback = '$') {
   if (!symbol || typeof symbol !== 'string') return fallback;
   const sec = getSecurityBySymbol(symbol);
@@ -131,24 +118,20 @@ export function getCurrency(symbol, fallback = '$') {
   return fallback;
 }
 
-/**
- * Resolves the number of decimals to use for a security / price.
- * For non-stock securities: uses explicit `decimals` from JSON.
- * For stocks:
- * - price >= $1.00: 2 d.p.
- * - price < $1.00 and >= $0.10: 3 d.p.
- * - price < $0.10: 4 d.p. (max 4 d.p.)
- */
+// Decimal count for a price: explicit > JSON-decimals > price-based fallback
 export function getDecimals(symbol, price = null, explicitDecimals = null) {
+  // Caller overrode it
   if (typeof explicitDecimals === 'number') {
     return explicitDecimals;
   }
+  // Non-stock with fixed decimals in JSON
   if (symbol) {
     const sec = getSecurityBySymbol(symbol);
     if (sec && typeof sec.decimals === 'number') {
       return sec.decimals;
     }
   }
+  // Stocks: scale decimals to price magnitude (cheaper to show more dp on low prices)
   if (price !== null && price !== undefined && typeof price === 'number') {
     const p = Math.abs(price);
     if (p === 0 || p >= 1.0) return 2;
@@ -158,20 +141,17 @@ export function getDecimals(symbol, price = null, explicitDecimals = null) {
   return 2;
 }
 
-/**
- * Returns all non-stock securities formatted for local search indexing.
- */
+// All non-stock securities as a flat array (for search indexing)
 export function getAllNonStockSecurities() {
   return ALL_NON_STOCK_SECURITIES;
 }
 
-/**
- * Returns non-stock securities grouped by their type and sorted alphabetically within each group.
- */
+// Non-stocks grouped by category, each group sorted alphabetically
 export function getGroupedNonStockSecurities() {
   const categories = ['forex', 'indices', 'commodities', 'bonds', 'crypto'];
   return categories.map((cat) => {
     const list = nonStockSecuritiesData[cat] || [];
+    // Re-shape entries to match the normalized security shape
     const items = list.map((sec) => ({
       ...sec,
       category: cat,

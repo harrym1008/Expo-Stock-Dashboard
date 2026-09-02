@@ -13,6 +13,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import AppText from './AppText';
 
+// Horizontal pill tab bar: select, add, reorder (edit-mode arrows), delete, rename
 export default function TabSelector({
   tabs = [],
   activeTabId,
@@ -26,9 +27,11 @@ export default function TabSelector({
 }) {
   const { theme, isDark } = useTheme();
 
+  // Active vs inactive pill backgrounds (theme-aware)
   const activeBg = isDark ? '#4A4A4A' : '#D0D5DD';
   const inactiveBg = isDark ? '#1C1F26' : '#E4E7EC';
 
+  // Delete active tab (with confirmation); refuses when only one remains
   const handleDeleteItem = () => {
     if (tabs.length <= 1) return;
 
@@ -49,6 +52,7 @@ export default function TabSelector({
     );
   };
 
+  // Trigger rename flow for the active tab
   const handleRenameItem = () => {
     onRenameTab?.(activeTabId);
   };
@@ -70,6 +74,7 @@ export default function TabSelector({
   }, [tabs, onReorderTabs]);
 
   return (
+    {/* Wrapper holding the horizontal scroll area + edge fade gradients */}
     <View style={styles.wrapper}>
       <ScrollView
         horizontal
@@ -82,6 +87,7 @@ export default function TabSelector({
           const isLast = index === tabs.length - 1;
 
           return (
+            {/* Animated pill: left arrow (edit), body, right arrow (edit) */}
             <Animated.View
               key={tab.id}
               layout={LinearTransition.duration(200)}
@@ -121,6 +127,7 @@ export default function TabSelector({
                 onPress={() => onSelectTab?.(tab.id)}
                 activeOpacity={0.8}
               >
+                {/* Pill label: bold when active */}
                 <AppText
                   bold={isActive}
                   style={[
@@ -232,6 +239,7 @@ export default function TabSelector({
   );
 }
 
+// Pill bar + edit-action + gradient fade styles
 const styles = StyleSheet.create({
   wrapper: {
     position: 'relative',

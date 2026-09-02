@@ -17,6 +17,7 @@ export default function TabNavigator() {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
+  // Android: match the NavigationBar background + icon contrast to the theme
   useEffect(() => {
     if (Platform.OS === 'android') {
       if (typeof NavigationBar?.setBackgroundColorAsync === 'function') {
@@ -28,6 +29,7 @@ export default function TabNavigator() {
     }
   }, [theme.tabBarBackground, isDark]);
 
+  // Platform-adjusted tab bar geometry (accounts for safe-area insets)
   const bottomInset = insets.bottom;
   const tabBarHeight = Platform.select({
     ios: 52 + bottomInset,
@@ -41,9 +43,11 @@ export default function TabNavigator() {
   });
 
   return (
+    {/* Bottom tab shell: 4 tabs, theme-colored bar, per-route icons */}
     <Tab.Navigator
       initialRouteName="Home"
       screenOptions={({ route }) => ({
+        // Hide per-screen headers; icons + labels come from TabIcon + tabBarLabelStyle
         headerShown: false,
         tabBarIcon: ({ focused, color }) => (
           <TabIcon routeName={route.name} focused={focused} color={color} size={22} />
@@ -71,6 +75,7 @@ export default function TabNavigator() {
 }
 
 const styles = StyleSheet.create({
+  // Thin top divider, no shadow on Android
   tabBar: {
     borderTopWidth: 1,
     paddingTop: spacing.xs,

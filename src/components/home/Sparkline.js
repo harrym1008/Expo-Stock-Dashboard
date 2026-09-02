@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
+// Inline mini-line chart: maps a data array to an SVG path, smoothing optional
 export default function Sparkline({
   data = [],
   width: customWidth,
@@ -11,8 +12,10 @@ export default function Sparkline({
   smoothing = 0,
   style,
 }) {
+  // Container size from onLayout (drives SVG scaling)
   const [layout, setLayout] = useState({ width: 0, height: 0 });
 
+  // Record container dimensions when they change
   const handleLayout = (event) => {
     const { width, height } = event.nativeEvent.layout;
     if (
@@ -44,6 +47,7 @@ export default function Sparkline({
     });
   }, [data, smoothing]);
 
+  // Need at least 2 points to draw a line
   if (!smoothedData || smoothedData.length < 2) {
     return <View style={[styles.container, style]} onLayout={handleLayout} />;
   }
@@ -51,18 +55,21 @@ export default function Sparkline({
   const effectiveWidth = customWidth || layout.width || 100;
   const effectiveHeight = customHeight || layout.height || 36;
 
+  // Scale data to canvas: normalize by min/max range
   const min = Math.min(...smoothedData);
   const max = Math.max(...smoothedData);
   const range = max - min === 0 ? 1 : max - min;
   const paddingY = 4;
   const usableHeight = Math.max(effectiveHeight - paddingY * 2, 2);
 
+  // Convert each value to an (x, y) point
   const points = smoothedData.map((val, index) => {
     const x = (index / (smoothedData.length - 1)) * effectiveWidth;
     const y = effectiveHeight - paddingY - ((val - min) / range) * usableHeight;
     return { x, y };
   });
 
+  // Build the SVG path string from the points
   const pathD = points.reduce((acc, point, index) => {
     return index === 0
       ? `M ${point.x.toFixed(2)} ${point.y.toFixed(2)}`
@@ -70,6 +77,7 @@ export default function Sparkline({
   }, '');
 
   return (
+    {/* Container sized by props or measured layout */}
     <View
       style={[
         styles.container,
@@ -80,6 +88,7 @@ export default function Sparkline({
       onLayout={handleLayout}
     >
       {effectiveWidth > 0 && effectiveHeight > 0 && (
+        {/* SVG polyline; non-scaling stroke keeps width constant */}
         <Svg
           width="100%"
           height="100%"
@@ -101,6 +110,7 @@ export default function Sparkline({
   );
 }
 
+// Centered, clipped container for the chart
 const styles = StyleSheet.create({
   container: {
     justifyContent: 'center',

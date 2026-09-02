@@ -13,6 +13,7 @@ import { spacing, borderRadius, fonts } from '../../constants/theme';
 import { dialogStyles } from '../../styles';
 import AppText from './AppText';
 
+// Portfolio creation dialog: name + starting cash with min/max validation
 export default function CreatePortfolioModal({
   visible = false,
   initialTitle = 'Portfolio 1',
@@ -29,6 +30,7 @@ export default function CreatePortfolioModal({
 
   const titleInputRef = useRef(null);
 
+  // Reset fields when the modal opens or props change
   useEffect(() => {
     if (visible) {
       setTitle(initialTitle);
@@ -62,11 +64,13 @@ export default function CreatePortfolioModal({
     }
   };
 
+  // Strip commas + validate cash within [minCash, maxCash]; title must be non-empty
   const parsedCash = parseFloat(cashInput.replace(/,/g, ''));
   const isCashValid = !isNaN(parsedCash) && parsedCash >= minCash && parsedCash <= maxCash;
   const isTitleValid = title.trim().length > 0;
   const isSubmitDisabled = !isTitleValid || !isCashValid;
 
+  // Submit only when valid
   const handleSubmit = () => {
     if (isSubmitDisabled) return;
     onSubmit?.({
@@ -106,6 +110,7 @@ export default function CreatePortfolioModal({
             },
           ]}
         >
+          {/* Dialog title */}
           <AppText bold style={styles.modalTitle}>
             Create New Portfolio
           </AppText>
@@ -224,6 +229,7 @@ export default function CreatePortfolioModal({
   );
 }
 
+// Modal layout styles
 const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,

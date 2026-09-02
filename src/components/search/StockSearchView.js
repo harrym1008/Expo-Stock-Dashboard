@@ -54,6 +54,7 @@ const DEFAULT_TOP_TICKERS = [...ALL_STOCK_TICKERS]
   .sort((a, b) => b.marketCap - a.marketCap)
   .slice(0, 25);
 
+// Search screen: local ticker list + debounced Finnhub remote search
 export default function StockSearchView({
   onSelectStock,
   autoFocus = false,
@@ -327,6 +328,7 @@ export default function StockSearchView({
   );
 }
 
+// Search bar, section headers, list + loading/empty states
 const styles = StyleSheet.create({
   searchBarContainer: {
     flexDirection: 'row',

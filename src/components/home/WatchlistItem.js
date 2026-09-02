@@ -14,9 +14,11 @@ import Sparkline from './Sparkline';
 import CompanyLogo from '../common/CompanyLogo';
 import { getCurrency, getDecimals } from '../../utils/securityUtils';
 
+// Animated watchlist row: logo/info, sparkline, price + % change
 function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
   const { theme } = useTheme();
 
+  // Green/red based on up/down percent
   const isPositive = (item?.changePercent ?? 0) >= 0;
   const trendColor = isPositive ? '#00D084' : '#FF4D4F';
 
@@ -26,6 +28,7 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
     }
   };
 
+  // Derive display + currency/decimal fields with safe fallbacks
   const displaySymbol = item?.displaySymbol || item?.symbol || '';
   const displayName = item?.displayName || item?.name || displaySymbol;
   const curSymbol = item?.currency !== undefined ? item.currency : getCurrency(item?.symbol, '$');
@@ -111,6 +114,7 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
   );
 }
 
+// Memo comparison: skip re-render unless item identity or key fields change
 function areEqual(prevProps, nextProps) {
   if (prevProps.isEditMode !== nextProps.isEditMode) return false;
   if (prevProps.onPress !== nextProps.onPress) return false;
@@ -137,6 +141,7 @@ function areEqual(prevProps, nextProps) {
 
 export default React.memo(WatchlistItem, areEqual);
 
+// Row layout: drag handle, left section, chart, right price block
 const styles = StyleSheet.create({
   dragHandle: {
     paddingRight: spacing.sm,

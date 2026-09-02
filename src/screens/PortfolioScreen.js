@@ -36,6 +36,7 @@ export default function PortfolioScreen() {
     deletePortfolio,
     reorderPortfolios,
   } = usePortfolio();
+  const { isPaperTradingEnabled } = useTrading();
 
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedStock, setSelectedStock] = useState(null);
@@ -141,7 +142,7 @@ export default function PortfolioScreen() {
     activePortfolio?.positions,
   ]);
 
-  // 1. Live Position Valuations & Returns (unified with formatStockQuote & StockDetailModal)
+  // Compute live value/return for each position
   const positionsWithLiveMetrics = useMemo(() => {
     if (!activePortfolio || !Array.isArray(activePortfolio.positions)) return [];
     return activePortfolio.positions.map((pos) => {
@@ -175,7 +176,7 @@ export default function PortfolioScreen() {
     });
   }, [activePortfolio, quotes, profiles, marketStatus]);
 
-  // 2. Real-time Total Portfolio Value & Overall Returns
+  // Sum positions + cash for total value; compute return since starting cash
   const portfolioMetrics = useMemo(() => {
     const cash = activePortfolio?.cash || 0;
     const startingCash = activePortfolio?.startingCash || cash || 10000;
@@ -196,6 +197,7 @@ export default function PortfolioScreen() {
     };
   }, [activePortfolio, positionsWithLiveMetrics]);
 
+  // Prefer the live-formatted position; fall back to formatting the raw selected stock
   const modalStock = useMemo(() => {
     if (!selectedStock) return null;
     const sym = selectedStock.symbol?.toUpperCase();
@@ -214,6 +216,7 @@ export default function PortfolioScreen() {
     );
   }, [selectedStock, positionsWithLiveMetrics, quotes, profiles, marketStatus]);
 
+  // Green when the portfolio is up since start
   const isStartPos = portfolioMetrics.sinceStartChangePercent >= 0;
 
   return (
@@ -394,6 +397,7 @@ export default function PortfolioScreen() {
   );
 }
 
+// Portfolio screen layout: empty state, value rows, positions list
 const styles = StyleSheet.create({
   emptyContainer: {
     flex: 1,

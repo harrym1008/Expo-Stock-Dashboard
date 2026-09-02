@@ -23,6 +23,7 @@ import { spacing, borderRadius } from '../../constants/theme';
 import { modalStyles } from '../../styles';
 import AppText from './AppText';
 
+// Slide-up settings sheet: theme toggle, paper trading, API key, cache mgmt
 export default function SettingsModal({ visible, onClose }) {
   const { theme, isDark, toggleTheme } = useTheme();
   const { apiKey, updateApiKey } = useMarketData();
@@ -32,10 +33,12 @@ export default function SettingsModal({ visible, onClose }) {
   const [showKey, setShowKey] = useState(false);
   const [cacheStats, setCacheStats] = useState({ totalMB: '0.00', itemCount: 0 });
 
+  // Pull current cache usage stats
   const loadStats = () => {
     storageService.getCacheStats().then(setCacheStats);
   };
 
+  // Reset fields + load stats when the modal opens or key changes
   useEffect(() => {
     if (visible) {
       setInputKey(apiKey || '');
@@ -44,6 +47,7 @@ export default function SettingsModal({ visible, onClose }) {
     }
   }, [visible, apiKey]);
 
+  // Save the API key (trims); show a transient "saved" state
   const handleSaveKey = async () => {
     await updateApiKey(inputKey.trim());
     setIsSaved(true);
@@ -253,6 +257,7 @@ export default function SettingsModal({ visible, onClose }) {
   );
 }
 
+// Settings sheet layout styles
 const styles = StyleSheet.create({
   title: {
     fontSize: 20,

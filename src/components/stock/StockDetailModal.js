@@ -41,16 +41,20 @@ import AddToWatchlistModal from './AddToWatchlistModal';
 import StockOrderModal from './StockOrderModal';
 import NewsCard from '../common/NewsCard';
 
+// Timeframe options shown as pills
 const TIMEFRAMES = ['1H', '1D', '1W', '3M', '1Y', '5Y', 'ALL'];
 
+// In-memory cache of each symbol's last-selected timeframe
 const memoryStockTimeframes = {};
 
+// Hydrate the timeframe cache from persisted storage
 storageService.getStockTimeframes().then((saved) => {
   if (saved && typeof saved === 'object') {
     Object.assign(memoryStockTimeframes, saved);
   }
 });
 
+// Position of current price within [low, high] as 0-100%
 function getRangePosition(current, low, high) {
   if (
     typeof current !== 'number' ||
@@ -101,6 +105,7 @@ const LastUpdatedFreshness = React.memo(function LastUpdatedFreshness({ timestam
   );
 });
 
+// Full stock detail sheet: header, chart, timeframe, stats, about, news, paper trade
 function StockDetailModal({ visible, stock, onClose }) {
   const { theme, isDark } = useTheme();
   const {
@@ -134,6 +139,7 @@ function StockDetailModal({ visible, stock, onClose }) {
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
+  // Uppercased display symbol + non-stock classification (category/flags)
   const cleanSymbol = stock?.symbol ? getDisplaySymbol(stock.symbol) : '';
   const isNonStock = Boolean(
     (stock?.symbol && (isNonStockSecurity(stock.symbol) || isNonStockSecurity(cleanSymbol))) ||
@@ -147,6 +153,7 @@ function StockDetailModal({ visible, stock, onClose }) {
   const isStock = !isNonStock && stock?.isStock !== false;
   const isStockPaperTradingAllowed = isPaperTradingEnabled && isStock;
 
+  // Non-stocks always show as "Market Open"
   const effectiveMarketStatus = useMemo(() => {
     if (isNonStock) {
       return {
@@ -196,6 +203,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     }
   }, [visible, cleanSymbol, fetchQuote]);
 
+  // Switch timeframe; persist choice to storage (skips if unchanged)
   const handleSelectTimeframe = (tf) => {
     if (tf === selectedTimeframe) return;
     setIsTimeframeLoading(true);
@@ -318,6 +326,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     };
   }, [visible, stock?.symbol, apiKey, marketStatus.session, fetchProfile, fetchStockMetrics, fetchCompanyDescription, fetchCompanyNews]);
 
+  // Timeframes disabled when the stock is too young to have that much history
   const isTimeframeDisabled = useMemo(() => {
     const firstTrade = chartData?.firstTradeDate || null;
     if (!firstTrade) return () => false;
@@ -334,6 +343,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     };
   }, [chartData?.firstTradeDate]);
 
+  // Auto-escalate to ALL if the active timeframe is unavailable for this stock
   useEffect(() => {
     if (isTimeframeDisabled(selectedTimeframe)) {
       handleSelectTimeframe('ALL');
@@ -342,10 +352,12 @@ function StockDetailModal({ visible, stock, onClose }) {
 
   const isPos = (n) => typeof n === 'number' && !isNaN(n) && n > 0;
 
+  // Timeframe to display (chart-provided, else selected) + resolved live quote
   const activeDisplayedTimeframe = chartData?.timeframe || selectedTimeframe;
   const liveQuote = cleanSymbol ? (quotes[cleanSymbol] || quotes[stock?.symbol] || {}) : {};
   const liveWsPrice = isPos(liveQuote?.price) ? liveQuote.price : (isPos(stock?.price) ? stock.price : null);
 
+  // Track latest live price for extended-session display
   if (liveWsPrice) {
     latestExtendedPriceRef.current = liveWsPrice;
   }
@@ -382,13 +394,16 @@ function StockDetailModal({ visible, stock, onClose }) {
     targetStockExtPrice ??
     regularClosePrice;
 
+  // Currency + decimals for the security
   const curSymbol = stock?.currency !== undefined ? stock.currency : getCurrency(cleanSymbol, '$');
   const decimals = getDecimals(cleanSymbol, leftPrice, stock?.decimals);
   const secMetadata = getSecurityBySymbol(cleanSymbol);
 
   const profileData = cleanSymbol ? profiles[cleanSymbol] : null;
+  // Company name from stock, symbol metadata, or fetched profile
   const companyName = stock?.displayName || getDisplayName(cleanSymbol) || profileData?.name || stock?.name || cleanSymbol;
 
+  // Normalized stock object for the chart section (symbol/currency/decimals resolved)
   const chartSectionStock = useMemo(() => ({
     ...stock,
     symbol: cleanSymbol,
@@ -398,11 +413,13 @@ function StockDetailModal({ visible, stock, onClose }) {
     isNonStock,
   }), [stock, cleanSymbol, curSymbol, decimals, isStock, isNonStock]);
 
+  // Current price + day range bar inputs
   const currentStatPrice = leftPrice;
   const dayLow = chartData?.regularMarketDayLow ?? (chartData?.timeframe === '1D' ? chartData?.minPrice : null) ?? stock?.low ?? null;
   const dayHigh = chartData?.regularMarketDayHigh ?? (chartData?.timeframe === '1D' ? chartData?.maxPrice : null) ?? stock?.high ?? null;
   const dayRangePos = getRangePosition(currentStatPrice, dayLow, dayHigh);
 
+  // 52-week range bar inputs (metrics with either naming convention)
   const fiftyTwoLow = metrics?.['52WeekLow'] ?? metrics?.fiftyTwoWeekLow ?? chartData?.fiftyTwoWeekLow ?? null;
   const fiftyTwoHigh = metrics?.['52WeekHigh'] ?? metrics?.fiftyTwoWeekHigh ?? chartData?.fiftyTwoWeekHigh ?? null;
   const fiftyTwoRangePos = getRangePosition(currentStatPrice, fiftyTwoLow, fiftyTwoHigh);
@@ -478,6 +495,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     ],
   ];
 
+  // Extracted company profile fields
   const businessSummary = companyDesc?.description || '';
   const sector = companyDesc?.sector || null;
   const industry = companyDesc?.industry || profileData?.industry || null;
@@ -485,6 +503,7 @@ function StockDetailModal({ visible, stock, onClose }) {
   const country = companyDesc?.country || profileData?.country || null;
   const websiteUrl = companyDesc?.website || profileData?.weburl || null;
 
+  // Filtered company info tags (drops falsy entries)
   const companyTags = [
     sector && { label: 'Sector', value: sector },
     industry && { label: 'Industry', value: industry },
@@ -492,6 +511,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     companyDesc?.employees && { label: 'Employees', value: companyDesc.employees.toLocaleString() },
   ].filter(Boolean);
 
+  // Paper-trading position summary: shares, avg cost, value, gain/loss %
   const positionInfo = useMemo(() => {
     if (!isStockPaperTradingAllowed || !cleanSymbol) return null;
     const pos = getPosition(activePortfolioId, cleanSymbol);
@@ -951,6 +971,7 @@ function StockDetailModal({ visible, stock, onClose }) {
   );
 }
 
+// Detail modal layout: header, sections, cards, stats grid, footer
 const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.lg,

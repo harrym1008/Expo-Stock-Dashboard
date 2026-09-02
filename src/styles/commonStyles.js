@@ -1,58 +1,25 @@
 import { StyleSheet } from 'react-native';
 import { spacing, borderRadius } from '../constants/theme';
 
-/**
- * Common layout and alignment styles reused across screens and components.
- */
+// Reusable layout primitives (flex/alignment) shared by many components
 export const layoutStyles = StyleSheet.create({
-  flex1: {
-    flex: 1,
-  },
-  center: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  rowBetween: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  rowCenter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  flex1: { flex: 1 },
+  center: { alignItems: 'center', justifyContent: 'center' },
 });
 
-/**
- * Common bottom-sheet modal structure styles reused across slide-up sheet modals.
- */
+// Slide-up bottom sheet layout: dim backdrop, rounded sheet body, header/content
 export const modalStyles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-  },
-  modalOverlayLight: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-  },
-  topBackdropGap: {
-    height: 66,
-    width: '100%',
-  },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.55)' },
+  modalOverlayLight: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.45)' },
+  // Spacer at top so sheet slides under the app header
+  topBackdropGap: { height: 66, width: '100%' },
   sheetContainer: {
     flex: 1,
     borderTopLeftRadius: borderRadius.md + 6,
     borderTopRightRadius: borderRadius.md + 6,
     overflow: 'hidden',
   },
-  safeArea: {
-    flex: 1,
-  },
+  safeArea: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -61,11 +28,7 @@ export const modalStyles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
   },
-  closeBtn: {
-    padding: spacing.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  closeBtn: { padding: spacing.xs, alignItems: 'center', justifyContent: 'center' },
   content: {
     paddingTop: spacing.lg,
     paddingHorizontal: spacing.lg,
@@ -78,9 +41,7 @@ export const modalStyles = StyleSheet.create({
   },
 });
 
-/**
- * Common dialog modal card styles (e.g. TextInputModal, alert dialogs).
- */
+// Centered dialog card (TextInputModal, CreatePortfolioModal, alerts)
 export const dialogStyles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -123,17 +84,11 @@ export const dialogStyles = StyleSheet.create({
     justifyContent: 'center',
     minWidth: 84,
   },
-  buttonText: {
-    fontSize: 14,
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-  },
+  buttonText: { fontSize: 14 },
+  submitButtonText: { color: '#FFFFFF' },
 });
 
-/**
- * Common stock list item styles reused across WatchlistItem, SearchResultItem, etc.
- */
+// Row layout for stock list items (WatchlistItem, SearchResultItem)
 export const stockItemStyles = StyleSheet.create({
   itemContainer: {
     flexDirection: 'row',
@@ -142,26 +97,13 @@ export const stockItemStyles = StyleSheet.create({
     paddingVertical: spacing.md,
     minHeight: 64,
   },
-  symbolText: {
-    fontSize: 16,
-    letterSpacing: 0.2,
-  },
-  nameText: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  priceText: {
-    fontSize: 17,
-    letterSpacing: 0.2,
-  },
-  changeText: {
-    fontSize: 12,
-  },
+  symbolText: { fontSize: 16, letterSpacing: 0.2 },
+  nameText: { fontSize: 12, marginTop: 2 },
+  priceText: { fontSize: 17, letterSpacing: 0.2 },
+  changeText: { fontSize: 12 },
 });
 
-/**
- * Common empty state presentation styles.
- */
+// Centered empty-state layout (icon + title + subtitle)
 export const emptyStateStyles = StyleSheet.create({
   container: {
     paddingVertical: spacing.xxl,
@@ -169,9 +111,7 @@ export const emptyStateStyles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
   },
-  text: {
-    fontSize: 14,
-  },
+  text: { fontSize: 14 },
   iconContainer: {
     width: 64,
     height: 64,
@@ -192,13 +132,9 @@ export const emptyStateStyles = StyleSheet.create({
   },
 });
 
-/**
- * Common news list and card styles reused across NewsScreen and StockDetailModal.
- */
+// News list + card layout (NewsScreen, StockDetailModal)
 export const newsStyles = StyleSheet.create({
-  newsList: {
-    gap: spacing.sm + 2,
-  },
+  newsList: { gap: spacing.sm + 2 },
   newsCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -207,33 +143,18 @@ export const newsStyles = StyleSheet.create({
     borderWidth: 1,
     gap: spacing.md,
   },
-  newsContent: {
-    flex: 1,
-  },
+  newsContent: { flex: 1 },
   newsMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     marginBottom: 4,
   },
-  newsSource: {
-    fontSize: 11,
-  },
-  newsDot: {
-    fontSize: 11,
-  },
-  newsTime: {
-    fontSize: 11,
-  },
-  newsHeadline: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  newsSummary: {
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: 4,
-  },
+  newsSource: { fontSize: 11 },
+  newsDot: { fontSize: 11 },
+  newsTime: { fontSize: 11 },
+  newsHeadline: { fontSize: 13, lineHeight: 18 },
+  newsSummary: { fontSize: 12, lineHeight: 16, marginTop: 4 },
   newsThumbnail: {
     width: 68,
     height: 54,

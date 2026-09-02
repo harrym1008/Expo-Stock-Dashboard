@@ -28,6 +28,7 @@ import AppText from './AppText';
  * @param {(text: string) => void} props.onSubmit - Callback when submit is pressed with trimmed text
  * @param {() => void} props.onCancel - Callback when cancel or overlay is pressed
  */
+// Reusable centered modal for create/rename naming (trims input, disables empty submit)
 export default function TextInputModal({
   visible = false,
   title = '',
@@ -49,6 +50,7 @@ export default function TextInputModal({
     }
   }, [visible, initialValue]);
 
+  // Submit only if non-empty
   const handleSubmit = () => {
     const trimmed = text.trim();
     if (trimmed.length === 0) return;
@@ -168,6 +170,7 @@ export default function TextInputModal({
   );
 }
 
+// Modal title spacing
 const styles = StyleSheet.create({
   title: {
     fontSize: 18,

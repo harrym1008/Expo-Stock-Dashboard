@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
 const PROFILE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const storageService = {
+  // Return stored API key, falling back to env var
   async getApiKey() {
     try {
       const storedKey = await AsyncStorage.getItem(STORAGE_KEYS.FINNHUB_API_KEY);
@@ -27,6 +28,7 @@ export const storageService = {
     }
   },
 
+  // Persist API key (removes entry when blank)
   async setApiKey(key) {
     try {
       if (key && key.trim()) {
@@ -41,11 +43,13 @@ export const storageService = {
 
   // --- 50MB Persistent LRU Cache Integration ---
 
+  // Fetch cached profile (JSON) from LRU cache
   async getCachedProfile(symbol) {
     if (!symbol) return null;
     return await persistentLruCache.getJson(`profile_${symbol.toUpperCase()}`);
   },
 
+  // Cache profile JSON with 30-day TTL
   async setCachedProfile(symbol, profile) {
     if (!symbol || !profile) return;
     await persistentLruCache.setJson(`profile_${symbol.toUpperCase()}`, profile, PROFILE_TTL_MS);
@@ -61,6 +65,7 @@ export const storageService = {
 
   // --- Watchlists Persistence ---
 
+  // Load watchlists array (null on missing/corrupt)
   async getStoredWatchlists() {
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEYS.WATCHLISTS);
@@ -70,6 +75,7 @@ export const storageService = {
     }
   },
 
+  // Persist watchlists array
   async setStoredWatchlists(watchlists) {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.WATCHLISTS, JSON.stringify(watchlists));
@@ -80,6 +86,7 @@ export const storageService = {
 
   // --- Portfolios Persistence ---
 
+  // Load portfolios array (null on missing/corrupt)
   async getStoredPortfolios() {
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEYS.PORTFOLIOS);
@@ -89,6 +96,7 @@ export const storageService = {
     }
   },
 
+  // Persist portfolios array
   async setStoredPortfolios(portfolios) {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.PORTFOLIOS, JSON.stringify(portfolios));
@@ -97,6 +105,7 @@ export const storageService = {
     }
   },
 
+  // Load active portfolio id (lenient parse, tolerant of bad JSON)
   async getStoredActivePortfolioId() {
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEYS.ACTIVE_PORTFOLIO_ID);
@@ -111,6 +120,7 @@ export const storageService = {
     }
   },
 
+  // Save (or clear) active portfolio id
   async setStoredActivePortfolioId(id) {
     try {
       if (id) {
@@ -125,6 +135,7 @@ export const storageService = {
 
   // --- Per-Stock Timeframe Memory ---
 
+  // Load per-stock timeframe map (empty on missing/corrupt)
   async getStockTimeframes() {
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEYS.STOCK_TIMEFRAMES);
@@ -134,6 +145,7 @@ export const storageService = {
     }
   },
 
+  // Remember a stock's last-selected timeframe (keyed by symbol)
   async setStockTimeframe(symbol, timeframe) {
     if (!symbol || !timeframe) return;
     try {
@@ -147,6 +159,7 @@ export const storageService = {
 
   // --- Simulated Paper Trading ---
 
+  // Load paper-trading flag (default false)
   async getPaperTradingEnabled() {
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEYS.PAPER_TRADING_ENABLED);
@@ -156,6 +169,7 @@ export const storageService = {
     }
   },
 
+  // Persist paper-trading flag (coerced to boolean)
   async setPaperTradingEnabled(enabled) {
     try {
       await AsyncStorage.setItem(

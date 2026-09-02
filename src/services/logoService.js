@@ -9,20 +9,24 @@ class LogoService {
     this.listeners = new Map();
   }
 
+  // Fallback placeholder image URL for unknown/missing symbols
   getPlaceholderUri(symbol) {
     const cleanSym = (symbol || 'ST').trim().toUpperCase();
-    return `https://placehold.co/128x128/FFFFFF/000000.png?text=${encodeURIComponent(cleanSym)}`;
+    return `https://placehold.co/128x128/555/FFF.png?text=${encodeURIComponent(cleanSym)}`;
   }
 
+  // Static Finnhub CDN URL for a symbol
   getStaticUrl(symbol) {
     return `${STATIC_LOGO_BASE}/${symbol.trim().toUpperCase()}.png`;
   }
 
+  // Read logo from the in-memory (RAM) cache only
   getCachedLogo(symbol) {
     if (!symbol) return null;
     return this.memoryCache.get(symbol.trim().toUpperCase()) || null;
   }
 
+  // Register a per-symbol callback; returns an unsubscribe function
   subscribe(symbol, callback) {
     if (!symbol || typeof callback !== 'function') return () => {};
     const sym = symbol.trim().toUpperCase();
@@ -41,6 +45,7 @@ class LogoService {
     };
   }
 
+  // Push a freshly-fetched logo to all subscribers for a symbol
   notify(symbol, uri) {
     const sym = (symbol || '').trim().toUpperCase();
     const callbacks = this.listeners.get(sym);
@@ -139,6 +144,7 @@ class LogoService {
     return null;
   }
 
+  // Kick off logo fetch for a batch (skips cached/in-flight symbols)
   preloadLogos(symbols = []) {
     if (!Array.isArray(symbols) || symbols.length === 0) return;
     for (const item of symbols) {
