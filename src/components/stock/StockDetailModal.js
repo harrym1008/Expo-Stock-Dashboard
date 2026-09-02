@@ -8,7 +8,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { useTrading } from '../../context/TradingContext';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { spacing, borderRadius } from '../../constants/theme';
-import { formatTimeAgo, formatLargeNum, formatStatPrice, formatShares, formatMoney } from '../../utils/formatters';
+import { formatTimeAgo, formatLargeNum, formatShares, formatMoney } from '../../utils/formatters';
 import { getSecurityBySymbol, getDisplaySymbol, getDisplayName, getCurrency, getDecimals, isNonStockSecurity } from '../../utils/securityUtils';
 import { storageService } from '../../services/storageService';
 import { useWatchlist } from '../../context/WatchlistContext';
@@ -53,9 +53,9 @@ function RangeBar({ label, low, high, position, isDark, theme, curSymbol, decima
       <View style={styles.rangeLabelRow}>
         <AppText style={[styles.rangeSubtitle, { color: theme.textSecondary }]}>{label}</AppText>
         <View style={styles.rangeValuesRow}>
-          <AppText bold style={styles.rangeValueText}>{formatStatPrice(low, curSymbol, decimals, symbol)}</AppText>
+          <AppText bold style={styles.rangeValueText}>{formatMoney(low, curSymbol, decimals, symbol)}</AppText>
           <AppText style={[styles.rangeValueSeparator, { color: theme.textMuted }]}>-</AppText>
-          <AppText bold style={styles.rangeValueText}>{formatStatPrice(high, curSymbol, decimals, symbol)}</AppText>
+          <AppText bold style={styles.rangeValueText}>{formatMoney(high, curSymbol, decimals, symbol)}</AppText>
         </View>
       </View>
       <View style={[styles.rangeTrack, { backgroundColor: isDark ? '#1E2532' : '#E4E7EC' }]}>
@@ -418,7 +418,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     (chartData?.previousClose > 0 ? chartData.previousClose : null) ??
     (stock?.previousClose > 0 ? stock.previousClose : null);
   const prevCloseStr = prevCloseVal > 0
-    ? formatStatPrice(prevCloseVal, curSymbol, decimals, cleanSymbol)
+    ? formatMoney(prevCloseVal, curSymbol, decimals, cleanSymbol)
     : '-';
 
   const marketCapVal = metrics?.marketCapitalization ?? profileData?.marketCap ?? stock?.marketCap;
@@ -445,7 +445,7 @@ function StockDetailModal({ visible, stock, onClose }) {
 
   const epsTTM = metrics?.epsTTM ?? companyDesc?.eps;
   const trailingEpsStr = typeof epsTTM === 'number'
-    ? formatStatPrice(epsTTM, curSymbol, decimals, cleanSymbol)
+    ? formatMoney(epsTTM, curSymbol, decimals, cleanSymbol)
     : '-';
 
   const marginTTM = metrics?.netProfitMarginTTM ?? companyDesc?.profitMargin;

@@ -1,24 +1,10 @@
 import { getHolidayScheduleForDate } from './marketHolidays';
 
-/**
- * Determines current US Market Session and Status in US Eastern Time (New York)
- * evaluated down to the EXACT SECOND, powered by Finnhub market-holiday dataset & API.
- *
- * Rules:
- * - Empty tradingHour: Fully closed (no pre-market, regular, or post-market).
- * - Populated tradingHour (e.g. 09:30-13:00):
- *     - Pre-market exists: 04:00:00 to tradingHour.start
- *     - Regular market: tradingHour.start to tradingHour.end
- *     - Post-market: tradingHour.end to postMarket.end (or 20:00:00)
- * - Standard weekday:
- *     - 04:00:00 - 09:30:00 ET: Pre-Market (Orange #FF9500)
- *     - 09:30:00 - 16:00:00 ET: Market Open (Green #00D084)
- *     - 16:00:00 - 20:00:00 ET: After-Hours (Purple #D946EF)
- *     - 20:00:00 - 04:00:00 ET & Weekends: Market Closed (Grey #8E8E93)
- */
-// NY-tz formatter built once at module load (getMarketSessionStatus runs every 1s)
-const NY_FORMATTER = new Intl.DateTimeFormat('en-US', {
+
+// NY-timezone formatter built once at module load
+const NY_TZ_FORMATTER = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/New_York',
+  hourCycle: 'h23',
   hour12: false,
   year: 'numeric',
   month: '2-digit',
@@ -29,37 +15,30 @@ const NY_FORMATTER = new Intl.DateTimeFormat('en-US', {
   second: 'numeric',
 });
 
-// Current US market session, evaluated to the exact second in NY time
+// Returns the current market session give a Date object (defaults to now)
 export function getMarketSessionStatus(date = new Date()) {
-  const parts = NY_FORMATTER.formatToParts(date);
-  // Defaults avoid crashes if a field is missing
-  let year = date.getFullYear();
-  let month = '01';
-  let day = '01';
-  let weekday = 'Mon';
-  let hour = 12;
-  let minute = 0;
-  let second = 0;
+  const parts = NY_TZ_FORMATTER.formatToParts(date).reduce((acc, { type, value }) => {
+    acc[type] = value;
+    return acc;
+  }, {});
 
-  // Pull each field out of the formatted parts
-  for (const part of parts) {
-    if (part.type === 'year') year = parseInt(part.value, 10);
-    if (part.type === 'month') month = part.value;
-    if (part.type === 'day') day = part.value;
-    if (part.type === 'weekday') weekday = part.value;
-    if (part.type === 'hour') hour = parseInt(part.value, 10);
-    if (part.type === 'minute') minute = parseInt(part.value, 10);
-    if (part.type === 'second') second = parseInt(part.value, 10);
-  }
+  const year = parseInt(parts.year, 10);
+  const month = parseInt(parts.month, 10);
+  const day = parseInt(parts.day, 10);
+  const weekday = parts.weekday; // e.g., 'Mon'
+  let hour = parseInt(parts.hour, 10);
+  const minute = parseInt(parts.minute, 10);
+  const second = parseInt(parts.second, 10);
 
   if (hour === 24) hour = 0;
 
   const dateKey = `${year}-${month}-${day}`;
   const isWeekend = weekday === 'Sat' || weekday === 'Sun';
+
   // Total seconds since midnight, for simple numeric range compares
   const totalSeconds = hour * 3600 + minute * 60 + second;
 
-  // 1. Weekend -> fully closed
+  // Weekend? Fully closed
   if (isWeekend) {
     return {
       session: 'CLOSED',
@@ -73,11 +52,11 @@ export function getMarketSessionStatus(date = new Date()) {
     };
   }
 
-  // 2. Holiday from Finnhub dataset (may be fully closed or early-close)
+  // Holiday? Check for special hours or full closure
   const holiday = getHolidayScheduleForDate(dateKey);
 
   if (holiday) {
-    // Empty tradingHour => exchange shut for the whole day
+    // Empty tradingHour = exchange is shut for the whole day
     if (holiday.isFullyClosed) {
       return {
         session: 'CLOSED',
@@ -91,11 +70,11 @@ export function getMarketSessionStatus(date = new Date()) {
       };
     }
 
-    // Holiday hour boundaries (fall back to normal times if a field is absent)
-    const preStart = 4 * 3600; // 04:00:00
+    // If we are here, the holiday has special hours
+    const preStart = 4 * 3600; // Always 04:00:00
     const regStart = holiday.regularHours?.start ?? 9 * 3600 + 1800; // 09:30:00
-    const regEnd = holiday.regularHours?.end ?? 13 * 3600;           // e.g. 13:00:00 (early close)
-    const postEnd = holiday.postMarketHours?.end ?? 20 * 3600;
+    const regEnd = holiday.regularHours?.end ?? 16 * 3600;           // 16:00:00
+    const postEnd = holiday.postMarketHours?.end ?? 20 * 3600;       // 20:00:00
 
     // Pre-Market window on an early-close day
     if (totalSeconds >= preStart && totalSeconds < regStart) {
@@ -152,14 +131,14 @@ export function getMarketSessionStatus(date = new Date()) {
     };
   }
 
-  // 3. Normal weekday schedule (no holiday)
-  const stdPreStart = 4 * 3600;        // 04:00:00
-  const stdRegStart = 9 * 3600 + 1800; // 09:30:00
-  const stdRegEnd = 16 * 3600;         // 16:00:00
-  const stdPostEnd = 20 * 3600;        // 20:00:00
+  // Otherwise, it's a normal trading day
+  const normalPreStart = 4 * 3600;        // 04:00:00
+  const normalRegStart = 9 * 3600 + 1800; // 09:30:00
+  const normalRegEnd = 16 * 3600;         // 16:00:00
+  const normalPostEnd = 20 * 3600;        // 20:00:00
 
   // Pre-Market: 04:00 - 09:30
-  if (totalSeconds >= stdPreStart && totalSeconds < stdRegStart) {
+  if (totalSeconds >= normalPreStart && totalSeconds < normalRegStart) {
     return {
       session: 'PRE_MARKET',
       label: 'Pre-Market',
@@ -173,7 +152,7 @@ export function getMarketSessionStatus(date = new Date()) {
   }
 
   // Regular session: 09:30 - 16:00
-  if (totalSeconds >= stdRegStart && totalSeconds < stdRegEnd) {
+  if (totalSeconds >= normalRegStart && totalSeconds < normalRegEnd) {
     return {
       session: 'OPEN',
       label: 'Market Open',
@@ -187,7 +166,7 @@ export function getMarketSessionStatus(date = new Date()) {
   }
 
   // After-hours: 16:00 - 20:00
-  if (totalSeconds >= stdRegEnd && totalSeconds < stdPostEnd) {
+  if (totalSeconds >= normalRegEnd && totalSeconds < normalPostEnd) {
     return {
       session: 'AFTER_HOURS',
       label: 'After-Hours',

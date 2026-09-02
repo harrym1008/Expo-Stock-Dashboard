@@ -1,49 +1,28 @@
-/**
- * Adaptive sliding window async queue rate limiter supporting:
- * - Immediate processing for low traffic (0 extra latency for isolated requests)
- * - Proportional backlog pacing (gradually slows down dispatch speed as queue depth builds up)
- * - Per-second and per-minute sliding window constraints
- * - Adaptive ease-off and exponential backoff when HTTP 429 Too Many Requests responses are encountered
- * - Queue freeze during cooldown and throttled pacing during recovery
- */
-// Async queue rate limiter w/ sliding windows + 429 backoff (see file-header JSDoc)
+// Async queue rate limiter with linear 429 backoff
 export class RateLimiter {
   constructor({
     maxPerSecond,
     maxPerMinute,
     backlogDelayPerItem = 50,
     maxBacklogDelay = 1000,
-    baseBackoffMs = 2000,
-    maxBackoffMs = 30000,
-    easeOffThrottleRatio = 0.35,
-    easeOffMinSpacingMs = 150,
-    recoverySuccessThreshold = 5,
   }) {
     this.maxPerSecond = maxPerSecond;
     this.maxPerMinute = maxPerMinute;
     this.backlogDelayPerItem = backlogDelayPerItem;
     this.maxBacklogDelay = maxBacklogDelay;
-    this.baseBackoffMs = baseBackoffMs;
-    this.maxBackoffMs = maxBackoffMs;
-    this.easeOffThrottleRatio = easeOffThrottleRatio;
-    this.easeOffMinSpacingMs = easeOffMinSpacingMs;
-    this.recoverySuccessThreshold = recoverySuccessThreshold;
 
-    // Pending jobs + sliding-window timestamps (per-second + per-minute)
+    // Pending jobs and sliding-window timestamps
     this.queue = [];
     this.secondTimestamps = [];
     this.minuteTimestamps = [];
     this.processing = false;
 
-    // 429 cooldown/ease-off tracking
+    // A successful response resets the next 429 to a 5-second cooldown
     this.cooldownUntil = 0;
     this.consecutive429Count = 0;
-    this.last429Timestamp = 0;
-    this.isEasedOff = false;
-    this.successCountSince429 = 0;
   }
 
-  // Queue a job; resolves when it actually runs (after any pacing/waiting)
+  // Queues a job... resolves when it actually runs
   async schedule(fn) {
     return new Promise((resolve, reject) => {
       this.queue.push({ fn, resolve, reject });
@@ -51,90 +30,45 @@ export class RateLimiter {
     });
   }
 
-  /**
-   * Report an HTTP 429 (Too Many Requests).
-   * Freezes queue dispatch, calculates exponential/header backoff, and enters ease-off mode.
-   * Debounces near-simultaneous 429 bursts (< 2s) so parallel in-flight requests don't cascade backoff tiers.
-   * @param {number|null} retryAfterSeconds Optional retry-after duration from response header
-   * @returns {number} Backoff delay in milliseconds
-   */
-  // Mark a 429: compute backoff, enter cooldown + ease-off mode (debounced)
-  handle429(retryAfterSeconds = null) {
-    const now = Date.now();
-
-    // Only count a new strike if the last 429 was >2s ago (avoids cascade)
-    if (now - this.last429Timestamp > 2000) {
-      this.consecutive429Count++;
-    }
-    this.last429Timestamp = now;
-
-    let backoffMs;
-    if (typeof retryAfterSeconds === 'number' && retryAfterSeconds > 0) {
-      backoffMs = Math.max(retryAfterSeconds * 1000, 1000);
-    } else {
-      // Exponential backoff: base * 2^(strike-1) + jitter (0-500ms), capped
-      const exponent = Math.max(0, this.consecutive429Count - 1);
-      const rawBackoff = this.baseBackoffMs * Math.pow(2, exponent);
-      const jitter = Math.floor(Math.random() * 500);
-      backoffMs = Math.min(this.maxBackoffMs, rawBackoff + jitter);
-    }
-
-    this.cooldownUntil = Math.max(this.cooldownUntil, now + backoffMs);
-    this.isEasedOff = true;
-    this.successCountSince429 = 0;
-
-    console.warn(
-      `[RateLimiter] ⚠️ 429 Too Many Requests detected! Easing off for ${Math.round(backoffMs)}ms (strike ${this.consecutive429Count}, queue depth: ${this.queue.length}).`
-    );
-
+  // Marks a 429 and pauses new dispatches for 5s per consecutive response
+  handle429(_retryAfterSeconds = null) {
+    this.consecutive429Count += 1;
+    const backoffMs = this.consecutive429Count * 5000;
+    this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + backoffMs);
     return backoffMs;
   }
 
-  // Count a 200; clear ease-off once enough consecutive successes accrue
+  // Marks a successful response and resets the 429 backoff
   notifySuccess() {
-    if (!this.isEasedOff && this.consecutive429Count === 0) return;
-
-    this.successCountSince429++;
-    if (this.successCountSince429 >= this.recoverySuccessThreshold) {
-      this.isEasedOff = false;
-      this.consecutive429Count = 0;
-      this.successCountSince429 = 0;
-      console.log(`[RateLimiter] ✅ Rate limit ease-off recovered. Resumed normal operational limits.`);
-    }
+    this.consecutive429Count = 0;
   }
 
   // Drain the queue respecting per-second/per-minute windows + cooldowns
   async processQueue() {
     if (this.processing || this.queue.length === 0) return;
     this.processing = true;
+
     // Yield so a synchronous batch of schedule() calls all queue first
     await Promise.resolve();
 
     while (this.queue.length > 0) {
       const now = Date.now();
 
-      // 1. If in active cooldown from 429, pause processing
+      // If in active cooldown from 429, pause processing
       if (this.cooldownUntil > now) {
         const sleepMs = this.cooldownUntil - now;
         await new Promise((r) => setTimeout(r, sleepMs));
         continue;
       }
 
-      // 2. Prune sliding window timestamps
+      // Prune sliding window timestamps
       const currentNow = Date.now();
       this.secondTimestamps = this.secondTimestamps.filter((t) => currentNow - t < 1000);
       this.minuteTimestamps = this.minuteTimestamps.filter((t) => currentNow - t < 60000);
 
-      // 3. Determine active rate limits (throttled when in ease-off mode)
-      const allowedPerSecond = this.isEasedOff
-        ? Math.max(2, Math.floor(this.maxPerSecond * this.easeOffThrottleRatio))
-        : this.maxPerSecond;
-      const allowedPerMinute = this.isEasedOff
-        ? Math.max(30, Math.floor(this.maxPerMinute * this.easeOffThrottleRatio))
-        : this.maxPerMinute;
-
-      const canSendSecond = this.secondTimestamps.length < allowedPerSecond;
-      const canSendMinute = this.minuteTimestamps.length < allowedPerMinute;
+      // Wait until both windows have room
+      const canSendSecond = this.secondTimestamps.length < this.maxPerSecond;
+      const canSendMinute = this.minuteTimestamps.length < this.maxPerMinute;
 
       if (canSendSecond && canSendMinute) {
         const item = this.queue.shift();
@@ -143,22 +77,14 @@ export class RateLimiter {
           this.secondTimestamps.push(dispatchTime);
           this.minuteTimestamps.push(dispatchTime);
 
-          item
-            .fn()
+          Promise.resolve()
+            .then(item.fn)
             .then(item.resolve)
             .catch(item.reject);
 
-          // 4. Calculate pacing delay
-          let pacingDelay = 0;
-          if (this.isEasedOff) {
-            // In ease-off mode, enforce minimum spacing between requests to be gentle on the server
-            pacingDelay = this.easeOffMinSpacingMs;
-          } else if (this.queue.length > 0 && this.backlogDelayPerItem > 0) {
-            pacingDelay = Math.min(
-              this.maxBacklogDelay,
-              this.queue.length * this.backlogDelayPerItem
-            );
-          }
+          const pacingDelay = this.queue.length > 0
+            ? Math.min(this.maxBacklogDelay, this.backlogDelayPerItem)
+            : 0;
 
           if (pacingDelay > 0) {
             await new Promise((r) => setTimeout(r, pacingDelay));
@@ -184,23 +110,19 @@ export class RateLimiter {
   }
 }
 
-// 1. Finnhub: 60/min, 10/sec (50ms pacing per queued item up to 1000ms)
+
+// Finnhub: 60/min, 8/sec
 export const finnhubRateLimiter = new RateLimiter({
-  maxPerSecond: 10,
+  maxPerSecond: 8,
   maxPerMinute: 60,
   backlogDelayPerItem: 50,
   maxBacklogDelay: 1000,
 });
 
-// 2. Yahoo Finance: Increased to 360/min, 30/sec (15ms pacing per queued item up to 300ms) with 429 ease-off backoff
+// Yahoo Finance: 360/min, 20/sec
 export const yahooRateLimiter = new RateLimiter({
-  maxPerSecond: 30,
+  maxPerSecond: 20,
   maxPerMinute: 360,
   backlogDelayPerItem: 15,
   maxBacklogDelay: 300,
-  baseBackoffMs: 2000,
-  maxBackoffMs: 30000,
-  easeOffThrottleRatio: 0.35,
-  easeOffMinSpacingMs: 150,
-  recoverySuccessThreshold: 5,
 });

@@ -1,11 +1,12 @@
-// Bundled 2023-2027 holiday fallback; live Finnhub data can supplement at runtime
-import fallbackHolidays from '../constants/usMarketHolidays.json';
+// Bundled 2023-2027 holiday data from JSON
+import jsonHolidays from '../constants/usMarketHolidays.json';
+// Live Finnhub data can supplement at runtime
 
-// Registry: dateKey -> holiday schedule; sorted array mirrors it for lookups
+// dateKey to holiday config map
 const holidayRegistry = new Map();
 let allSortedHolidays = [];
 
-// "HH:MM" -> seconds since midnight
+// Calculates second from midnight from a "HH:MM" string
 function parseTimeSeconds(timeStr) {
   if (!timeStr) return null;
   const [h, m] = timeStr.split(':').map((v) => parseInt(v, 10));
@@ -40,7 +41,7 @@ function parseRange(rangeStr) {
   return null;
 }
 
-// Add Finnhub holiday rows into the registry, then keep the sorted mirror array
+// Ingest holiday data rows into the registry
 export function ingestHolidayData(items = []) {
   if (!Array.isArray(items)) return;
 
@@ -55,7 +56,7 @@ export function ingestHolidayData(items = []) {
       atDate: dateKey,
       tradingHourRaw: item.tradingHour || '',
       postMarketRaw: item.postMarket || '',
-      // No/empty tradingHour => exchange shut all day
+      // No/empty tradingHour = exchange shut all day
       isFullyClosed: !item.tradingHour || item.tradingHour.trim() === '',
       regularHours: tradingRange, // e.g. { start: 34200 (09:30), end: 46800 (13:00) }
       postMarketHours: postRange, // e.g. { start: 46800 (13:00), end: 61200 (17:00) }
@@ -68,15 +69,16 @@ export function ingestHolidayData(items = []) {
   );
 }
 
-// Seed the registry from the bundled fallback dataset at load
-ingestHolidayData(fallbackHolidays?.data || []);
+// Preload JSON holiday data at module load time
+ingestHolidayData(jsonHolidays?.data || []);
+
 
 // Look up holiday config for a YYYY-MM-DD key (null if none)
 export function getHolidayScheduleForDate(dateKey) {
   return holidayRegistry.get(dateKey) || null;
 }
 
-// Next N holidays from a reference date (default: today in NY time)
+// Returns the next N holidays from a reference date or today if null
 export function getNextUpcomingHolidays(count = 8, fromDate = new Date()) {
   // NY-tz date formatter for the reference date
   const formatter = new Intl.DateTimeFormat('en-US', {
@@ -86,18 +88,12 @@ export function getNextUpcomingHolidays(count = 8, fromDate = new Date()) {
     day: '2-digit',
   });
 
-  const parts = formatter.formatToParts(fromDate);
-  let y = '2026';
-  let m = '01';
-  let d = '01';
-  for (const part of parts) {
-    if (part.type === 'year') y = part.value;
-    if (part.type === 'month') m = part.value;
-    if (part.type === 'day') d = part.value;
-  }
-  const todayKey = `${y}-${m}-${d}`;
+  const parts = Object.fromEntries(
+    formatter.formatToParts(fromDate).map(({ type, value }) => [type, value])
+  );
+  const todayKey = `${parts.year}-${parts.month}-${parts.day}`;
 
-  // Date strings compare lexicographically, so >= todayKey gives upcoming ones
+  // Filter upcoming holidays using >= todayKey
   return allSortedHolidays
     .filter((item) => item.atDate >= todayKey)
     .slice(0, count);

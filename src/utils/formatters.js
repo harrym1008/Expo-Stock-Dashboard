@@ -1,10 +1,7 @@
-// Currency + stock-quote formatting helpers
-import {
-  getSecurityBySymbol,
-  getDecimals,
-} from './securityUtils';
+import { getSecurityBySymbol, getDecimals } from './securityUtils';
 
-// Shared currency string builder; locale passed per caller to keep existing output
+
+// Currency string builder
 function applyCurrency(num, cur, dec, locale) {
   return `${cur}${num.toLocaleString(locale, {
     minimumFractionDigits: dec,
@@ -12,9 +9,8 @@ function applyCurrency(num, cur, dec, locale) {
   })}`;
 }
 
-// Money -> currency string; decimals via getDecimals (explicit > dynamic)
+// Format a number as a money string with currency symbol and decimal count
 export function formatMoney(val, currency = '$', decimals = null, symbol = null) {
-  // NaN/null/undefined -> placeholder dash
   if (val == null || isNaN(val)) return '-';
   const num = Number(val || 0);
   const cur = currency ?? '$';
@@ -22,7 +18,7 @@ export function formatMoney(val, currency = '$', decimals = null, symbol = null)
   return applyCurrency(num, cur, dec, 'en-US');
 }
 
-// Share count -> "N.NN shares" (2-4 dp)
+// Format a number of shares with 2-4 decimals and "shares" suffix
 export function formatShares(val) {
   const num = Number(val || 0);
   const formatted = num.toLocaleString('en-US', {
@@ -32,47 +28,39 @@ export function formatShares(val) {
   return `${formatted} shares`;
 }
 
-// Compact large-number format (K/M/B/T)
+// Format a large number with k,mn,bn,tn suffixes and currency prefix
 export function formatLargeNum(num, currency = '') {
   if (num == null || isNaN(num) || num === 0) return '-';
   const abs = Math.abs(num);
   const cur = currency ?? '';
   if (abs >= 1e12) {
-    return `${cur}${(num / 1e12).toFixed(2)}T`;
+    return `${cur}${(num / 1e12).toFixed(2)}tn`;
   }
   if (abs >= 1e9) {
-    return `${cur}${(num / 1e9).toFixed(2)}B`;
+    return `${cur}${(num / 1e9).toFixed(2)}bn`;
   }
   if (abs >= 1e6) {
-    return `${cur}${(num / 1e6).toFixed(2)}M`;
+    return `${cur}${(num / 1e6).toFixed(2)}mn`;
   }
   if (abs >= 1e3) {
-    return `${cur}${(num / 1e3).toFixed(1)}K`;
+    return `${cur}${(num / 1e3).toFixed(1)}k`;
   }
   return `${cur}${num.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
-// Stat/odd price formatting; same as formatMoney but suppresses 0 and uses default locale
-export function formatStatPrice(val, currency = '$', decimals = null, symbol = null) {
-  if (val == null || isNaN(val) || val === 0) return '-';
-  const num = Number(val);
-  const cur = currency ?? '$';
-  const dec = getDecimals(symbol, num, decimals);
-  return applyCurrency(num, cur, dec, undefined);
-}
 
-// Human-readable "x ago" from a ms timestamp (granular by magnitude)
+
+// Human-readable "x time ago" from a ms timestamp
 export function formatTimeAgo(timestamp) {
-  // Invalid/past-zero -> generic "recently"
   if (!(timestamp > 0)) {
-    return 'recently';
+    return '0 secs ago';
   }
 
   const now = Date.now();
   const diffSeconds = Math.max(0, Math.floor((now - timestamp) / 1000));
 
   if (diffSeconds < 1) {
-    return '0 sec ago';
+    return 'less than 1 sec ago';
   }
   if (diffSeconds === 1) {
     return '1 sec ago';
@@ -117,8 +105,7 @@ export function formatTimeAgo(timestamp) {
   return `${minText} ago`;
 }
 
-// Merge item (watchlist/portfolio row) + live WS quote + live profile + 1D chart
-// + market status into one normalized display object (price/change/sparkline/etc.)
+// Format a full stock quote object with resolved display values, prices, and sparkline
 export function formatStockQuote(item, liveQuote, liveProfile, y1D, marketStatus) {
   // Regular-session close: best available of 1D -> live -> item
   const regularClose =
@@ -238,7 +225,7 @@ export function formatStockQuote(item, liveQuote, liveProfile, y1D, marketStatus
     exchange: liveProfile?.exchange || item?.exchange || (sec ? sec.category.toUpperCase() : '...'),
     logo: liveProfile?.logo || item?.logo || null,
     sparkline: dynamicSparkline,
-    // Newest timestamp wins for freshness calc
+    // Newest timestamp wins for freshness calculation
     lastUpdated:
       liveQuote?.lastTickTime ||
       liveQuote?.timestamp ||
