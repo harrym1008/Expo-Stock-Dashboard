@@ -18,7 +18,7 @@ class FinnhubWebSocketManager {
     this.reconnectAttempts = 0;
 
     // Symbol sets (stored as Finnhub subscription symbols)
-    this.allWishlistSymbols = new Set();
+    this.allWatchlistSymbols = new Set();
     this.activeViewSymbols = new Set();
 
     // Actual subscribed symbols on the Finnhub socket
@@ -31,6 +31,7 @@ class FinnhubWebSocketManager {
     this.listeners = new Set();
   }
 
+  // Update API key; reconnect when it changes
   setApiKey(key) {
     const trimmed = (key || '').trim();
     if (this.apiKey !== trimmed) {
@@ -40,11 +41,13 @@ class FinnhubWebSocketManager {
     }
   }
 
+  // Register a 2Hz batch listener; returns unsubscribe fn
   addListener(callback) {
     this.listeners.add(callback);
     return () => this.listeners.delete(callback);
   }
 
+  // Open the WS socket (guarded by key + reconnect cap + existing connection)
   connect() {
     if (!this.apiKey) {
       return;
@@ -76,6 +79,7 @@ class FinnhubWebSocketManager {
         try {
           const message = JSON.parse(event.data);
           if (message.type === 'trade' && Array.isArray(message.data)) {
+            // Buffer each trade tick by symbol (2Hz flush)
             for (const trade of message.data) {
               if (trade.s && typeof trade.p === 'number' && trade.p > 0) {
                 const sym = trade.s.toUpperCase();
@@ -110,6 +114,7 @@ class FinnhubWebSocketManager {
     }
   }
 
+  // Backoff-scheduled reconnect (pauses past the attempt cap)
   scheduleReconnect() {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectAttempts++;
@@ -127,6 +132,7 @@ class FinnhubWebSocketManager {
     }, backoffDelay);
   }
 
+  // Force a full reconnect: stop timers, close socket, reconnect
   reconnect() {
     this.stopTimers();
     if (this.ws) {
@@ -139,6 +145,7 @@ class FinnhubWebSocketManager {
     this.connect();
   }
 
+  // Start the 2Hz flush interval and the 15s rotation interval
   startTimers() {
     if (!this.throttleTimer) {
       this.throttleTimer = setInterval(() => {
@@ -148,13 +155,14 @@ class FinnhubWebSocketManager {
 
     if (!this.rotationTimer) {
       this.rotationTimer = setInterval(() => {
-        if (this.allWishlistSymbols.size > WATCHLIST_BUDGET) {
+        if (this.allWatchlistSymbols.size > WATCHLIST_BUDGET) {
           this.rotateWatchlistSubscriptions();
         }
       }, ROTATION_INTERVAL_MS);
     }
   }
 
+  // Kill both intervals
   stopTimers() {
     if (this.throttleTimer) {
       clearInterval(this.throttleTimer);
@@ -166,6 +174,7 @@ class FinnhubWebSocketManager {
     }
   }
 
+  // Flush buffered ticks to listeners (2Hz)
   flushTickBuffer() {
     if (this.tickBuffer.size === 0 || this.listeners.size === 0) return;
 
@@ -183,17 +192,20 @@ class FinnhubWebSocketManager {
 
   // --- Subscription Management ---
 
+  // Replace the full watchlist symbol set and resync
   setWatchlistSymbols(symbols = []) {
-    this.allWishlistSymbols = new Set(symbols.map((s) => getFinnhubSymbol(s)));
+    this.allWatchlistSymbols = new Set(symbols.map((s) => getFinnhubSymbol(s)));
     this.syncSubscriptions();
   }
 
+  // Set active-view symbols (capped to ACTIVE_VIEW_BUDGET) and resync
   setActiveViewSymbols(symbols = []) {
     const capped = symbols.slice(0, ACTIVE_VIEW_BUDGET).map((s) => getFinnhubSymbol(s));
     this.activeViewSymbols = new Set(capped);
     this.syncSubscriptions();
   }
 
+  // Diff desired vs current socket subscriptions and subscribe/unsubscribe to match
   syncSubscriptions() {
     if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
@@ -206,14 +218,16 @@ class FinnhubWebSocketManager {
     }
 
     const availableWatchlistBudget = MAX_TOTAL_BUDGET - targetSubscriptions.size;
-    const wishlistArray = Array.from(this.allWishlistSymbols);
+    const watchlistArray = Array.from(this.allWatchlistSymbols);
 
-    if (wishlistArray.length <= availableWatchlistBudget) {
-      for (const sym of wishlistArray) {
+    if (watchlistArray.length <= availableWatchlistBudget) {
+      // Budget fits all watchlist symbols
+      for (const sym of watchlistArray) {
         targetSubscriptions.add(sym);
       }
     } else {
-      const selected = this.getRandomSubset(wishlistArray, availableWatchlistBudget);
+      // Oversubscribed: random subset within remaining budget
+      const selected = this.getRandomSubset(watchlistArray, availableWatchlistBudget);
       for (const sym of selected) {
         targetSubscriptions.add(sym);
       }
@@ -245,14 +259,15 @@ class FinnhubWebSocketManager {
     }
   }
 
+  // Resample the watchlist subset every 15s (keeps 45-symbol rotation fresh)
   rotateWatchlistSubscriptions() {
-    if (!this.isConnected || this.allWishlistSymbols.size <= WATCHLIST_BUDGET) {
+    if (!this.isConnected || this.allWatchlistSymbols.size <= WATCHLIST_BUDGET) {
       return;
     }
 
     const availableBudget = MAX_TOTAL_BUDGET - this.activeViewSymbols.size;
-    const wishlistArray = Array.from(this.allWishlistSymbols);
-    const newSubset = this.getRandomSubset(wishlistArray, availableBudget);
+    const watchlistArray = Array.from(this.allWatchlistSymbols);
+    const newSubset = this.getRandomSubset(watchlistArray, availableBudget);
 
     const newTargetSubscriptions = new Set([...this.activeViewSymbols, ...newSubset]);
 
@@ -275,11 +290,13 @@ class FinnhubWebSocketManager {
     );
   }
 
+  // Fisher-Yates shuffle, take `size` (random watchlist rotation)
   getRandomSubset(array, size) {
     const shuffled = [...array].sort(() => 0.5 - Math.random());
     return shuffled.slice(0, size);
   }
 
+  // Send a subscribe/unsubscribe message over the live socket
   sendSocketMessage(type, symbol) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
@@ -290,6 +307,7 @@ class FinnhubWebSocketManager {
     }
   }
 
+  // Tear down socket, timers, listeners, and buffers
   destroy() {
     this.stopTimers();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);

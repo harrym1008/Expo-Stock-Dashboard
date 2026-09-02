@@ -7,6 +7,7 @@ import { getMarketSessionStatus } from '../utils/marketHours';
 import { ingestHolidayData } from '../utils/marketHolidays';
 import { getDisplaySymbol, getFinnhubSymbol, isNonStockSecurity } from '../utils/securityUtils';
 
+// Recompute change/percent + append live price to sparkline for a single tick
 function calculateTickUpdate(current, sym, newPrice, timestamp, sessionStatus) {
   if (typeof newPrice !== 'number' || isNaN(newPrice) || newPrice <= 0) {
     return current;
@@ -43,13 +44,14 @@ export function MarketDataProvider({ children }) {
   const [profiles, setProfiles] = useState({});
   const [marketStatus, setMarketStatus] = useState(getMarketSessionStatus());
 
+  // Refs mirror state for use inside the 2Hz tick callback without re-subscribing
   const profilesRef = useRef(profiles);
   profilesRef.current = profiles;
 
   const quotesRef = useRef(quotes);
   quotesRef.current = quotes;
 
-  // 1. High-precision 1-second timer for exact-second market session transitions (NY Time)
+  // 1. 1s timer: detect market-session transitions (NY time) and bump status
   useEffect(() => {
     const checkStatus = () => {
       const current = getMarketSessionStatus();
@@ -71,7 +73,7 @@ export function MarketDataProvider({ children }) {
     return () => clearInterval(interval);
   }, []);
 
-  // 2. Initialize API Key on startup
+  // 2. Load stored API key on mount; tear down WS on unmount
   useEffect(() => {
     storageService.getApiKey().then((key) => {
       if (key) {
@@ -85,7 +87,7 @@ export function MarketDataProvider({ children }) {
     };
   }, []);
 
-  // 3. Handle API Key Updates
+  // 3. Persist + propagate an updated API key
   const updateApiKey = useCallback(async (newKey) => {
     const cleanKey = (newKey || '').trim();
     setApiKey(cleanKey);
@@ -105,7 +107,7 @@ export function MarketDataProvider({ children }) {
     }
   }, [apiKey]);
 
-  // 5. Listen to 2Hz Trade Ticks from WebSocket
+  // 5. Apply 2Hz WebSocket trade ticks to the quotes map (keyed by both symbols)
   useEffect(() => {
     const unsubscribe = finnhubWebSocketService.addListener((ticks) => {
       if (!Array.isArray(ticks) || ticks.length === 0) return;
@@ -151,6 +153,7 @@ export function MarketDataProvider({ children }) {
       if (quote && typeof quote.price === 'number' && quote.price > 0) {
         setQuotes((prev) => {
           const existing = prev[cleanSym] || prev[finnhubSym] || {};
+          // Keep live WS price when present; otherwise take fetched price
           const isLiveWs = Boolean(existing.isLiveWs && existing.price > 0);
           const merged = {
             ...quote,
@@ -326,6 +329,7 @@ export function MarketDataProvider({ children }) {
   );
 
   return (
+    {/* Provider exposes market-data state + all fetch/inject methods */}
     <MarketDataContext.Provider value={value}>
       {children}
     </MarketDataContext.Provider>
@@ -333,6 +337,7 @@ export function MarketDataProvider({ children }) {
 }
 
 export function useMarketData() {
+  // Hook to consume market data; throws if used outside provider
   const context = useContext(MarketDataContext);
   if (!context) {
     throw new Error('useMarketData must be used within a MarketDataProvider');

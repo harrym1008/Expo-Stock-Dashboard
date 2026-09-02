@@ -1,13 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import {
-  View,
-  StyleSheet,
-  FlatList,
-  TextInput,
-  TouchableOpacity,
-  Keyboard,
-  ActivityIndicator,
-} from 'react-native';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, Keyboard, ActivityIndicator} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AppText from '../common/AppText';
 import SearchResultItem from './SearchResultItem';
@@ -21,7 +13,7 @@ import { finnhubRestService } from '../../services/finnhubRestService';
 import { spacing, borderRadius, fonts } from '../../constants/theme';
 import { layoutStyles, emptyStateStyles } from '../../styles';
 
-// Module-level memoized ticker entries
+// load all locally stored stock tickers from the JSON file
 const ALL_STOCK_TICKERS = Object.entries(searchTickersData).map(([symbol, item]) => ({
   symbol: symbol.toUpperCase(),
   displaySymbol: symbol.toUpperCase(),
@@ -33,6 +25,7 @@ const ALL_STOCK_TICKERS = Object.entries(searchTickersData).map(([symbol, item])
   currency: '$',
 }));
 
+// Load all non-security tickers
 const ALL_NON_STOCK_TICKERS = getAllNonStockSecurities().map((item) => ({
   symbol: item.displaySymbol,
   displaySymbol: item.displaySymbol,
@@ -47,13 +40,15 @@ const ALL_NON_STOCK_TICKERS = getAllNonStockSecurities().map((item) => ({
   yahooSymbol: item.yahooSymbol,
 }));
 
+// Merge all into one list for local search (prioritise non-stock securities first, then stocks)
 const ALL_TICKERS = [...ALL_STOCK_TICKERS, ...ALL_NON_STOCK_TICKERS];
 
-// Pre-sorted top 25 tickers by market cap for default view
+// By default show the top 40 stocks by market cap when search bar is empty (non securities not included)
 const DEFAULT_TOP_TICKERS = [...ALL_STOCK_TICKERS]
   .sort((a, b) => b.marketCap - a.marketCap)
-  .slice(0, 25);
+  .slice(0, 40);
 
+// Search screen using the local list of tickers and also using Finnhub for a further more detailed search
 export default function StockSearchView({
   onSelectStock,
   autoFocus = false,
@@ -68,7 +63,7 @@ export default function StockSearchView({
   const [remoteResults, setRemoteResults] = useState([]);
   const [remoteSearchStatus, setRemoteSearchStatus] = useState('idle');
 
-  // Search Finnhub only after the user has stopped typing for one second.
+  // Only search finnhub after the user has stopped typing for a second and query isnt empty
   useEffect(() => {
     const trimmedQuery = searchQuery.trim();
     let isCurrentSearch = true;
@@ -79,7 +74,6 @@ export default function StockSearchView({
       return undefined;
     }
 
-    // Do not show results from a previous query while waiting for this query.
     setRemoteResults([]);
     setRemoteSearchStatus('pending');
 
@@ -88,6 +82,7 @@ export default function StockSearchView({
 
       let results = [];
       try {
+        // Submit the search query to Finnhub and get the results
         results = await finnhubRestService.searchSymbols(trimmedQuery, apiKey);
       } catch (err) {
         if (isCurrentSearch) {
@@ -121,7 +116,7 @@ export default function StockSearchView({
     };
   }, [searchQuery, apiKey]);
 
-  // Filter tickers by symbol or name - ALWAYS put non-stock securities above stocks
+  // Filter tickers by symbol or name
   const filteredResults = useMemo(() => {
     const trimmedQuery = searchQuery.trim();
     if (!trimmedQuery) {
@@ -140,7 +135,7 @@ export default function StockSearchView({
       }
     }
 
-    // Sort: ALWAYS put non-stock securities above stocks
+    // Sort by market cap (highest at top), always put non-stock securities above stocks
     matches.sort((a, b) => {
       if (!a.isStock && b.isStock) return -1;
       if (a.isStock && !b.isStock) return 1;
@@ -171,8 +166,8 @@ export default function StockSearchView({
       return b.marketCap - a.marketCap;
     });
 
-    // Limit to max 25 results
-    const results = matches.slice(0, 25);
+    // Limit to max 40 results
+    const results = matches.slice(0, 40);
 
     // Append Finnhub matches that are not already present in the local list.
     const existingSymbols = new Set(results.map((item) => item.symbol.toUpperCase()));
@@ -183,10 +178,10 @@ export default function StockSearchView({
       }
     });
 
-    return results;
+    return results.slice(0, 40);    // Once again limit to max 40 after appending from finnhub
   }, [searchQuery, remoteResults]);
 
-  // Preload static logos in background for visible search results
+  
   useEffect(() => {
     logoService.preloadLogos(filteredResults);
   }, [filteredResults]);
@@ -201,7 +196,6 @@ export default function StockSearchView({
 
   return (
     <View style={[layoutStyles.flex1, containerStyle]}>
-      {/* Search Input Bar */}
       <View
         style={[
           styles.searchBarContainer,
@@ -247,7 +241,7 @@ export default function StockSearchView({
         )}
       </View>
 
-      {/* Default Screen: Tappable Non-Stock Securities Header Row with 24px vertical padding */}
+      {/* Non-Stock Securities header row */}
       {!isSearching && (
         <TouchableOpacity
           style={styles.nonStockHeaderButton}
@@ -326,6 +320,7 @@ export default function StockSearchView({
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   searchBarContainer: {

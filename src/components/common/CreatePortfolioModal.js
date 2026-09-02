@@ -1,18 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  Modal,
-  View,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import {Modal, View, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform} from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { spacing, borderRadius, fonts } from '../../constants/theme';
-import { dialogStyles } from '../../styles';
+import { dialogueStyles } from '../../styles';
 import AppText from './AppText';
 
+
+// Modal dialogue for creating a new portfolio with title and starting cash
 export default function CreatePortfolioModal({
   visible = false,
   initialTitle = 'Portfolio 1',
@@ -29,6 +23,7 @@ export default function CreatePortfolioModal({
 
   const titleInputRef = useRef(null);
 
+  // Reset fields when the modal opens or props change
   useEffect(() => {
     if (visible) {
       setTitle(initialTitle);
@@ -39,7 +34,7 @@ export default function CreatePortfolioModal({
 
   // Clean and format numeric cash input
   const handleCashChange = (text) => {
-    // Keep numbers and single decimal
+    // keep numbers and single decimal
     const raw = text.replace(/[^0-9.]/g, '');
     const parts = raw.split('.');
     let cleanNum = parts[0];
@@ -62,11 +57,13 @@ export default function CreatePortfolioModal({
     }
   };
 
+  // Strip commas and validate cash and title
   const parsedCash = parseFloat(cashInput.replace(/,/g, ''));
   const isCashValid = !isNaN(parsedCash) && parsedCash >= minCash && parsedCash <= maxCash;
   const isTitleValid = title.trim().length > 0;
   const isSubmitDisabled = !isTitleValid || !isCashValid;
 
+  // Submit only when valid
   const handleSubmit = () => {
     if (isSubmitDisabled) return;
     onSubmit?.({
@@ -85,9 +82,8 @@ export default function CreatePortfolioModal({
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={dialogStyles.overlay}
+        style={dialogueStyles.overlay}
       >
-        {/* Semi-transparent backdrop */}
         <TouchableOpacity
           style={StyleSheet.absoluteFillObject}
           activeOpacity={1}
@@ -99,25 +95,26 @@ export default function CreatePortfolioModal({
         {/* Modal Card */}
         <View
           style={[
-            dialogStyles.card,
+            dialogueStyles.card,
             {
               backgroundColor: isDark ? '#1C1F26' : '#FFFFFF',
               borderColor: theme.border,
             },
           ]}
         >
+          {/* Dialogue title */}
           <AppText bold style={styles.modalTitle}>
             Create New Portfolio
           </AppText>
 
-          {/* Portfolio Name Input */}
+          {/* Portfolio Name input */}
           <AppText bold style={[styles.inputLabel, { color: theme.textSecondary }]}>
             PORTFOLIO NAME
           </AppText>
           <TextInput
             ref={titleInputRef}
             style={[
-              dialogStyles.input,
+              dialogueStyles.input,
               styles.inputField,
               {
                 backgroundColor: isDark ? '#12161E' : '#F0F3F7',
@@ -126,7 +123,7 @@ export default function CreatePortfolioModal({
                 fontFamily: fonts.regular,
               },
             ]}
-            placeholder="e.g. Portfolio 1"
+            placeholder="e.g. My Portfolio"
             placeholderTextColor={theme.textMuted}
             value={title}
             onChangeText={setTitle}
@@ -136,9 +133,9 @@ export default function CreatePortfolioModal({
             returnKeyType="next"
           />
 
-          {/* Starting Cash Input */}
+          {/* Starting Cash input */}
           <AppText bold style={[styles.inputLabel, { color: theme.textSecondary }]}>
-            STARTING CASH ($100 – $1,000,000)
+            STARTING CASH ($100 - $1,000,000)
           </AppText>
           <View
             style={[
@@ -183,10 +180,10 @@ export default function CreatePortfolioModal({
           )}
 
           {/* Action Buttons Row */}
-          <View style={dialogStyles.buttonRow}>
+          <View style={dialogueStyles.buttonRow}>
             <TouchableOpacity
               style={[
-                dialogStyles.button,
+                dialogueStyles.button,
                 { backgroundColor: isDark ? '#262D3D' : '#E8ECF2' },
               ]}
               onPress={onCancel}
@@ -194,14 +191,14 @@ export default function CreatePortfolioModal({
               accessibilityRole="button"
               accessibilityLabel="Cancel"
             >
-              <AppText bold style={[dialogStyles.buttonText, { color: theme.textSecondary }]}>
+              <AppText bold style={[dialogueStyles.buttonText, { color: theme.textSecondary }]}>
                 Cancel
               </AppText>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
-                dialogStyles.button,
+                dialogueStyles.button,
                 {
                   backgroundColor: theme.primary,
                   opacity: isSubmitDisabled ? 0.45 : 1,
@@ -213,7 +210,7 @@ export default function CreatePortfolioModal({
               accessibilityRole="button"
               accessibilityLabel="Create Portfolio"
             >
-              <AppText bold style={[dialogStyles.buttonText, dialogStyles.submitButtonText]}>
+              <AppText bold style={[dialogueStyles.buttonText, dialogueStyles.submitButtonText]}>
                 Create
               </AppText>
             </TouchableOpacity>
@@ -224,6 +221,7 @@ export default function CreatePortfolioModal({
   );
 }
 
+// Modal layout styles
 const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,

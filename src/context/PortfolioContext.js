@@ -10,8 +10,10 @@ import React, {
 import { storageService } from '../services/storageService';
 import { useMarketData } from './MarketDataContext';
 
+// Context holding portfolios + active id
 const PortfolioContext = createContext(null);
 
+// Seed portfolio (used until storage loads)
 const defaultPortfolios = [
   {
     id: 'portfolio-1',
@@ -27,6 +29,7 @@ export function PortfolioProvider({ children }) {
   const [portfolios, setPortfolios] = useState(defaultPortfolios);
   const [activePortfolioId, setActivePortfolioIdState] = useState('portfolio-1');
   const hasLoadedFromStorage = useRef(false);
+  // Pull market-data helpers needed to refresh portfolio quotes/profiles
   const {
     setPortfolioSymbols,
     fetchQuote,
@@ -131,7 +134,7 @@ export function PortfolioProvider({ children }) {
     );
   }, [portfolios, activePortfolioId]);
 
-  // 4. Helper to query position of a symbol in a specific portfolio
+  // 4. Query a symbol's position within a portfolio (defaults to active)
   const getPosition = useCallback(
     (portfolioId, symbol) => {
       if (!symbol) return null;
@@ -196,7 +199,7 @@ export function PortfolioProvider({ children }) {
     }
   }, []);
 
-  // 6. Zero-Fee Instant Order Execution
+  // 6. Zero-Fee Instant Order Execution (mutates cash + positions for the target portfolio)
   const executeOrder = useCallback(
     ({
       portfolioId,
@@ -236,6 +239,7 @@ export function PortfolioProvider({ children }) {
         let resultPosition = null;
 
         if (mode === 'BUY') {
+          // Reject if cash can't cover the trade
           if (currentCash < orderCost) {
             throw new Error(`Insufficient funds: Required $${orderCost.toFixed(2)}, Available $${currentCash.toFixed(2)}`);
           }
@@ -243,6 +247,7 @@ export function PortfolioProvider({ children }) {
           newCash = Math.max(0, currentCash - orderCost);
 
           if (existingPos) {
+            // Add to existing position: blend avg cost across combined shares
             const oldShares = Number(existingPos.shares) || 0;
             const oldAvgCost = Number(existingPos.avgCost) || 0;
             const oldTotalCost = existingPos.totalCost ?? oldShares * oldAvgCost;
@@ -260,6 +265,7 @@ export function PortfolioProvider({ children }) {
             };
             newPositions[existingPosIndex] = resultPosition;
           } else {
+            // Open a new position at the fill price
             resultPosition = {
               id: `pos-${cleanSym}-${Date.now()}`,
               symbol: cleanSym,
@@ -281,7 +287,7 @@ export function PortfolioProvider({ children }) {
           const remainingShares = Math.max(0, ownedShares - numShares);
 
           if (remainingShares <= 0.0001) {
-            // Position closed completely
+            // Position fully closed: drop it from the list
             newPositions = newPositions.filter((_, idx) => idx !== existingPosIndex);
             resultPosition = {
               symbol: cleanSym,
@@ -366,6 +372,7 @@ export function PortfolioProvider({ children }) {
   );
 
   return (
+    {/* Provider exposes portfolios + order execution */}
     <PortfolioContext.Provider value={value}>
       {children}
     </PortfolioContext.Provider>
@@ -373,6 +380,7 @@ export function PortfolioProvider({ children }) {
 }
 
 export function usePortfolio() {
+  // Hook to consume portfolio state; throws if used outside provider
   const context = useContext(PortfolioContext);
   if (!context) {
     throw new Error('usePortfolio must be used within a PortfolioProvider');

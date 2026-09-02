@@ -15,6 +15,7 @@ import { modalStyles } from '../../styles';
 import AppText from '../common/AppText';
 import CompanyLogo from '../common/CompanyLogo';
 
+// Bottom sheet: tick through existing watchlists, toggle membership per list
 export default function AddToWatchlistModal({ visible, stock, onClose }) {
   const { theme, isDark } = useTheme();
   const {
@@ -23,11 +24,14 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
     toggleStockInWatchlist,
   } = useWatchlist();
 
+  // Bail out if no stock was passed
   if (!stock) return null;
 
+  // Derive display fields with safe fallbacks
   const displaySymbol = stock.displaySymbol || stock.symbol || '';
   const displayName = stock.displayName || stock.name || displaySymbol;
 
+  // Theme-aware card colors
   const cardBg = isDark ? '#161920' : '#FFFFFF';
   const cardBorder = isDark ? 'rgba(255, 255, 255, 0.08)' : theme.border;
 
@@ -105,7 +109,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
               </TouchableOpacity>
             </View>
 
-            {/* Vertical List of All Wishlists */}
+            {/* Vertical List of All Watchlists */}
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={modalStyles.content}
@@ -118,7 +122,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                   { color: theme.textSecondary },
                 ]}
               >
-                SELECT WISHLISTS
+                SELECT WATCHLISTS
               </AppText>
 
               <View
@@ -139,7 +143,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                     <TouchableOpacity
                       key={wl.id}
                       style={[
-                        styles.wishlistRow,
+                        styles.watchlistRow,
                         !isLast && {
                           borderBottomWidth: StyleSheet.hairlineWidth,
                           borderBottomColor: isDark
@@ -159,7 +163,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                       accessibilityState={{ checked: isChecked }}
                       accessibilityLabel={`${wl.title}, ${isChecked ? 'selected' : 'not selected'}`}
                     >
-                      {/* Left: Wishlist Title & Stock Count */}
+                      {/* Left: Watchlist Title & Stock Count */}
                       <View style={styles.rowLeft}>
                         <AppText bold style={styles.rowTitle}>
                           {wl.title}
@@ -213,6 +217,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
   );
 }
 
+// Modal layout: header, per-watchlist row, checkbox
 const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
@@ -250,7 +255,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
-  wishlistRow: {
+  watchlistRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

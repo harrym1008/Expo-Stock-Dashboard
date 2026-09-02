@@ -4,6 +4,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { borderRadius } from '../../constants/theme';
 import { logoService } from '../../services/logoService';
 
+// Just a rounded logo image which gets its URI from the logo service 
 export default function CompanyLogo({
   symbol,
   size = 32,
@@ -11,6 +12,7 @@ export default function CompanyLogo({
   logoUri: customLogoUri = null,
 }) {
   const { theme } = useTheme();
+  // Seed the image URI from custom prop, cache, or placeholder
   const [imageUri, setImageUri] = useState(() => {
     if (customLogoUri) return customLogoUri;
     return (
@@ -53,6 +55,7 @@ export default function CompanyLogo({
     };
   }, [symbol, customLogoUri]);
 
+  // Use placeholder if errored or no URI yet
   const placeholder = logoService.getPlaceholderUri(symbol);
   const displayUri = hasError || !imageUri ? placeholder : imageUri;
 

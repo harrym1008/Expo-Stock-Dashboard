@@ -1,11 +1,4 @@
-import React from 'react';
-import {
-  Modal,
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  SectionList,
-} from 'react-native';
+import {Modal, View, StyleSheet, TouchableOpacity, SectionList} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -15,8 +8,10 @@ import AppText from '../common/AppText';
 import SearchResultItem from './SearchResultItem';
 import { getGroupedNonStockSecurities } from '../../utils/securityUtils';
 
+// load the grouped non-stock securities data once at startup
 const GROUPED_NON_STOCK_DATA = getGroupedNonStockSecurities();
 
+// Slide-up modal listing non-stock securities grouped by category accessed in the search page
 export default function NonStockSecuritiesModal({
   visible,
   onSelectStock,
@@ -26,6 +21,7 @@ export default function NonStockSecuritiesModal({
 
   if (!visible) return null;
 
+  // Close then hand the selected security back to caller
   const handleSelect = (item) => {
     if (onClose) onClose();
     if (onSelectStock) onSelectStock(item);
@@ -39,7 +35,6 @@ export default function NonStockSecuritiesModal({
       onRequestClose={onClose}
     >
       <View style={modalStyles.modalOverlay}>
-        {/* Top Gap - Tap to dismiss */}
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
@@ -48,7 +43,6 @@ export default function NonStockSecuritiesModal({
           accessibilityLabel="Close modal"
         />
 
-        {/* Sheet Container */}
         <View
           style={[
             modalStyles.sheetContainer,
@@ -59,7 +53,6 @@ export default function NonStockSecuritiesModal({
             style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
-            {/* Header: Title and Close Button */}
             <View
               style={[
                 modalStyles.header,
@@ -131,6 +124,7 @@ export default function NonStockSecuritiesModal({
   );
 }
 
+// Modal layout: header, section headers, list padding
 const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,

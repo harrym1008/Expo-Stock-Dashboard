@@ -234,6 +234,7 @@ const ScrubOverlay = React.memo(function ScrubOverlay({
   );
 });
 
+// Interactive touch-scrubbable SVG chart; static + overlay layers split for perf
 function StockInteractiveChart({
   points = [],
   sparkline = [],
@@ -278,8 +279,10 @@ function StockInteractiveChart({
     return [];
   }, [points, sparkline]);
 
+  // Extract just the price axis values
   const prices = useMemo(() => chartPoints.map((p) => p.price), [chartPoints]);
 
+  // Y-axis range + neat tick layout for the grid/labels
   const { minVal, maxVal, neatY } = useMemo(() => {
     if (prices.length === 0) {
       return { minVal: 0, maxVal: 100, neatY: { ticks: [], step: 1, yMin: 0, yMax: 100 } };
@@ -308,12 +311,14 @@ function StockInteractiveChart({
     return Math.max(26, Math.ceil(maxChars * 7.2 + 8));
   }, [neatY.ticks, neatY.step]);
 
+  // Layout metrics: chart region + usable height (minus padding)
   const paddingTop = 16;
   const paddingBottom = 8;
   const chartWidth = Math.max(10, layout.width - yAxisWidth);
   const chartHeight = Math.max(10, layout.height);
   const usableHeight = Math.max(10, chartHeight - paddingTop - paddingBottom);
 
+  // Y range guard against zero division
   const yRange = maxVal - minVal === 0 ? 1 : maxVal - minVal;
 
   // Pre-compute coordinate lookup arrays so scrub doesn't call functions per-frame
@@ -410,6 +415,7 @@ function StockInteractiveChart({
     [chartPoints, chartWidth]
   );
 
+  // On release/cancel: drop pending call, clear scrub, notify parent
   const handleTouchEnd = useCallback(() => {
     // Cancel any pending trailing scrub call
     if (pendingScrubRafRef.current) {
@@ -452,6 +458,7 @@ function StockInteractiveChart({
     [updateTouch, handleTouchEnd]
   );
 
+  // Measure container size + window offset (only when they actually change)
   const handleLayout = useCallback((event) => {
     const { width, height } = event.nativeEvent.layout;
     setLayout((prev) => {
@@ -477,6 +484,7 @@ function StockInteractiveChart({
 
   const dateText = activePoint ? formatCandleDate(activePoint.time, timeframe) : '';
 
+  // Theme-aware grid + crosshair colors
   const gridLineColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
   const crosshairColor = isDark ? 'rgba(255, 255, 255, 0.45)' : 'rgba(0, 0, 0, 0.4)';
 
@@ -563,6 +571,7 @@ function StockInteractiveChart({
   );
 }
 
+// Chart layout: container, wrapper, date badge, y-axis label column
 const styles = StyleSheet.create({
   container: {
     flex: 1,

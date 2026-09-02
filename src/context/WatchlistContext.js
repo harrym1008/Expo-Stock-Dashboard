@@ -12,13 +12,13 @@ import { useMarketData } from './MarketDataContext';
 import {
   getSecurityBySymbol,
   getDisplaySymbol,
-  getDisplayName,
-  getCurrency,
   getDecimals,
 } from '../utils/securityUtils';
 
+// Context holding watchlists + active id
 const WatchlistContext = createContext(null);
 
+// Seed watchlist (used until storage loads)
 const DEFAULT_WATCHLISTS = [
   {
     id: 'watchlist-1',
@@ -31,6 +31,7 @@ export function WatchlistProvider({ children }) {
   const [watchlists, setWatchlists] = useState(DEFAULT_WATCHLISTS);
   const [activeWatchlistId, setActiveWatchlistId] = useState('watchlist-1');
   const hasLoadedFromStorage = useRef(false);
+  // Push watchlist symbols into the WS subscription manager
   const { setWatchlistSymbols } = useMarketData();
 
   // 1. Persistence: Load watchlists from AsyncStorage on mount
@@ -125,6 +126,7 @@ export function WatchlistProvider({ children }) {
           return wl;
         }
 
+        // Resolve display fields from the global security registry
         const sec = getSecurityBySymbol(cleanSym);
         const displaySymbol = sec?.displaySymbol || stockData.displaySymbol || cleanSym;
         const displayName = sec?.displayName || stockData.displayName || stockData.name || cleanSym;
@@ -303,6 +305,7 @@ export function WatchlistProvider({ children }) {
   );
 
   return (
+    {/* Provider exposes watchlists + all mutations */}
     <WatchlistContext.Provider value={value}>
       {children}
     </WatchlistContext.Provider>
@@ -310,6 +313,7 @@ export function WatchlistProvider({ children }) {
 }
 
 export function useWatchlist() {
+  // Hook to consume watchlist state; throws if used outside provider
   const context = useContext(WatchlistContext);
   if (!context) {
     throw new Error('useWatchlist must be used within a WatchlistProvider');

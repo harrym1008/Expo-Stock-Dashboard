@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState } from 'react';
 
+// Dark theme palette (default)
 export const darkTheme = {
   mode: 'dark',
   background: '#07090C',
@@ -17,6 +18,7 @@ export const darkTheme = {
   tabBarInactive: '#667488',
 };
 
+// Light theme palette
 export const lightTheme = {
   mode: 'light',
   background: '#F0F3F7',
@@ -34,6 +36,7 @@ export const lightTheme = {
   tabBarInactive: '#8E9BAE',
 };
 
+// Context shape (defaults to dark + no-op toggle)
 const ThemeContext = createContext({
   theme: darkTheme,
   isDark: true,
@@ -50,10 +53,16 @@ export function ThemeProvider({ children }) {
   const theme = isDark ? darkTheme : lightTheme;
 
   return (
+    {/* Provider exposes theme + toggle to the tree */}
     <ThemeContext.Provider value={{ theme, isDark, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );
+}
+
+export function useTheme() {
+  // Hook to consume theme state
+  return useContext(ThemeContext);
 }
 
 export function useTheme() {

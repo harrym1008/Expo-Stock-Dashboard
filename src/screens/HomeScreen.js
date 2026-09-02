@@ -17,6 +17,7 @@ import { spacing, borderRadius } from '../constants/theme';
 import { layoutStyles, emptyStateStyles } from '../styles';
 import { formatStockQuote } from '../utils/formatters';
 
+// Home screen: editable watchlist grid, sparklines, CRUD, detail/search modals
 export default function HomeScreen() {
   const { theme, isDark } = useTheme();
   const {
@@ -56,7 +57,7 @@ export default function HomeScreen() {
   const [inputModalAction, setInputModalAction] = useState(null); // 'add' | 'rename'
   const [renameTargetId, setRenameTargetId] = useState(null);
 
-  // Track symbols already fetched in the current active watchlist
+  // Tracks which symbols' sparklines have been fetched (avoid duplicate fetches)
   const fetchedSparklinesRef = useRef(new Set());
   const [sparklineRefreshTrigger, setSparklineRefreshTrigger] = useState(0);
 
@@ -71,7 +72,7 @@ export default function HomeScreen() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch real 1D sparklines & Finnhub profiles/quotes for active watchlist stocks
+  // Drop cached sparklines when the watchlist or market session changes
   useEffect(() => {
     fetchedSparklinesRef.current.clear();
   }, [activeWatchlistId, marketStatus.session]);
@@ -207,6 +208,7 @@ export default function HomeScreen() {
     [activeWatchlistId, reorderStocks]
   );
 
+  // Add a searched stock to the active watchlist, then fetch its data
   const handleSelectStockToAdd = useCallback(
     (stockItem) => {
       if (activeWatchlistId && stockItem) {
@@ -260,12 +262,13 @@ export default function HomeScreen() {
     selectedStock,
   ]);
 
-  // Memoize formatted selected stock specifically on its own quote/profile/sparkline
+  // Resolve quote/profile/sparkline for the selected stock
   const selectedSymbol = selectedStock?.symbol?.toUpperCase();
   const selectedQuote = selectedSymbol ? (quotes[selectedSymbol] || quotes[selectedStock?.symbol]) : null;
   const selectedProfile = selectedSymbol ? profiles[selectedSymbol] : null;
   const selectedSparkline = selectedSymbol ? sparklines1D[selectedSymbol] : null;
 
+  // Format the selected stock for the detail modal
   const formattedSelectedStock = useMemo(() => {
     if (!selectedStock) return null;
     return formatStockQuote(
@@ -277,6 +280,7 @@ export default function HomeScreen() {
     );
   }, [selectedStock, selectedQuote, selectedProfile, selectedSparkline, marketStatus]);
 
+  // Render a swipeable item containing a WatchlistItem
   const renderStockItem = useCallback(
     ({ item, drag, isActive }) => {
       return (
@@ -387,6 +391,7 @@ export default function HomeScreen() {
   );
 }
 
+// Home screen layout: list padding, footer, add button
 const styles = StyleSheet.create({
   listContent: {
     flexGrow: 1,

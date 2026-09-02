@@ -13,6 +13,7 @@ import { modalStyles } from '../../styles';
 import AppText from '../common/AppText';
 import StockSearchView from '../search/StockSearchView';
 
+// Full-screen search modal (reuses StockSearchView) for adding a stock to a watchlist
 export default function SearchStockModal({
   visible,
   watchlistTitle = '',
@@ -89,6 +90,7 @@ export default function SearchStockModal({
   );
 }
 
+// Search modal layout: header + embedded search container
 const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,

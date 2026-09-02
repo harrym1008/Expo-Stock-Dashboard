@@ -400,7 +400,7 @@
         },
         {
             "finnhubSymbol": "OANDA:USB02Y_USD",
-            "displayName": "US 2Y Treasury Note",
+            "displayName": "US 2Y Treasury Bond",
             "displaySymbol": "US2Y",
             "yahooSymbol": "ZT=F",
             "decimals": 3,
@@ -408,7 +408,7 @@
         },
         {
             "finnhubSymbol": "OANDA:USB05Y_USD",
-            "displayName": "US 5Y Treasury Note",
+            "displayName": "US 5Y Treasury Bond",
             "displaySymbol": "US5Y",
             "yahooSymbol": "ZF=F",
             "decimals": 3,
@@ -416,7 +416,7 @@
         },
         {
             "finnhubSymbol": "OANDA:USB10Y_USD",
-            "displayName": "US 10Y Treasury Note",
+            "displayName": "US 10Y Treasury Bond",
             "displaySymbol": "US10Y",
             "yahooSymbol": "ZN=F",
             "decimals": 3,
@@ -450,9 +450,9 @@
         },
         {
         "finnhubSymbol": "BINANCE:DOGEUSDT",
-        "displayName": "BNB",
-        "displaySymbol": "BNB",
-        "yahooSymbol": "BNB-USD",
+        "displayName": "DOGE",
+        "displaySymbol": "DOGE",
+        "yahooSymbol": "DOGE-USD",
         "decimals": 4,
         "currency": "$"
         },

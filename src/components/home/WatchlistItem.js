@@ -1,11 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, {
-  FadeInLeft,
-  FadeOutLeft,
-  LinearTransition,
-} from 'react-native-reanimated';
+import Animated, {FadeInLeft, FadeOutLeft, LinearTransition} from 'react-native-reanimated';
 import { useTheme } from '../../context/ThemeContext';
 import { spacing } from '../../constants/theme';
 import { stockItemStyles } from '../../styles';
@@ -14,9 +10,12 @@ import Sparkline from './Sparkline';
 import CompanyLogo from '../common/CompanyLogo';
 import { getCurrency, getDecimals } from '../../utils/securityUtils';
 
+
+// Animated watchlist row: logo/info, sparkline, price + % change
 function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
   const { theme } = useTheme();
 
+  // Green/red based on up/down percent
   const isPositive = (item?.changePercent ?? 0) >= 0;
   const trendColor = isPositive ? '#00D084' : '#FF4D4F';
 
@@ -26,6 +25,7 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
     }
   };
 
+  // Derive display + currency/decimal fields with safe fallbacks
   const displaySymbol = item?.displaySymbol || item?.symbol || '';
   const displayName = item?.displayName || item?.name || displaySymbol;
   const curSymbol = item?.currency !== undefined ? item.currency : getCurrency(item?.symbol, '$');
@@ -82,7 +82,7 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
           </View>
         </Animated.View>
 
-        {/* Middle: Sparkline Chart with smoothing 4 */}
+        {/* Smooth the sparkline in the home screen */}
         <View style={styles.chartSection}>
           <Sparkline
             data={item?.sparkline}
@@ -111,6 +111,7 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
   );
 }
 
+// Skip rerender unless item props have actually changed
 function areEqual(prevProps, nextProps) {
   if (prevProps.isEditMode !== nextProps.isEditMode) return false;
   if (prevProps.onPress !== nextProps.onPress) return false;

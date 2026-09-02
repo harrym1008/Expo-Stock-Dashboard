@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { layoutStyles } from '../../styles';
 import AppText from './AppText';
 import SettingsModal from './SettingsModal';
 
+// The main screen container which contains a header with title and optional action buttons
 export default function ScreenContainer({
   title,
   children,
@@ -21,6 +22,7 @@ export default function ScreenContainer({
 
   const content = (
     <View style={styles.content}>
+      {/* Header: title left, action buttons right */}
       <View style={[styles.header, { borderBottomColor: theme.borderSubtle }]}>
         <AppText bold style={styles.title}>
           {title}
@@ -57,6 +59,7 @@ export default function ScreenContainer({
         </View>
       </View>
 
+      {/* Scrollable content area */}
       <View style={layoutStyles.flex1}>{children}</View>
 
       <SettingsModal

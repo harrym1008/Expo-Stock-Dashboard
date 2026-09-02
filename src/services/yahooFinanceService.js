@@ -21,7 +21,7 @@ const BOUNDARY_INTERVALS = {
   '1Y': 7 * 24 * 60 * 60 * 1000,
 };
 
-// Global in-memory cache to preserve the latest 1D after-hours and pre-market trade prices across all timeframe queries
+// Global in-memory cache: latest after-hours/pre-market/closes prices across all timeframe queries
 const latestKnownAfterHoursPrices = {};
 const latestKnownPreMarketPrices = {};
 const latestKnownPreviousCloses = {};
@@ -103,6 +103,7 @@ async function fetchWithBackoff(url, options = {}, { maxRetries = 2, tag = 'Yaho
   }
 }
 
+// Overlay a live trade price onto cached chart data (open vs out-of-hours branches)
 function applyLivePriceOverlay(chartData, latestLivePrice) {
   if (!chartData || !Array.isArray(chartData.sparkline) || chartData.sparkline.length === 0) {
     return chartData;
@@ -115,7 +116,7 @@ function applyLivePriceOverlay(chartData, latestLivePrice) {
   const sessionStatus = getMarketSessionStatus();
   const regClose = chartData.regularMarketPrice || chartData.currentPrice;
 
-  // 1. If Market is OPEN: Update regular session price, left-hand calculations, and endmost sparkline
+  // 1. Market OPEN: refresh price, sparkline end, and left-hand change calcs
   if (sessionStatus.isOpen) {
     const updatedSparkline = [...chartData.sparkline.slice(0, -1), latestLivePrice];
     const startPrice = updatedSparkline[0] || latestLivePrice;
@@ -169,6 +170,7 @@ function applyLivePriceOverlay(chartData, latestLivePrice) {
 }
 
 export const yahooFinanceService = {
+  // Fetch chart candles for a timeframe (cache → Yahoo chart API → normalize → cache)
   async fetchHistoricalData(symbol, timeframe = '1D', latestLivePrice = null) {
     if (!symbol) return null;
     const cleanSymbol = getDisplaySymbol(symbol);
@@ -241,6 +243,7 @@ export const yahooFinanceService = {
         const rawQuotes = result.indicators?.quote?.[0] || {};
         const rawCloses = rawQuotes.close || [];
 
+        // Build price points from valid (positive) closes
         let points = [];
         if (Array.isArray(rawCloses) && rawCloses.length > 0) {
           const validIndices = [];
@@ -258,7 +261,7 @@ export const yahooFinanceService = {
           }
         }
 
-        // Fallback for indices and sessions where 1d has 0 candles yet today (e.g. US indices in pre-market or holidays)
+        // Fallback for indices/sessions with 0 intraday candles today (pre-market/holidays)
         if (points.length === 0 && (timeframe === '1D' || timeframe === '1H')) {
           console.log(
             `[Yahoo Finance] ℹ️ 0 intraday candles for ${cleanSymbol} (${yahooSymbol}) on ${timeframe}. Fetching 5d fallback for last active session...`
@@ -316,7 +319,7 @@ export const yahooFinanceService = {
 
         if (points.length === 0) return null;
 
-        // For 1H timeframe: Slice to the last 60 minutes of trades
+        // For 1H timeframe: slice to the last 60 minutes of trades
         if (timeframe === '1H') {
           const lastPointTime = points[points.length - 1]?.time || Date.now();
           const oneHourAgo = lastPointTime - 60 * 60 * 1000;
@@ -328,12 +331,14 @@ export const yahooFinanceService = {
         const startPrice = prices[0];
         const endmostPrice = prices[prices.length - 1];
         const chartPreviousClose = typeof meta.chartPreviousClose === 'number' ? meta.chartPreviousClose : startPrice;
+        // Resolve previous close (meta → 1D/1H chart close → global fallback)
         let previousClose = typeof meta.previousClose === 'number'
           ? meta.previousClose
           : (timeframe === '1D' || timeframe === '1H'
               ? chartPreviousClose
               : (latestKnownPreviousCloses[cleanSymbol] ?? null));
 
+        // Derive previous close from price + change% if still unknown
         if (
           typeof previousClose !== 'number' &&
           typeof meta.regularMarketPrice === 'number' &&
@@ -355,7 +360,7 @@ export const yahooFinanceService = {
         const minPrice = Math.min(...prices);
         const maxPrice = Math.max(...prices);
 
-        // Official regular session close price
+        // Official regular-session close price
         const regularMarketPrice = typeof meta.regularMarketPrice === 'number'
           ? meta.regularMarketPrice
           : endmostPrice;
@@ -391,7 +396,7 @@ export const yahooFinanceService = {
         const preMarketChange = preMarketPrice - regularMarketPrice;
         const preMarketChangePercent = regularMarketPrice !== 0 ? (preMarketChange / regularMarketPrice) * 100 : 0;
 
-        // Price comparison base: 1D compares against previousClose, 1H/1W/3M/1Y/5Y/ALL compares against startPrice
+        // Change base: 1D vs previousClose; others vs startPrice
         const baseComparison = timeframe === '1D' ? (previousClose || chartPreviousClose) : startPrice;
         const priceChange = regularMarketPrice - baseComparison;
         const priceChangePercent = baseComparison !== 0 ? (priceChange / baseComparison) * 100 : 0;
@@ -429,7 +434,7 @@ export const yahooFinanceService = {
           sparkline: prices,
         };
 
-        // 3. Save to persistent LRU cache with boundary-aligned TTL
+        // 3. Persist to LRU cache (boundary-aligned TTL), fire-and-forget so UI isn't blocked
         const alignedTtl = getBoundaryAlignedTtl(timeframe);
         // Persist independently of rendering. A slow native database write must
         // not delay an already-completed market-data request reaching the UI.

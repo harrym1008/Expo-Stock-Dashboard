@@ -1,33 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  Modal,
-  View,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import {Modal, View, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform} from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { spacing, fonts } from '../../constants/theme';
-import { dialogStyles } from '../../styles';
+import { dialogueStyles } from '../../styles';
 import AppText from './AppText';
 
-/**
- * TextInputModal
- *
- * A reusable modal for creating/naming or renaming items (such as watchlists).
- *
- * @param {Object} props
- * @param {boolean} props.visible - Controls modal visibility
- * @param {string} props.title - Modal title header
- * @param {string} [props.placeholder] - Placeholder text for input field
- * @param {string} [props.initialValue] - Pre-filled value (useful for renaming)
- * @param {string} [props.submitLabel] - Label for submit button (default: 'Submit')
- * @param {string} [props.cancelLabel] - Label for cancel button (default: 'Cancel')
- * @param {(text: string) => void} props.onSubmit - Callback when submit is pressed with trimmed text
- * @param {() => void} props.onCancel - Callback when cancel or overlay is pressed
- */
+
+// Reusable centred modal for naming something
 export default function TextInputModal({
   visible = false,
   title = '',
@@ -49,6 +28,7 @@ export default function TextInputModal({
     }
   }, [visible, initialValue]);
 
+  // Submit only if input is not empty
   const handleSubmit = () => {
     const trimmed = text.trim();
     if (trimmed.length === 0) return;
@@ -75,9 +55,9 @@ export default function TextInputModal({
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={dialogStyles.overlay}
+        style={dialogueStyles.overlay}
       >
-        {/* Semi-transparent backdrop - tapping dismisses */}
+        {/* Semi-transparent backdrop... tapping this dismisses the modal */}
         <TouchableOpacity
           style={StyleSheet.absoluteFillObject}
           activeOpacity={1}
@@ -86,10 +66,9 @@ export default function TextInputModal({
           accessibilityLabel="Dismiss modal backdrop"
         />
 
-        {/* Centered Modal Card */}
         <View
           style={[
-            dialogStyles.card,
+            dialogueStyles.card,
             {
               backgroundColor: isDark ? '#1C1F26' : '#FFFFFF',
               borderColor: theme.border,
@@ -105,7 +84,7 @@ export default function TextInputModal({
           <TextInput
             ref={inputRef}
             style={[
-              dialogStyles.input,
+              dialogueStyles.input,
               {
                 backgroundColor: isDark ? '#12161E' : '#F0F3F7',
                 borderColor: theme.border,
@@ -126,11 +105,11 @@ export default function TextInputModal({
             onSubmitEditing={handleSubmit}
           />
 
-          {/* Action Buttons Row */}
-          <View style={dialogStyles.buttonRow}>
+          {/* Action buttons row */}
+          <View style={dialogueStyles.buttonRow}>
             <TouchableOpacity
               style={[
-                dialogStyles.button,
+                dialogueStyles.button,
                 { backgroundColor: isDark ? '#262D3D' : '#E8ECF2' },
               ]}
               onPress={handleCancel}
@@ -138,14 +117,14 @@ export default function TextInputModal({
               accessibilityRole="button"
               accessibilityLabel={cancelLabel}
             >
-              <AppText bold style={[dialogStyles.buttonText, { color: theme.textSecondary }]}>
+              <AppText bold style={[dialogueStyles.buttonText, { color: theme.textSecondary }]}>
                 {cancelLabel}
               </AppText>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
-                dialogStyles.button,
+                dialogueStyles.button,
                 {
                   backgroundColor: theme.primary,
                   opacity: isSubmitDisabled ? 0.45 : 1,
@@ -157,7 +136,7 @@ export default function TextInputModal({
               accessibilityRole="button"
               accessibilityLabel={submitLabel}
             >
-              <AppText bold style={[dialogStyles.buttonText, dialogStyles.submitButtonText]}>
+              <AppText bold style={[dialogueStyles.buttonText, dialogueStyles.submitButtonText]}>
                 {submitLabel}
               </AppText>
             </TouchableOpacity>
@@ -167,6 +146,7 @@ export default function TextInputModal({
     </Modal>
   );
 }
+
 
 const styles = StyleSheet.create({
   title: {

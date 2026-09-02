@@ -14,6 +14,7 @@ import { useMarketData } from '../context/MarketDataContext';
 import { spacing } from '../constants/theme';
 import { layoutStyles, emptyStateStyles, newsStyles } from '../styles';
 
+// News screen: loads general market news into a scrollable list
 export default function NewsScreen() {
   const { theme, isDark } = useTheme();
   const { fetchMarketNews, apiKey, hasValidKey } = useMarketData();
@@ -21,6 +22,7 @@ export default function NewsScreen() {
   const [news, setNews] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Fetch market news; guard against empty/erroneous responses
   const loadNews = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -35,6 +37,7 @@ export default function NewsScreen() {
     }
   }, [fetchMarketNews]);
 
+  // Load news on mount and when apiKey changes
   useEffect(() => {
     loadNews();
   }, [loadNews, apiKey]);
@@ -88,6 +91,7 @@ export default function NewsScreen() {
   );
 }
 
+// News screen layout: list padding, loading, empty states
 const styles = StyleSheet.create({
   listPadding: {
     paddingBottom: spacing.xxl,

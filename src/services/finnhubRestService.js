@@ -6,6 +6,7 @@ import { persistentLruCache } from './persistentLruCache';
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
 export const finnhubRestService = {
+  // Fetch one company profile (cache → Finnhub REST → logo override → cache)
   async fetchCompanyProfile(symbol, apiKey) {
     if (!symbol || !apiKey) return null;
     const cleanSymbol = symbol.trim().toUpperCase();
@@ -64,6 +65,7 @@ export const finnhubRestService = {
     });
   },
 
+  // Search Finnhub for US common stocks matching a query
   async searchSymbols(query, apiKey) {
     if (!query || !query.trim() || !apiKey) return [];
 
@@ -94,6 +96,7 @@ export const finnhubRestService = {
     });
   },
 
+  // Fetch market holiday list for an exchange
   async fetchMarketHolidays(apiKey, exchange = 'US') {
     if (!apiKey) return null;
 
@@ -114,6 +117,7 @@ export const finnhubRestService = {
     });
   },
 
+  // Fetch full stock metrics (1h TTL) using 'all' metric set
   async fetchStockMetrics(symbol, apiKey) {
     if (!symbol) return null;
     const key = apiKey || (await storageService.getApiKey());
@@ -147,6 +151,7 @@ export const finnhubRestService = {
         const m = data?.metric;
         if (!m) return null;
 
+        // Flatten Finnhub metric fields into a normalized shape
         const metrics = {
           symbol: cleanSymbol,
           ...m,
@@ -166,6 +171,7 @@ export const finnhubRestService = {
     });
   },
 
+  // Fetch recent company news (1-month window, 30min TTL, Chartmill filtered)
   async fetchCompanyNews(symbol, apiKey) {
     if (!symbol) return [];
     const key = apiKey || (await storageService.getApiKey());
@@ -181,6 +187,7 @@ export const finnhubRestService = {
       return cached;
     }
 
+    // Last-month date window for the news query
     const now = new Date();
     const toDate = now.toISOString().split('T')[0];
     const oneMonthAgo = new Date(now);
@@ -200,6 +207,7 @@ export const finnhubRestService = {
 
         const articles = rawNews
           .filter((item) => {
+            // Drop items missing headline/url or from Chartmill
             if (!item.headline || !item.url) return false;
             const source = (item.source || '').toLowerCase();
             const headline = (item.headline || '').toLowerCase();
@@ -208,7 +216,7 @@ export const finnhubRestService = {
             }
             return true;
           })
-          .slice(0, 6)
+          .slice(0, 6) // cap at 6 items
           .map((item) => ({
             id: item.id || String(item.datetime) + item.headline.slice(0, 10),
             headline: item.headline,
@@ -231,6 +239,7 @@ export const finnhubRestService = {
     });
   },
 
+  // Fetch category market news (15min TTL, Chartmill filtered)
   async fetchMarketNews(apiKey, category = 'general', forceRefresh = false) {
     const key = apiKey || (await storageService.getApiKey());
     if (!key) return [];
@@ -265,6 +274,7 @@ export const finnhubRestService = {
 
         const articles = rawNews
           .filter((item) => {
+            // Drop items missing headline/url or from Chartmill
             if (!item.headline || !item.url) return false;
             const source = (item.source || '').toLowerCase();
             const headline = (item.headline || '').toLowerCase();

@@ -23,6 +23,7 @@ import CompanyLogo from '../common/CompanyLogo';
 import StockInteractiveChart from './StockInteractiveChart';
 import OrderExecutedModal from './OrderExecutedModal';
 
+// Paper-order entry sheet: portfolio picker, quantity/USD toggle, live cost, mini chart
 export default function StockOrderModal({
   visible,
   onClose,
@@ -48,12 +49,14 @@ export default function StockOrderModal({
   const [pendingOrderParams, setPendingOrderParams] = useState(null);
   const [validationError, setValidationError] = useState('');
 
+  // Keep selected portfolio in sync with the active one
   useEffect(() => {
     if (activePortfolioId) {
       setSelectedPortfolioId(activePortfolioId);
     }
   }, [activePortfolioId, visible]);
 
+  // Resolved portfolio (selected, else first)
   const selectedPortfolioObj = useMemo(() => {
     return (
       portfolios.find((p) => p.id === selectedPortfolioId) ||
@@ -62,6 +65,7 @@ export default function StockOrderModal({
     );
   }, [portfolios, selectedPortfolioId]);
 
+  // Current price: live WS > stock field > quote > fallback 100
   const cleanSymbol = (stock?.symbol || 'NVDA').toUpperCase();
   const wsQuote = quotes[cleanSymbol] || quotes[stock?.symbol];
   const liveWsPrice =
@@ -101,10 +105,12 @@ export default function StockOrderModal({
     }
   }, [visible]);
 
+  // Toggle between shares and USD for the "owned" value
   const handleToggleOwnedUnit = useCallback(() => {
     setIsOwnedUsdMode((prev) => !prev);
   }, []);
 
+  // Toggle input unit between USD and shares; recompute the other side at current price
   const handleToggleInputUnit = useCallback(() => {
     setIsInputUsdMode((prev) => {
       const next = !prev;
@@ -125,6 +131,7 @@ export default function StockOrderModal({
     });
   }, [quantityInput, currentPrice]);
 
+  // Sanitize numeric input, limiting decimals to the current unit mode
   const handleInputChange = useCallback((text) => {
     let cleaned = text.replace(/[^0-9.]/g, '');
     const parts = cleaned.split('.');
@@ -139,6 +146,7 @@ export default function StockOrderModal({
     setQuantityInput(cleaned);
   }, [isInputUsdMode]);
 
+  // Resolve input into shares + cost depending on unit mode
   const parsedInput = parseFloat(quantityInput) || 0;
   const orderShares = isInputUsdMode
     ? currentPrice > 0
@@ -163,8 +171,10 @@ export default function StockOrderModal({
     return [];
   }, [chartData, stock?.sparkline]);
 
+  // Buy = green, sell = red
   const buttonBgColor = isBuy ? '#38C172' : '#FF4D4F';
 
+  // Validate the order (non-zero shares, cash coverage, share availability) then stage it
   const handleSubmitOrder = () => {
     setValidationError('');
     if (orderShares <= 0) {
@@ -191,6 +201,7 @@ export default function StockOrderModal({
     setExecutedModalVisible(true);
   };
 
+  // Dismiss the confirmation sheet and close the order modal
   const handleOrderCompleted = () => {
     setExecutedModalVisible(false);
     setPendingOrderParams(null);
@@ -477,7 +488,7 @@ export default function StockOrderModal({
           </View>
         </View>
 
-        {/* Portfolio Selection Dialog */}
+        {/* Portfolio Selection Dialogue */}
         {portfolioPickerVisible && (
           <Modal
             visible={portfolioPickerVisible}
@@ -543,6 +554,7 @@ export default function StockOrderModal({
   );
 }
 
+// Order sheet layout: header, portfolio selector, data rows, submit button, picker
 const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,

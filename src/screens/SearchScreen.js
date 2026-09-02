@@ -7,6 +7,7 @@ import { useMarketData } from '../context/MarketDataContext';
 import { layoutStyles } from '../styles';
 import { formatStockQuote } from '../utils/formatters';
 
+// Search screen: search view + detail modal
 export default function SearchScreen() {
   const {
     quotes,
@@ -20,6 +21,7 @@ export default function SearchScreen() {
 
   const [selectedStock, setSelectedStock] = useState(null);
 
+  // Open detail modal and fetch live quote/profile for the picked stock
   const handleOpenStockDetail = useCallback(
     (item) => {
       setSelectedStock(item);
