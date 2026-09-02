@@ -9,9 +9,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
-import { useMarketData } from '../../context/MarketDataContext';
 import { spacing } from '../../constants/theme';
-import { modalStyles, layoutStyles } from '../../styles';
+import { modalStyles } from '../../styles';
 import AppText from '../common/AppText';
 import SearchResultItem from './SearchResultItem';
 import { getGroupedNonStockSecurities } from '../../utils/securityUtils';
@@ -24,7 +23,6 @@ export default function NonStockSecuritiesModal({
   onClose,
 }) {
   const { theme } = useTheme();
-  const { profiles } = useMarketData();
 
   if (!visible) return null;
 
@@ -88,10 +86,14 @@ export default function NonStockSecuritiesModal({
               </TouchableOpacity>
             </View>
 
-            {/* Grouped SectionList */}
+            {/* Grouped SectionList: renders all 60 items at once without pagination/batching delay */}
             <SectionList
               sections={GROUPED_NON_STOCK_DATA}
               keyExtractor={(item) => item.displaySymbol}
+              initialNumToRender={100}
+              maxToRenderPerBatch={100}
+              windowSize={10}
+              removeClippedSubviews={false}
               renderSectionHeader={({ section: { title, data } }) => (
                 <View
                   style={[
@@ -113,7 +115,7 @@ export default function NonStockSecuritiesModal({
                     ...item,
                     symbol: item.displaySymbol,
                     name: item.displayName,
-                    logo: profiles[item.symbol]?.logo || null,
+                    logo: null,
                   }}
                   onPress={() => handleSelect(item)}
                 />

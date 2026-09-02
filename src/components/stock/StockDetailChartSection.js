@@ -166,12 +166,11 @@ function StockDetailChartSection({
     (isPos(stock?.price) ? stock.price : null) ??
     (isPos(chartData?.currentPrice) ? chartData.currentPrice : 0);
 
-  const chartKey = `${stock?.symbol || ''}_${activeDisplayedTimeframe}`;
-  const chartWsPrice = useThrottledChartPrice(liveWsPrice, chartKey);
-  const effectiveWsPrice = isPos(chartWsPrice) ? chartWsPrice : null;
+  const rawLiveWsPrice = isPos(liveWsPrice) ? liveWsPrice : null;
 
+  // 1. Textual Display Prices: Updated immediately in real-time with incoming WebSocket ticks
   const leftPrice = isMarketOpen
-    ? (effectiveWsPrice ?? (isPos(stock?.price) ? stock.price : null) ?? (isPos(chartData?.currentPrice) ? chartData.currentPrice : null) ?? regularClosePrice)
+    ? (rawLiveWsPrice ?? (isPos(stock?.price) ? stock.price : null) ?? (isPos(chartData?.currentPrice) ? chartData.currentPrice : null) ?? regularClosePrice)
     : regularClosePrice;
 
   const curSymbol = stock?.currency !== undefined ? stock.currency : getCurrency(stock?.symbol, '$');
@@ -225,7 +224,7 @@ function StockDetailChartSection({
       (isPos(stock?.preMarketPrice) ? stock.preMarketPrice : null);
 
   const outOfHoursPriceVal =
-    effectiveWsPrice ??
+    rawLiveWsPrice ??
     (isPos(latestExtendedPrice) ? latestExtendedPrice : null) ??
     targetChartExtPrice ??
     targetStockExtPrice ??
@@ -256,26 +255,46 @@ function StockDetailChartSection({
       })} (${Math.abs(outOfHoursChangePercentVal).toFixed(2)}%) since close`
     : '-';
 
+  // 2. Chart Rendering Prices: Throttled at a maximum of once every 10 seconds (only if price changed)
+  const chartKey = `${stock?.symbol || ''}_${activeDisplayedTimeframe}`;
+  const chartWsPrice = useThrottledChartPrice(liveWsPrice, chartKey);
+  const effectiveChartWsPrice = isPos(chartWsPrice) ? chartWsPrice : null;
+
+  const chartLeftPrice = isMarketOpen
+    ? (effectiveChartWsPrice ?? (isPos(stock?.price) ? stock.price : null) ?? (isPos(chartData?.currentPrice) ? chartData.currentPrice : null) ?? regularClosePrice)
+    : regularClosePrice;
+
+  const chartOutOfHoursPriceVal =
+    effectiveChartWsPrice ??
+    (isPos(latestExtendedPrice) ? latestExtendedPrice : null) ??
+    targetChartExtPrice ??
+    targetStockExtPrice ??
+    regularClosePrice;
+
   const baseSparklineData = chartData?.sparkline || stock?.sparkline || [];
-  const activeEndPrice = isMarketOpen ? leftPrice : outOfHoursPriceVal;
+  const chartActiveEndPrice = isMarketOpen ? chartLeftPrice : chartOutOfHoursPriceVal;
+
+  const chartPeriodChange = chartData?.priceChange ?? stock?.change ?? (chartLeftPrice - baseComparison);
+  const isChartPeriodPositive = (chartPeriodChange ?? 0) >= 0;
+  const chartTimeframeTrendColor = isChartPeriodPositive ? '#00D084' : '#FF4D4F';
 
   const sparklineData = useMemo(() => {
-    return typeof activeEndPrice === 'number' && baseSparklineData.length > 0
-      ? [...baseSparklineData.slice(0, -1), activeEndPrice]
+    return typeof chartActiveEndPrice === 'number' && baseSparklineData.length > 0
+      ? [...baseSparklineData.slice(0, -1), chartActiveEndPrice]
       : baseSparklineData;
-  }, [baseSparklineData, activeEndPrice]);
+  }, [baseSparklineData, chartActiveEndPrice]);
 
   const chartPointsWithLiveOverlay = useMemo(() => {
-    return chartData?.points && chartData.points.length > 0 && typeof activeEndPrice === 'number'
+    return chartData?.points && chartData.points.length > 0 && typeof chartActiveEndPrice === 'number'
       ? [
           ...chartData.points.slice(0, -1),
           {
             ...chartData.points[chartData.points.length - 1],
-            price: activeEndPrice,
+            price: chartActiveEndPrice,
           },
         ]
       : chartData?.points || [];
-  }, [chartData?.points, activeEndPrice]);
+  }, [chartData?.points, chartActiveEndPrice]);
 
   const animatedChartStyle = useAnimatedStyle(() => {
     return {
@@ -408,7 +427,7 @@ function StockDetailChartSection({
             <StockInteractiveChart
               points={chartPointsWithLiveOverlay}
               sparkline={sparklineData}
-              color={timeframeTrendColor}
+              color={chartTimeframeTrendColor}
               timeframe={activeDisplayedTimeframe}
               onScrub={handleScrub}
               onScrubEnd={handleScrubEnd}

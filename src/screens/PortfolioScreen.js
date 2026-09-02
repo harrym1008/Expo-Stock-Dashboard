@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import ScreenContainer from '../components/common/ScreenContainer';
 import TabSelector from '../components/common/TabSelector';
@@ -17,6 +17,7 @@ import { formatMoney, formatStockQuote } from '../utils/formatters';
 
 export default function PortfolioScreen() {
   const { theme, isDark } = useTheme();
+  const { isPaperTradingEnabled } = useTrading();
   const {
     quotes,
     profiles,

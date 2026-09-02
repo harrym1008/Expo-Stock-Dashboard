@@ -26,6 +26,12 @@ const latestKnownAfterHoursPrices = {};
 const latestKnownPreMarketPrices = {};
 const latestKnownPreviousCloses = {};
 
+// Global in-memory session cache and promise deduplicator for Yahoo cookie & crumb auth
+let inMemorySession = null;
+let inFlightSessionPromise = null;
+let lastSessionFailureTime = 0;
+const SESSION_FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
+
 /**
  * Calculates cache TTL to expire exactly 3 seconds after the next candle boundary.
  * e.g. For 1H (1m candles): at 2:29:15, expires at 2:30:03 (+48s TTL).
@@ -445,6 +451,7 @@ export const yahooFinanceService = {
 
   /**
    * Retrieves or refreshes Yahoo Finance cookie and crumb session auth.
+   * Deduplicates concurrent network requests and preserves valid sessions in memory + SQLite.
    */
   async getSession(forceRefresh = false) {
     const cacheKey = 'yahoo_auth_session';
@@ -452,75 +459,127 @@ export const yahooFinanceService = {
     const USER_AGENT =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
+    // 1. Fast path: check in-memory cache
+    if (!forceRefresh && inMemorySession && inMemorySession.crumb) {
+      return inMemorySession;
+    }
+
+    // 2. Cooldown check: prevent auth hammering if recent attempt failed
+    if (!forceRefresh && Date.now() - lastSessionFailureTime < SESSION_FAILURE_COOLDOWN_MS) {
+      return null;
+    }
+
+    // 3. Check persistent SQLite cache
     if (!forceRefresh) {
-      const cached = await persistentLruCache.getJson(cacheKey);
-      if (cached && cached.cookie && cached.crumb) {
-        return cached;
+      try {
+        const cached = await persistentLruCache.getJson(cacheKey);
+        if (cached && cached.crumb) {
+          inMemorySession = cached;
+          return cached;
+        }
+      } catch {
+        // Fall through to network fetch
       }
     }
 
-    try {
-      console.log('[Yahoo Finance] 🔑 Fetching fresh session cookie & crumb...');
-      // 1. Fetch cookie from fc.yahoo.com
-      const cookieRes = await fetchWithBackoff('https://fc.yahoo.com', {
-        headers: { 'User-Agent': USER_AGENT },
-      }, { tag: 'Yahoo Finance Cookie (fc)' });
-
-      let cookie = cookieRes?.headers?.get ? cookieRes.headers.get('set-cookie') : null;
-      if (!cookie && typeof cookieRes?.headers?.getSetCookie === 'function') {
-        const rawArr = cookieRes.headers.getSetCookie();
-        if (Array.isArray(rawArr) && rawArr.length > 0) {
-          cookie = rawArr.join('; ');
-        }
-      }
-
-      if (!cookie) {
-        // Fallback request to finance.yahoo.com
-        const fallbackRes = await fetchWithBackoff('https://finance.yahoo.com', {
-          headers: { 'User-Agent': USER_AGENT },
-        }, { tag: 'Yahoo Finance Cookie (finance)' });
-        cookie = fallbackRes?.headers?.get ? fallbackRes.headers.get('set-cookie') : null;
-      }
-
-      // 2. Fetch crumb using the session cookie
-      const crumbRes = await fetchWithBackoff('https://query2.finance.yahoo.com/v1/test/getcrumb', {
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Cookie': cookie || '',
-        },
-      }, { tag: 'Yahoo Finance Crumb (q2)' });
-
-      let crumb = null;
-      if (crumbRes && crumbRes.ok) {
-        crumb = (await crumbRes.text()).trim();
-      }
-
-      // If query2 failed, try query1
-      if (!crumb || crumb.includes('<') || crumb.includes('error')) {
-        const crumbRes1 = await fetchWithBackoff('https://query1.finance.yahoo.com/v1/test/getcrumb', {
-          headers: {
-            'User-Agent': USER_AGENT,
-            'Cookie': cookie || '',
-          },
-        }, { tag: 'Yahoo Finance Crumb (q1)' });
-        if (crumbRes1 && crumbRes1.ok) {
-          crumb = (await crumbRes1.text()).trim();
-        }
-      }
-
-      if (crumb && !crumb.includes('<') && !crumb.includes('error')) {
-        const session = { cookie: cookie || '', crumb };
-        await persistentLruCache.setJson(cacheKey, session, ONE_DAY_MS);
-        console.log(`[Yahoo Finance] 🔑 Obtained session crumb: ${crumb.slice(0, 4)}...`);
-        return session;
-      }
-
-      console.log('[Yahoo Finance] Failed to obtain valid crumb from Yahoo Finance');
-      return null;
-    } catch (err) {
-      console.log('[Yahoo Finance] Error getting session cookie/crumb:', err.message || err);
-      return null;
+    // 4. Deduplicate concurrent requests via shared in-flight promise
+    if (inFlightSessionPromise) {
+      return inFlightSessionPromise;
     }
+
+    inFlightSessionPromise = (async () => {
+      try {
+        console.log('[Yahoo Finance] 🔑 Fetching fresh session cookie & crumb...');
+
+        // Step A: Fetch cookie from fc.yahoo.com
+        let cookie = null;
+        try {
+          const cookieRes = await fetchWithBackoff('https://fc.yahoo.com', {
+            headers: { 'User-Agent': USER_AGENT },
+          }, { maxRetries: 1, tag: 'Yahoo Finance Cookie (fc)' });
+
+          cookie = cookieRes?.headers?.get ? cookieRes.headers.get('set-cookie') : null;
+          if (!cookie && typeof cookieRes?.headers?.getSetCookie === 'function') {
+            const rawArr = cookieRes.headers.getSetCookie();
+            if (Array.isArray(rawArr) && rawArr.length > 0) {
+              cookie = rawArr.join('; ');
+            }
+          }
+        } catch {
+          // Fallback handled below
+        }
+
+        // Step B: Fallback request to finance.yahoo.com if no cookie header
+        if (!cookie) {
+          try {
+            const fallbackRes = await fetchWithBackoff('https://finance.yahoo.com', {
+              headers: { 'User-Agent': USER_AGENT },
+            }, { maxRetries: 1, tag: 'Yahoo Finance Cookie (finance)' });
+            cookie = fallbackRes?.headers?.get ? fallbackRes.headers.get('set-cookie') : null;
+          } catch {
+            // Proceed with empty cookie
+          }
+        }
+
+        // Step C: Fetch crumb via query2 (maxRetries: 0 to prevent 429 lockup)
+        let crumb = null;
+        try {
+          const crumbRes = await fetchWithBackoff('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+            headers: {
+              'User-Agent': USER_AGENT,
+              'Cookie': cookie || '',
+            },
+          }, { maxRetries: 0, tag: 'Yahoo Finance Crumb (q2)' });
+
+          if (crumbRes && crumbRes.ok) {
+            crumb = (await crumbRes.text()).trim();
+          }
+        } catch {
+          // Fallback to query1
+        }
+
+        // Step D: Fallback to query1 if query2 failed or returned HTML error
+        if (!crumb || crumb.includes('<') || crumb.includes('error')) {
+          try {
+            const crumbRes1 = await fetchWithBackoff('https://query1.finance.yahoo.com/v1/test/getcrumb', {
+              headers: {
+                'User-Agent': USER_AGENT,
+                'Cookie': cookie || '',
+              },
+            }, { maxRetries: 0, tag: 'Yahoo Finance Crumb (q1)' });
+
+            if (crumbRes1 && crumbRes1.ok) {
+              crumb = (await crumbRes1.text()).trim();
+            }
+          } catch {
+            // Failed
+          }
+        }
+
+        // Step E: Save valid session to memory + SQLite
+        if (crumb && !crumb.includes('<') && !crumb.includes('error')) {
+          const session = { cookie: cookie || '', crumb };
+          inMemorySession = session;
+          lastSessionFailureTime = 0;
+          await persistentLruCache.setJson(cacheKey, session, ONE_DAY_MS).catch(() => {});
+          console.log(`[Yahoo Finance] 🔑 Obtained session crumb: ${crumb.slice(0, 4)}...`);
+          return session;
+        }
+
+        // Set failure cooldown on auth rejection
+        lastSessionFailureTime = Date.now();
+        console.log('[Yahoo Finance] Failed to obtain valid crumb (5m cooldown active)');
+        return null;
+      } catch (err) {
+        lastSessionFailureTime = Date.now();
+        console.log('[Yahoo Finance] Error getting session cookie/crumb:', err.message || err);
+        return null;
+      } finally {
+        inFlightSessionPromise = null;
+      }
+    })();
+
+    return inFlightSessionPromise;
   },
 
   async fetchCompanyDescription(symbol, isRetry = false) {
@@ -528,24 +587,29 @@ export const yahooFinanceService = {
     const cleanSymbol = getDisplaySymbol(symbol);
     const cacheKey = `company_desc_${cleanSymbol}`;
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
     const USER_AGENT =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
-    // 1. Check persistent LRU cache
+    // 1. Check persistent LRU cache (and negative not-found cache)
     const cached = await persistentLruCache.getJson(cacheKey);
-    if (cached && (cached.description || cached.sector || cached.industry)) {
-      console.log(`[Yahoo Finance] ⚡ Cache HIT for company description: ${cleanSymbol}`);
-      return cached;
+    if (cached) {
+      if (cached.notFound) return null;
+      if (cached.description || cached.sector || cached.industry) {
+        console.log(`[Yahoo Finance] ⚡ Cache HIT for company description: ${cleanSymbol}`);
+        return cached;
+      }
     }
 
     const yahooSymbol = getYahooSymbol(cleanSymbol);
 
+    // 2. Resolve auth session OUTSIDE rate limiter queue so handshake doesn't block candle calls
+    const session = await this.getSession(isRetry);
+    const crumbParam = session?.crumb ? `&crumb=${encodeURIComponent(session.crumb)}` : '';
+    const cookieHeader = session?.cookie ? { 'Cookie': session.cookie } : {};
+
     return yahooRateLimiter.schedule(async () => {
       try {
-        const session = await this.getSession(isRetry);
-        const crumbParam = session?.crumb ? `&crumb=${encodeURIComponent(session.crumb)}` : '';
-        const cookieHeader = session?.cookie ? { 'Cookie': session.cookie } : {};
-
         const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(
           yahooSymbol
         )}?modules=summaryProfile,assetProfile,defaultKeyStatistics,financialData${crumbParam}`;
@@ -556,15 +620,21 @@ export const yahooFinanceService = {
             'User-Agent': USER_AGENT,
             ...cookieHeader,
           },
-        }, { tag: `Yahoo Finance Profile (${cleanSymbol})` });
+        }, { maxRetries: 1, tag: `Yahoo Finance Profile (${cleanSymbol})` });
 
+        // Refresh session on 401 if not already retried
         if (res?.status === 401 && !isRetry) {
           console.log(`[Yahoo Finance] 401 for ${cleanSymbol}, refreshing cookie + crumb session and retrying...`);
+          inMemorySession = null;
           return this.fetchCompanyDescription(symbol, true);
         }
 
+        // Cache 404 / missing profiles (e.g. commodities, crypto) as notFound to stop re-querying
         if (!res || !res.ok) {
-          console.log(`[Yahoo Finance] Failed to fetch profile summary for ${cleanSymbol}: HTTP ${res?.status}`);
+          console.log(`[Yahoo Finance] Profile not available for ${cleanSymbol}: HTTP ${res?.status}`);
+          if (res?.status === 404 || res?.status === 400) {
+            persistentLruCache.setJson(cacheKey, { notFound: true }, ONE_DAY_MS).catch(() => {});
+          }
           return null;
         }
 
@@ -595,6 +665,9 @@ export const yahooFinanceService = {
 
         if (data.description || data.sector || data.industry || data.peRatio) {
           persistentLruCache.setJson(cacheKey, data, SEVEN_DAYS_MS).catch(() => {});
+        } else {
+          // Empty profile data: cache negative hit to avoid loops
+          persistentLruCache.setJson(cacheKey, { notFound: true }, ONE_DAY_MS).catch(() => {});
         }
 
         return data;
