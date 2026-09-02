@@ -95,7 +95,7 @@ export function getMarketSessionStatus(date = new Date()) {
     const preStart = 4 * 3600; // 04:00:00
     const regStart = holiday.regularHours?.start ?? 9 * 3600 + 1800; // 09:30:00
     const regEnd = holiday.regularHours?.end ?? 13 * 3600;           // e.g. 13:00:00 (early close)
-    const postEnd = holiday.postMarketHours?.end ?? (holiday.postMarketHours ? holiday.postMarketHours.end : 20 * 3600);
+    const postEnd = holiday.postMarketHours?.end ?? 20 * 3600;
 
     // Pre-Market window on an early-close day
     if (totalSeconds >= preStart && totalSeconds < regStart) {

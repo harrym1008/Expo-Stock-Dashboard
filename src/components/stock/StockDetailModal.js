@@ -152,7 +152,7 @@ function StockDetailModal({ visible, stock, onClose }) {
   const isFavorite = cleanSymbol ? isStockInAnyWatchlist(cleanSymbol) : false;
   const latestExtendedPriceRef = useRef(null);
   const [persistentPrevClose, setPersistentPrevClose] = useState(
-    () => (typeof stock?.previousClose === 'number' && stock.previousClose > 0 ? stock.previousClose : null)
+    () => (stock?.previousClose > 0 ? stock.previousClose : null)
   );
 
   // Reset state when the stock symbol changes or modal is closed
@@ -166,9 +166,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     setIsInitialStockLoading(true);
     setIsTimeframeLoading(false);
     setPersistentPrevClose(
-      typeof stock?.previousClose === 'number' && stock.previousClose > 0
-        ? stock.previousClose
-        : null
+      stock?.previousClose > 0 ? stock.previousClose : null
     );
 
     if (stock?.symbol) {
@@ -218,7 +216,7 @@ function StockDetailModal({ visible, stock, onClose }) {
               const extCandidate = marketStatus?.isPreMarket
                 ? (data.preMarketPrice || data.postMarketPrice)
                 : (data.postMarketPrice || data.preMarketPrice);
-              if (typeof extCandidate === 'number' && extCandidate > 0 && Math.abs(extCandidate - (data.regularMarketPrice || 0)) > 0.000001) {
+              if (extCandidate > 0 && Math.abs(extCandidate - (data.regularMarketPrice || 0)) > 0.000001) {
                 latestExtendedPriceRef.current = extCandidate;
               }
             }
@@ -244,12 +242,12 @@ function StockDetailModal({ visible, stock, onClose }) {
 
   // Persist the previous close price for the stock if available, to avoid flickering when switching timeframes or re-rendering
   useEffect(() => {
-    if (typeof stock?.previousClose === 'number' && stock.previousClose > 0) {
+    if (stock?.previousClose > 0) {
       setPersistentPrevClose(stock.previousClose);
     }
   }, [stock?.previousClose]);
   useEffect(() => {
-    if (typeof chartData?.previousClose === 'number' && chartData.previousClose > 0) {
+    if (chartData?.previousClose > 0) {
       setPersistentPrevClose(chartData.previousClose);
     }
   }, [chartData?.previousClose]);
@@ -262,7 +260,7 @@ function StockDetailModal({ visible, stock, onClose }) {
       const sym = getDisplaySymbol(stock.symbol);
       fetchHistoricalChart(sym, '1D')
         .then((d1) => {
-          if (isMounted && typeof d1?.previousClose === 'number' && d1.previousClose > 0) {
+          if (isMounted && d1?.previousClose > 0) {
             setPersistentPrevClose(d1.previousClose);
           }
         })
@@ -341,13 +339,12 @@ function StockDetailModal({ visible, stock, onClose }) {
     }
   }, [selectedTimeframe, isTimeframeDisabled]);
 
-
   const isPos = (n) => typeof n === 'number' && !isNaN(n) && n > 0;
 
   // Timeframe to display and the live quote for the stock
   const activeDisplayedTimeframe = chartData?.timeframe || selectedTimeframe;
-  const liveQuote = cleanSymbol ? (quotes[cleanSymbol] || quotes[stock?.symbol] || {}) : {};
-  const liveWsPrice = isPos(liveQuote?.price) ? liveQuote.price : (isPos(stock?.price) ? stock.price : null);
+  const liveQuote = cleanSymbol ? (quotes[cleanSymbol] || quotes[stock?.symbol]) : null;
+  const liveWsPrice = liveQuote?.price > 0 ? liveQuote.price : (stock?.price > 0 ? stock.price : null);
 
   // Track latest live price for extended-session display
   if (liveWsPrice) {
@@ -356,37 +353,32 @@ function StockDetailModal({ visible, stock, onClose }) {
 
   // Determine the left price to display in the chart section
   const regularClosePrice =
-    (isPos(chartData?.regularMarketPrice) ? chartData.regularMarketPrice : null) ??
-    (isPos(liveQuote?.regularMarketPrice) ? liveQuote.regularMarketPrice : null) ??
-    (isPos(stock?.regularMarketPrice) ? stock.regularMarketPrice : null) ??
-    (isPos(liveQuote?.price) ? liveQuote.price : null) ??
-    (isPos(stock?.price) ? stock.price : null) ??
-    (isPos(chartData?.currentPrice) ? chartData.currentPrice : 0);
+    chartData?.regularMarketPrice ||
+    liveQuote?.regularMarketPrice ||
+    stock?.regularMarketPrice ||
+    stock?.price ||
+    0;
 
   const leftPrice = effectiveMarketStatus.isOpen
-    ? (liveWsPrice ?? (isPos(liveQuote?.price) ? liveQuote.price : null) ?? (isPos(stock?.price) ? stock.price : null) ?? (isPos(chartData?.currentPrice) ? chartData.currentPrice : null) ?? regularClosePrice)
+    ? (liveWsPrice || chartData?.currentPrice || regularClosePrice)
     : regularClosePrice;
 
 
   // Determine the extended session price to display in the chart section, if it is actually required
   const isPreMarket = marketStatus?.isPreMarket;
   const targetChartExtPrice = isPreMarket
-    ? (isPos(chartData?.preMarketPrice) && Math.abs(chartData.preMarketPrice - regularClosePrice) > 0.000001 ? chartData.preMarketPrice : null) ??
-      (isPos(chartData?.postMarketPrice) && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.000001 ? chartData.postMarketPrice : null)
-    : (isPos(chartData?.postMarketPrice) && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.000001 ? chartData.postMarketPrice : null) ??
-      (isPos(chartData?.preMarketPrice) && Math.abs(chartData.preMarketPrice - regularClosePrice) > 0.000001 ? chartData.preMarketPrice : null);
+    ? (chartData?.preMarketPrice || chartData?.postMarketPrice)
+    : (chartData?.postMarketPrice || chartData?.preMarketPrice);
 
   const targetStockExtPrice = isPreMarket
-    ? (isPos(liveQuote?.preMarketPrice) ? liveQuote.preMarketPrice : (isPos(stock?.preMarketPrice) ? stock.preMarketPrice : null)) ??
-      (isPos(liveQuote?.postMarketPrice) ? liveQuote.postMarketPrice : (isPos(stock?.postMarketPrice) ? stock.postMarketPrice : null))
-    : (isPos(liveQuote?.postMarketPrice) ? liveQuote.postMarketPrice : (isPos(stock?.postMarketPrice) ? stock.postMarketPrice : null)) ??
-      (isPos(liveQuote?.preMarketPrice) ? liveQuote.preMarketPrice : (isPos(stock?.preMarketPrice) ? stock.preMarketPrice : null));
+    ? (liveQuote?.preMarketPrice || stock?.preMarketPrice || liveQuote?.postMarketPrice || stock?.postMarketPrice)
+    : (liveQuote?.postMarketPrice || stock?.postMarketPrice || liveQuote?.preMarketPrice || stock?.preMarketPrice);
 
   const outOfHoursPriceVal =
-    liveWsPrice ??
-    (isPos(latestExtendedPriceRef.current) ? latestExtendedPriceRef.current : null) ??
-    targetChartExtPrice ??
-    targetStockExtPrice ??
+    liveWsPrice ||
+    latestExtendedPriceRef.current ||
+    targetChartExtPrice ||
+    targetStockExtPrice ||
     regularClosePrice;
 
 
@@ -423,49 +415,48 @@ function StockDetailModal({ visible, stock, onClose }) {
   // Statistics section: previous close, market cap, volume, avg volume, P/E, EPS, profit margin, beta, dividend yield
   const prevCloseVal =
     persistentPrevClose ??
-    (typeof chartData?.previousClose === 'number' && chartData.previousClose > 0 ? chartData.previousClose : null) ??
-    (typeof stock?.previousClose === 'number' && stock.previousClose > 0 ? stock.previousClose : null) ??
-    null;
-  const prevCloseStr = prevCloseVal !== null && prevCloseVal !== undefined && !isNaN(prevCloseVal) && prevCloseVal > 0
+    (chartData?.previousClose > 0 ? chartData.previousClose : null) ??
+    (stock?.previousClose > 0 ? stock.previousClose : null);
+  const prevCloseStr = prevCloseVal > 0
     ? formatStatPrice(prevCloseVal, curSymbol, decimals, cleanSymbol)
     : '-';
 
-  const marketCapVal = metrics?.marketCapitalization ?? profileData?.marketCap ?? stock?.marketCap ?? null;
-  const marketCapStr = marketCapVal !== null && marketCapVal !== undefined && !isNaN(marketCapVal) && marketCapVal > 0
+  const marketCapVal = metrics?.marketCapitalization ?? profileData?.marketCap ?? stock?.marketCap;
+  const marketCapStr = marketCapVal > 0
     ? formatLargeNum(marketCapVal * 1e6, curSymbol)
     : '-';
 
-  const volumeVal = chartData?.regularMarketVolume ?? stock?.volume ?? null;
-  const volumeStr = volumeVal !== null && volumeVal !== undefined && !isNaN(volumeVal) && volumeVal > 0
+  const volumeVal = chartData?.regularMarketVolume ?? stock?.volume;
+  const volumeStr = volumeVal > 0
     ? formatLargeNum(volumeVal)
     : '-';
 
-  const rawAvgVol = metrics?.['3MonthAverageTradingVolume'] ?? metrics?.avgVolume3M ?? null;
-  const numAvgVol = rawAvgVol !== null && rawAvgVol !== undefined ? Number(rawAvgVol) : null;
-  const avgVol3MStr = numAvgVol !== null && !isNaN(numAvgVol) && numAvgVol > 0
+  const rawAvgVol = metrics?.['3MonthAverageTradingVolume'] ?? metrics?.avgVolume3M;
+  const numAvgVol = Number(rawAvgVol);
+  const avgVol3MStr = numAvgVol > 0
     ? `${numAvgVol.toFixed(2)}M`
     : '-';
 
-  const peTTM = metrics?.peTTM ?? companyDesc?.peRatio ?? null;
-  const trailingPeStr = typeof peTTM === 'number' && !isNaN(peTTM) && peTTM > 0 ? peTTM.toFixed(2) : '-';
+  const peTTM = metrics?.peTTM ?? companyDesc?.peRatio;
+  const trailingPeStr = peTTM > 0 ? peTTM.toFixed(2) : '-';
 
-  const forwardPE = metrics?.forwardPE ?? companyDesc?.forwardPE ?? null;
-  const forwardPeStr = typeof forwardPE === 'number' && !isNaN(forwardPE) && forwardPE > 0 ? forwardPE.toFixed(2) : '-';
+  const forwardPE = metrics?.forwardPE ?? companyDesc?.forwardPE;
+  const forwardPeStr = forwardPE > 0 ? forwardPE.toFixed(2) : '-';
 
-  const epsTTM = metrics?.epsTTM ?? companyDesc?.eps ?? null;
-  const trailingEpsStr = typeof epsTTM === 'number' && !isNaN(epsTTM)
+  const epsTTM = metrics?.epsTTM ?? companyDesc?.eps;
+  const trailingEpsStr = typeof epsTTM === 'number'
     ? formatStatPrice(epsTTM, curSymbol, decimals, cleanSymbol)
     : '-';
 
-  const marginTTM = metrics?.netProfitMarginTTM ?? companyDesc?.profitMargin ?? null;
-  const profitMarginStr = typeof marginTTM === 'number' && !isNaN(marginTTM) ? `${marginTTM.toFixed(2)}%` : '-';
+  const marginTTM = metrics?.netProfitMarginTTM ?? companyDesc?.profitMargin;
+  const profitMarginStr = typeof marginTTM === 'number' ? `${marginTTM.toFixed(2)}%` : '-';
 
-  const beta = metrics?.beta ?? companyDesc?.beta ?? null;
-  const betaStr = typeof beta === 'number' && !isNaN(beta) ? beta.toFixed(2) : '-';
+  const beta = metrics?.beta ?? companyDesc?.beta;
+  const betaStr = typeof beta === 'number' ? beta.toFixed(2) : '-';
 
   const rawDivYield = metrics?.currentDividendYieldTTM;
-  const numDivYield = rawDivYield !== null && rawDivYield !== undefined ? Number(rawDivYield) : null;
-  const divYieldStr = numDivYield !== null && !isNaN(numDivYield)
+  const numDivYield = rawDivYield != null ? Number(rawDivYield) : null;
+  const divYieldStr = numDivYield != null && !isNaN(numDivYield)
     ? `${numDivYield.toFixed(2)}%`
     : (metrics ? '0.00%' : '-');
 

@@ -28,7 +28,7 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
   // Derive display + currency/decimal fields with safe fallbacks
   const displaySymbol = item?.displaySymbol || item?.symbol || '';
   const displayName = item?.displayName || item?.name || displaySymbol;
-  const curSymbol = item?.currency !== undefined ? item.currency : getCurrency(item?.symbol, '$');
+  const curSymbol = item?.currency ?? getCurrency(item?.symbol, '$');
   const decimals = getDecimals(item?.symbol, item?.price, item?.decimals);
 
   return (

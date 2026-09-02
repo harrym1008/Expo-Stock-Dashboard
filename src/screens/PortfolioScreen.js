@@ -152,9 +152,9 @@ export default function PortfolioScreen() {
       const profile = profiles[sym] || profiles[pos.symbol];
       const formatted = formatStockQuote(pos, quote, profile, null, marketStatus);
       const livePrice =
-        typeof formatted.price === 'number' && formatted.price > 0
+        formatted.price > 0
           ? formatted.price
-          : (typeof pos.avgCost === 'number' && pos.avgCost > 0 ? pos.avgCost : 0);
+          : (pos.avgCost > 0 ? pos.avgCost : 0);
       const sharesNum = Number(pos.shares) || 0;
       const totalVal = sharesNum * livePrice;
       const avgCost = Number(pos.avgCost) || livePrice;

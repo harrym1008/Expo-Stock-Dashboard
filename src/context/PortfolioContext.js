@@ -214,7 +214,7 @@ export function PortfolioProvider({ children }) {
       const numShares = parseFloat(shares);
       const numPrice = parseFloat(price);
 
-      if (!cleanSym || isNaN(numShares) || numShares <= 0 || isNaN(numPrice) || numPrice <= 0) {
+      if (!cleanSym || !(numShares > 0) || !(numPrice > 0)) {
         throw new Error('Invalid order arguments');
       }
 

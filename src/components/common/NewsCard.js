@@ -20,7 +20,7 @@ export default function NewsCard({ item }) {
   const hideImageBySource = isReuters || isBloomberg || isYahoo;
   const hasSummary = !isReuters && Boolean(item.summary && item.summary.trim());
 
-  const hasValidImage = Boolean(item.image && typeof item.image === 'string' && item.image.trim().length > 0);
+  const hasValidImage = Boolean(item.image?.trim());
   const showImage = !hideImageBySource && hasValidImage && !imageError;
 
   // Open the article URL in default browser on press

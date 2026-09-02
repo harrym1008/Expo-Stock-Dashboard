@@ -249,7 +249,7 @@ export const yahooFinanceService = {
           const validIndices = [];
           for (let i = 0; i < rawCloses.length; i++) {
             const v = rawCloses[i];
-            if (typeof v === 'number' && !isNaN(v) && v > 0) validIndices.push(i);
+            if (v > 0) validIndices.push(i);
           }
           if (validIndices.length > 0) {
             for (const i of validIndices) {
@@ -290,7 +290,7 @@ export const yahooFinanceService = {
                 if (Array.isArray(fbCloses) && fbCloses.length > 0) {
                   let lastValidTs = null;
                   for (let i = fbCloses.length - 1; i >= 0; i--) {
-                    if (typeof fbCloses[i] === 'number' && !isNaN(fbCloses[i]) && fbCloses[i] > 0) {
+                    if (fbCloses[i] > 0) {
                       lastValidTs = fbTimestamps[i];
                       break;
                     }
@@ -301,7 +301,7 @@ export const yahooFinanceService = {
                     for (let i = 0; i < fbCloses.length; i++) {
                       const v = fbCloses[i];
                       const t = (fbTimestamps[i] || 0) * 1000;
-                      if (typeof v === 'number' && !isNaN(v) && v > 0) {
+                      if (v > 0) {
                         if (new Date(t).toDateString() === lastDateStr) {
                           const dec = getDecimals(cleanSymbol, v);
                           points.push({ time: t, price: Number(v.toFixed(dec)) });
@@ -349,12 +349,12 @@ export const yahooFinanceService = {
           const computedPrev = Number(
             (meta.regularMarketPrice / (1 + meta.regularMarketChangePercent / 100)).toFixed(calculatedDec)
           );
-          if (typeof computedPrev === 'number' && !isNaN(computedPrev) && computedPrev > 0) {
+          if (computedPrev > 0) {
             previousClose = computedPrev;
           }
         }
 
-        if (typeof previousClose === 'number' && previousClose > 0) {
+        if (previousClose > 0) {
           latestKnownPreviousCloses[cleanSymbol] = previousClose;
         }
         const minPrice = Math.min(...prices);
@@ -716,9 +716,7 @@ export const yahooFinanceService = {
         if (!result) return null;
 
         const rawCloses = result.indicators?.quote?.[0]?.close || [];
-        const validCloses = rawCloses.filter(
-          (c) => typeof c === 'number' && !isNaN(c) && c > 0
-        );
+        const validCloses = rawCloses.filter((c) => c > 0);
 
         if (validCloses.length > 0) {
           const lastClose = validCloses[validCloses.length - 1];
@@ -729,7 +727,7 @@ export const yahooFinanceService = {
         // Fallback to meta prices
         const meta = result.meta || {};
         const metaPrice = meta.regularMarketPrice ?? meta.previousClose ?? null;
-        if (typeof metaPrice === 'number' && metaPrice > 0) {
+        if (metaPrice > 0) {
           const calculatedDec = getDecimals(cleanSymbol, metaPrice, dec);
           return Number(metaPrice.toFixed(calculatedDec));
         }

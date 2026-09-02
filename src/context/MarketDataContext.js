@@ -9,7 +9,7 @@ import { getDisplaySymbol, getFinnhubSymbol, isNonStockSecurity } from '../utils
 
 // Recompute change/percent + append live price to sparkline for a single tick
 function calculateTickUpdate(current, sym, newPrice, timestamp, sessionStatus) {
-  if (typeof newPrice !== 'number' || isNaN(newPrice) || newPrice <= 0) {
+  if (typeof newPrice !== 'number' || newPrice <= 0) {
     return current;
   }
   const currentQuote = current || {};
@@ -150,7 +150,7 @@ export function MarketDataProvider({ children }) {
       const finnhubSym = getFinnhubSymbol(symbol);
 
       const quote = await yahooFinanceService.fetchQuote(cleanSym);
-      if (quote && typeof quote.price === 'number' && quote.price > 0) {
+      if (quote?.price > 0) {
         setQuotes((prev) => {
           const existing = prev[cleanSym] || prev[finnhubSym] || {};
           // Keep live WS price when present; otherwise take fetched price
@@ -270,7 +270,7 @@ export function MarketDataProvider({ children }) {
 
   // 14. Programmatic Live Price Injection (e.g. from Yahoo Finance order fill)
   const injectLivePrice = useCallback((symbol, newPrice, timestamp = Date.now()) => {
-    if (!symbol || typeof newPrice !== 'number' || newPrice <= 0) return;
+    if (!symbol || !(newPrice > 0)) return;
     const displaySym = getDisplaySymbol(symbol);
     const finnhubSym = getFinnhubSymbol(symbol);
     const sessionStatus = getMarketSessionStatus();

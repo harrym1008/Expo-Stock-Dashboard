@@ -255,7 +255,7 @@ function StockInteractiveChart({
   // Unify points array: if points with { time, price } exist, use them; else fallback to sparkline
   const chartPoints = useMemo(() => {
     if (Array.isArray(points) && points.length > 0) {
-      return points.filter((p) => typeof p?.price === 'number' && !isNaN(p.price));
+      return points.filter((p) => p?.price > 0);
     }
     if (Array.isArray(sparkline) && sparkline.length > 0) {
       const now = Date.now();

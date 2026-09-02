@@ -59,7 +59,7 @@ export default function CreatePortfolioModal({
 
   // Strip commas and validate cash and title
   const parsedCash = parseFloat(cashInput.replace(/,/g, ''));
-  const isCashValid = !isNaN(parsedCash) && parsedCash >= minCash && parsedCash <= maxCash;
+  const isCashValid = parsedCash >= minCash && parsedCash <= maxCash;
   const isTitleValid = title.trim().length > 0;
   const isSubmitDisabled = !isTitleValid || !isCashValid;
 

@@ -34,7 +34,7 @@ Object.entries(nonStockSecuritiesData || {}).forEach(([category, list]) => {
         finnhubSymbol: sec.finnhubSymbol,
         yahooSymbol: sec.yahooSymbol,
         decimals: typeof sec.decimals === 'number' ? sec.decimals : 2,
-        currency: sec.currency !== undefined ? sec.currency : '$',
+        currency: sec.currency ?? '$',
       };
 
       ALL_NON_STOCK_SECURITIES.push(item);
@@ -112,10 +112,7 @@ export function getDisplayName(symbol) {
 export function getCurrency(symbol, fallback = '$') {
   if (!symbol || typeof symbol !== 'string') return fallback;
   const sec = getSecurityBySymbol(symbol);
-  if (sec && sec.currency !== undefined) {
-    return sec.currency;
-  }
-  return fallback;
+  return sec?.currency ?? fallback;
 }
 
 // Decimal count for a price: explicit > JSON-decimals > price-based fallback
@@ -132,7 +129,7 @@ export function getDecimals(symbol, price = null, explicitDecimals = null) {
     }
   }
   // Stocks: scale decimals to price magnitude (cheaper to show more dp on low prices)
-  if (price !== null && price !== undefined && typeof price === 'number') {
+  if (typeof price === 'number') {
     const p = Math.abs(price);
     if (p === 0 || p >= 1.0) return 2;
     if (p >= 0.10) return 3;

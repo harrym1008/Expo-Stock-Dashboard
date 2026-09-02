@@ -25,8 +25,7 @@ const CHART_UPDATE_THROTTLE_MS = 10000;
 
 // Debounces live WS prices into a chart-friendly price
 function useThrottledChartPrice(liveWsPrice, chartKey) {
-  const isPos = (n) => typeof n === 'number' && !isNaN(n) && n > 0;
-  const validLivePrice = isPos(liveWsPrice) ? liveWsPrice : null;
+  const validLivePrice = liveWsPrice > 0 ? liveWsPrice : null;
 
   const [chartPrice, setChartPrice] = useState(validLivePrice);
 
@@ -97,8 +96,6 @@ function useThrottledChartPrice(liveWsPrice, chartKey) {
           state.timer = null;
           const target = state.pendingPrice;
           if (
-            typeof target === 'number' &&
-            !isNaN(target) &&
             target > 0 &&
             Math.abs(target - state.lastAppliedPrice) >= 0.0001
           ) {
@@ -166,16 +163,16 @@ function StockDetailChartSection({
 
   // Regular-session close price... prefer chart data, fall back to stock fields
   const regularClosePrice =
-    (isPos(chartData?.regularMarketPrice) ? chartData.regularMarketPrice : null) ??
-    (isPos(stock?.regularMarketPrice) ? stock.regularMarketPrice : null) ??
-    (isPos(stock?.price) ? stock.price : null) ??
-    (isPos(chartData?.currentPrice) ? chartData.currentPrice : 0);
+    chartData?.regularMarketPrice ||
+    stock?.regularMarketPrice ||
+    stock?.price ||
+    0;
 
-  const rawLiveWsPrice = isPos(liveWsPrice) ? liveWsPrice : null;
+  const rawLiveWsPrice = liveWsPrice > 0 ? liveWsPrice : null;
 
   // Update the textual display prices immediately upon incoming websocket msgs
   const leftPrice = isMarketOpen
-    ? (rawLiveWsPrice ?? (isPos(stock?.price) ? stock.price : null) ?? (isPos(chartData?.currentPrice) ? chartData.currentPrice : null) ?? regularClosePrice)
+    ? (rawLiveWsPrice || stock?.price || chartData?.currentPrice || regularClosePrice)
     : regularClosePrice;
 
   // Derive currency and formatting from the stock object
@@ -229,37 +226,35 @@ function StockDetailChartSection({
       (isPos(chartData?.preMarketPrice) && Math.abs(chartData.preMarketPrice - regularClosePrice) > 0.00001 ? chartData.preMarketPrice : null);
 
   const targetStockExtPrice = isPreMarket
-    ? (isPos(stock?.preMarketPrice) ? stock.preMarketPrice : null) ??
-      (isPos(stock?.postMarketPrice) ? stock.postMarketPrice : null)
-    : (isPos(stock?.postMarketPrice) ? stock.postMarketPrice : null) ??
-      (isPos(stock?.preMarketPrice) ? stock.preMarketPrice : null);
+    ? (stock?.preMarketPrice || stock?.postMarketPrice)
+    : (stock?.postMarketPrice || stock?.preMarketPrice);
 
   // Extended-session price to display when markets are closed using the highest-priority
   const outOfHoursPriceVal =
-    rawLiveWsPrice ??
-    (isPos(latestExtendedPrice) ? latestExtendedPrice : null) ??
-    targetChartExtPrice ??
-    targetStockExtPrice ??
+    rawLiveWsPrice ||
+    latestExtendedPrice ||
+    targetChartExtPrice ||
+    targetStockExtPrice ||
     regularClosePrice;
 
   // Extended-session change vs the regular close
-  const outOfHoursChangeVal = isPos(outOfHoursPriceVal) && isPos(regularClosePrice)
+  const outOfHoursChangeVal = outOfHoursPriceVal && regularClosePrice
     ? outOfHoursPriceVal - regularClosePrice
     : 0;
   const outOfHoursChangePercentVal =
-    isPos(regularClosePrice) ? (outOfHoursChangeVal / regularClosePrice) * 100 : 0;
+    regularClosePrice ? (outOfHoursChangeVal / regularClosePrice) * 100 : 0;
 
   const isOutOfHoursPositive = outOfHoursChangeVal >= 0;
   const outOfHoursTrendColor = isOutOfHoursPositive ? '#00D084' : '#FF4D4F';
 
-  const afterHoursPriceStr = isPos(outOfHoursPriceVal)
+  const afterHoursPriceStr = outOfHoursPriceVal > 0
     ? outOfHoursPriceVal.toLocaleString(undefined, {
         minimumFractionDigits: decimals,
         maximumFractionDigits: decimals,
       })
     : '-';
 
-  const afterHoursChangeStr = isPos(outOfHoursPriceVal) && isPos(regularClosePrice)
+  const afterHoursChangeStr = outOfHoursPriceVal > 0 && regularClosePrice > 0
     ? `${isOutOfHoursPositive ? '+' : '-'}${curSymbol}${Math.abs(
         outOfHoursChangeVal
       ).toLocaleString(undefined, {
@@ -272,17 +267,17 @@ function StockDetailChartSection({
   // 2. Chart Rendering Prices
   const chartKey = `${stock?.symbol || ''}_${activeDisplayedTimeframe}`;
   const chartWsPrice = useThrottledChartPrice(liveWsPrice, chartKey);
-  const effectiveChartWsPrice = isPos(chartWsPrice) ? chartWsPrice : null;
+  const effectiveChartWsPrice = chartWsPrice > 0 ? chartWsPrice : null;
 
   const chartLeftPrice = isMarketOpen
-    ? (effectiveChartWsPrice ?? (isPos(stock?.price) ? stock.price : null) ?? (isPos(chartData?.currentPrice) ? chartData.currentPrice : null) ?? regularClosePrice)
+    ? (effectiveChartWsPrice || stock?.price || chartData?.currentPrice || regularClosePrice)
     : regularClosePrice;
 
   const chartOutOfHoursPriceVal =
-    effectiveChartWsPrice ??
-    (isPos(latestExtendedPrice) ? latestExtendedPrice : null) ??
-    targetChartExtPrice ??
-    targetStockExtPrice ??
+    effectiveChartWsPrice ||
+    latestExtendedPrice ||
+    targetChartExtPrice ||
+    targetStockExtPrice ||
     regularClosePrice;
 
   const baseSparklineData = chartData?.sparkline || stock?.sparkline || [];
@@ -293,7 +288,7 @@ function StockDetailChartSection({
   const chartTimeframeTrendColor = isChartPeriodPositive ? '#00D084' : '#FF4D4F';
 
   const sparklineData = useMemo(() => {
-    return typeof chartActiveEndPrice === 'number' && baseSparklineData.length > 0
+    return chartActiveEndPrice > 0 && baseSparklineData.length > 0
       ? [...baseSparklineData.slice(0, -1), chartActiveEndPrice]
       : baseSparklineData;
   }, [baseSparklineData, chartActiveEndPrice]);
