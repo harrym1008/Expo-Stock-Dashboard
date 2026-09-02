@@ -1,15 +1,11 @@
 import React from 'react';
 import { StyleSheet, TouchableOpacity } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import Animated, {
-  useAnimatedStyle,
-} from 'react-native-reanimated';
+import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing } from '../../constants/theme';
 
-/**
- * Animated delete button rendered when swiping left.
- */
+
 // Right-edge delete button: fades/scales with swipe progress
 function RightActionButton({ progress, onDelete }) {
   // Fade in and scale the icon as the swipe opens
@@ -25,7 +21,7 @@ function RightActionButton({ progress, onDelete }) {
   });
 
   return (
-    {/* Red action pane with trash icon */}
+    // Red action pane with trash icon 
     <TouchableOpacity
       style={styles.deleteAction}
       onPress={onDelete}
@@ -40,19 +36,9 @@ function RightActionButton({ progress, onDelete }) {
   );
 }
 
-/**
- * SwipeableStockItem component
- * Wraps a stock item with swipe-to-delete functionality (like iOS Contacts).
- * Swiping left reveals a red action pane on the right side with a trash icon.
- *
- * @param {Object} props
- * @param {React.ReactNode} props.children - Stock item child content
- * @param {Function} props.onDelete - Callback invoked when delete button is tapped
- * @param {string|number} props.itemId - Optional ID identifier for the item
- */
-// Swipe-to-delete wrapper: left swipe reveals the delete action pane
+// Swipe-to-delete wrapper... left swipe reveals the delete action pane behind the watchlist item
 function SwipeableStockItem({ children, onDelete, itemId }) {
-  // Delete tap forwards the item id to the parent
+
   const handleDelete = () => {
     if (onDelete) {
       onDelete(itemId);
@@ -70,7 +56,6 @@ function SwipeableStockItem({ children, onDelete, itemId }) {
   };
 
   return (
-    {/* Swipeable shell: children shown, right actions revealed on swipe */}
     <ReanimatedSwipeable
       key={itemId}
       renderRightActions={renderRightActions}
@@ -84,7 +69,6 @@ function SwipeableStockItem({ children, onDelete, itemId }) {
 
 export default React.memo(SwipeableStockItem);
 
-// Swipe action pane + icon wrapper styles
 const styles = StyleSheet.create({
   deleteAction: {
     width: 80,

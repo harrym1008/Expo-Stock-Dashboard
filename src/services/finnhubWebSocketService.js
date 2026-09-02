@@ -18,7 +18,7 @@ class FinnhubWebSocketManager {
     this.reconnectAttempts = 0;
 
     // Symbol sets (stored as Finnhub subscription symbols)
-    this.allWishlistSymbols = new Set();
+    this.allWatchlistSymbols = new Set();
     this.activeViewSymbols = new Set();
 
     // Actual subscribed symbols on the Finnhub socket
@@ -155,7 +155,7 @@ class FinnhubWebSocketManager {
 
     if (!this.rotationTimer) {
       this.rotationTimer = setInterval(() => {
-        if (this.allWishlistSymbols.size > WATCHLIST_BUDGET) {
+        if (this.allWatchlistSymbols.size > WATCHLIST_BUDGET) {
           this.rotateWatchlistSubscriptions();
         }
       }, ROTATION_INTERVAL_MS);
@@ -194,7 +194,7 @@ class FinnhubWebSocketManager {
 
   // Replace the full watchlist symbol set and resync
   setWatchlistSymbols(symbols = []) {
-    this.allWishlistSymbols = new Set(symbols.map((s) => getFinnhubSymbol(s)));
+    this.allWatchlistSymbols = new Set(symbols.map((s) => getFinnhubSymbol(s)));
     this.syncSubscriptions();
   }
 
@@ -218,16 +218,16 @@ class FinnhubWebSocketManager {
     }
 
     const availableWatchlistBudget = MAX_TOTAL_BUDGET - targetSubscriptions.size;
-    const wishlistArray = Array.from(this.allWishlistSymbols);
+    const watchlistArray = Array.from(this.allWatchlistSymbols);
 
-    if (wishlistArray.length <= availableWatchlistBudget) {
+    if (watchlistArray.length <= availableWatchlistBudget) {
       // Budget fits all watchlist symbols
-      for (const sym of wishlistArray) {
+      for (const sym of watchlistArray) {
         targetSubscriptions.add(sym);
       }
     } else {
       // Oversubscribed: random subset within remaining budget
-      const selected = this.getRandomSubset(wishlistArray, availableWatchlistBudget);
+      const selected = this.getRandomSubset(watchlistArray, availableWatchlistBudget);
       for (const sym of selected) {
         targetSubscriptions.add(sym);
       }
@@ -261,13 +261,13 @@ class FinnhubWebSocketManager {
 
   // Resample the watchlist subset every 15s (keeps 45-symbol rotation fresh)
   rotateWatchlistSubscriptions() {
-    if (!this.isConnected || this.allWishlistSymbols.size <= WATCHLIST_BUDGET) {
+    if (!this.isConnected || this.allWatchlistSymbols.size <= WATCHLIST_BUDGET) {
       return;
     }
 
     const availableBudget = MAX_TOTAL_BUDGET - this.activeViewSymbols.size;
-    const wishlistArray = Array.from(this.allWishlistSymbols);
-    const newSubset = this.getRandomSubset(wishlistArray, availableBudget);
+    const watchlistArray = Array.from(this.allWatchlistSymbols);
+    const newSubset = this.getRandomSubset(watchlistArray, availableBudget);
 
     const newTargetSubscriptions = new Set([...this.activeViewSymbols, ...newSubset]);
 

@@ -1,8 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
-// Inline mini-line chart: maps a data array to an SVG path, smoothing optional
+// Sparkline converts data array into an SVG and renders inside a View (drawing a line chart)
 export default function Sparkline({
   data = [],
   width: customWidth,
@@ -12,10 +12,7 @@ export default function Sparkline({
   smoothing = 0,
   style,
 }) {
-  // Container size from onLayout (drives SVG scaling)
   const [layout, setLayout] = useState({ width: 0, height: 0 });
-
-  // Record container dimensions when they change
   const handleLayout = (event) => {
     const { width, height } = event.nativeEvent.layout;
     if (
@@ -26,7 +23,7 @@ export default function Sparkline({
     }
   };
 
-  // Mean average smoothing of X surrounding values (e.g. radius = smoothing)
+  // Smooth the data using a simple moving average if smoothing > 0
   const smoothedData = useMemo(() => {
     if (!data || data.length < 2 || !smoothing || smoothing <= 0) {
       return data;
@@ -47,7 +44,7 @@ export default function Sparkline({
     });
   }, [data, smoothing]);
 
-  // Need at least 2 points to draw a line
+  // At least two points must exist to draw a line... otherwise render an empty container
   if (!smoothedData || smoothedData.length < 2) {
     return <View style={[styles.container, style]} onLayout={handleLayout} />;
   }
@@ -55,7 +52,7 @@ export default function Sparkline({
   const effectiveWidth = customWidth || layout.width || 100;
   const effectiveHeight = customHeight || layout.height || 36;
 
-  // Scale data to canvas: normalize by min/max range
+  // Scale data to fit in the view box with padding
   const min = Math.min(...smoothedData);
   const max = Math.max(...smoothedData);
   const range = max - min === 0 ? 1 : max - min;
@@ -77,7 +74,6 @@ export default function Sparkline({
   }, '');
 
   return (
-    {/* Container sized by props or measured layout */}
     <View
       style={[
         styles.container,
@@ -88,7 +84,6 @@ export default function Sparkline({
       onLayout={handleLayout}
     >
       {effectiveWidth > 0 && effectiveHeight > 0 && (
-        {/* SVG polyline; non-scaling stroke keeps width constant */}
         <Svg
           width="100%"
           height="100%"

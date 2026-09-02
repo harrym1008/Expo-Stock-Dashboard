@@ -109,7 +109,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
               </TouchableOpacity>
             </View>
 
-            {/* Vertical List of All Wishlists */}
+            {/* Vertical List of All Watchlists */}
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={modalStyles.content}
@@ -122,7 +122,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                   { color: theme.textSecondary },
                 ]}
               >
-                SELECT WISHLISTS
+                SELECT WATCHLISTS
               </AppText>
 
               <View
@@ -143,7 +143,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                     <TouchableOpacity
                       key={wl.id}
                       style={[
-                        styles.wishlistRow,
+                        styles.watchlistRow,
                         !isLast && {
                           borderBottomWidth: StyleSheet.hairlineWidth,
                           borderBottomColor: isDark
@@ -163,7 +163,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                       accessibilityState={{ checked: isChecked }}
                       accessibilityLabel={`${wl.title}, ${isChecked ? 'selected' : 'not selected'}`}
                     >
-                      {/* Left: Wishlist Title & Stock Count */}
+                      {/* Left: Watchlist Title & Stock Count */}
                       <View style={styles.rowLeft}>
                         <AppText bold style={styles.rowTitle}>
                           {wl.title}
@@ -217,7 +217,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
   );
 }
 
-// Modal layout: header, per-wishlist row, checkbox
+// Modal layout: header, per-watchlist row, checkbox
 const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
-  wishlistRow: {
+  watchlistRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
