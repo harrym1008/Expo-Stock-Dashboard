@@ -25,6 +25,9 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
 
   if (!stock) return null;
 
+  const displaySymbol = stock.displaySymbol || stock.symbol || '';
+  const displayName = stock.displayName || stock.name || displaySymbol;
+
   const cardBg = isDark ? '#161920' : '#FFFFFF';
   const cardBorder = isDark ? 'rgba(255, 255, 255, 0.08)' : theme.border;
 
@@ -65,7 +68,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
             >
               <View style={styles.headerLeft}>
                 <CompanyLogo
-                  symbol={stock.symbol}
+                  symbol={displaySymbol}
                   logoUri={stock.logo}
                   size={38}
                 />
@@ -73,7 +76,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                 <View style={styles.titleInfo}>
                   <View style={styles.symbolRow}>
                     <AppText bold style={styles.symbolText}>
-                      {stock.symbol}
+                      {displaySymbol}
                     </AppText>
                     <AppText
                       style={[styles.exchangeText, { color: theme.textSecondary }]}
@@ -85,7 +88,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                     style={[styles.companyText, { color: theme.textSecondary }]}
                     numberOfLines={1}
                   >
-                    {stock.name}
+                    {displayName}
                   </AppText>
                 </View>
               </View>
@@ -128,7 +131,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                 ]}
               >
                 {watchlists.map((wl, index) => {
-                  const isChecked = isStockInWatchlist(wl.id, stock.symbol);
+                  const isChecked = isStockInWatchlist(wl.id, displaySymbol);
                   const itemCount = Array.isArray(wl.items) ? wl.items.length : 0;
                   const isLast = index === watchlists.length - 1;
 
@@ -144,7 +147,13 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                             : theme.borderSubtle,
                         },
                       ]}
-                      onPress={() => toggleStockInWatchlist(wl.id, stock)}
+                      onPress={() => toggleStockInWatchlist(wl.id, {
+                        ...stock,
+                        symbol: displaySymbol,
+                        displaySymbol,
+                        name: displayName,
+                        displayName,
+                      })}
                       activeOpacity={0.7}
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked: isChecked }}
@@ -161,7 +170,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                             { color: theme.textSecondary },
                           ]}
                         >
-                          {itemCount} {itemCount === 1 ? 'stock' : 'stocks'}
+                          {itemCount} {itemCount === 1 ? 'item' : 'items'}
                         </AppText>
                       </View>
 
@@ -271,4 +280,3 @@ const styles = StyleSheet.create({
     marginLeft: spacing.md,
   },
 });
-

@@ -10,6 +10,9 @@ import CompanyLogo from '../common/CompanyLogo';
 export default function SearchResultItem({ item, onPress }) {
   const { theme } = useTheme();
 
+  const displaySymbol = item?.displaySymbol || item?.symbol || '';
+  const displayName = item?.displayName || item?.name || displaySymbol;
+
   return (
     <TouchableOpacity
       style={[
@@ -22,25 +25,25 @@ export default function SearchResultItem({ item, onPress }) {
       onPress={onPress}
       activeOpacity={0.65}
       accessibilityRole="button"
-      accessibilityLabel={`Select ${item.symbol}, ${item.name}`}
+      accessibilityLabel={`Select ${displaySymbol}, ${displayName}`}
     >
       {/* Left: Cached Static Logo & Info */}
       <View style={styles.leftSection}>
         <CompanyLogo
-          symbol={item.symbol}
-          logoUri={item.logo}
+          symbol={displaySymbol}
+          logoUri={item?.logo}
           size={36}
         />
 
         <View style={styles.textWrapper}>
           <AppText bold style={stockItemStyles.symbolText}>
-            {item.symbol}
+            {displaySymbol}
           </AppText>
           <AppText
             style={[stockItemStyles.nameText, styles.nameText, { color: theme.textSecondary }]}
             numberOfLines={1}
           >
-            {item.name}
+            {displayName}
           </AppText>
         </View>
       </View>
@@ -78,4 +81,3 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-

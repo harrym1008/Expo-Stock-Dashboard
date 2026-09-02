@@ -1,3 +1,5 @@
+import { getFinnhubSymbol } from '../utils/securityUtils';
+
 const MAX_TOTAL_BUDGET = 50;
 const WATCHLIST_BUDGET = 45;
 const ACTIVE_VIEW_BUDGET = 5;
@@ -15,7 +17,7 @@ class FinnhubWebSocketManager {
     this.throttleTimer = null;
     this.reconnectAttempts = 0;
 
-    // Symbol sets
+    // Symbol sets (stored as Finnhub subscription symbols)
     this.allWishlistSymbols = new Set();
     this.activeViewSymbols = new Set();
 
@@ -79,9 +81,6 @@ class FinnhubWebSocketManager {
                 const sym = trade.s.toUpperCase();
                 const price = trade.p;
                 const volume = trade.v;
-                // console.log(
-                //   `[Finnhub WS Tick] ⚡ ${sym} -> $${price.toFixed(2)} (Vol: ${volume || 0} | Time: ${timeStr})`
-                // );
 
                 this.tickBuffer.set(sym, {
                   symbol: sym,
@@ -185,12 +184,12 @@ class FinnhubWebSocketManager {
   // --- Subscription Management ---
 
   setWatchlistSymbols(symbols = []) {
-    this.allWishlistSymbols = new Set(symbols.map((s) => s.toUpperCase()));
+    this.allWishlistSymbols = new Set(symbols.map((s) => getFinnhubSymbol(s)));
     this.syncSubscriptions();
   }
 
   setActiveViewSymbols(symbols = []) {
-    const capped = symbols.slice(0, ACTIVE_VIEW_BUDGET).map((s) => s.toUpperCase());
+    const capped = symbols.slice(0, ACTIVE_VIEW_BUDGET).map((s) => getFinnhubSymbol(s));
     this.activeViewSymbols = new Set(capped);
     this.syncSubscriptions();
   }

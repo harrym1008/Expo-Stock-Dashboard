@@ -1,0 +1,492 @@
+{
+    "forex": [
+        {
+            "finnhubSymbol": "OANDA:EUR_USD",
+            "displayName": "Euro / US Dollar",
+            "displaySymbol": "EUR/USD",
+            "yahooSymbol": "EURUSD=X",
+            "decimals": 5,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:USD_JPY",
+            "displayName": "US Dollar / Japanese Yen",
+            "displaySymbol": "USD/JPY",
+            "yahooSymbol": "JPY=X",
+            "decimals": 3,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:GBP_USD",
+            "displayName": "British Pound / US Dollar",
+            "displaySymbol": "GBP/USD",
+            "yahooSymbol": "GBPUSD=X",
+            "decimals": 5,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:USD_CHF",
+            "displayName": "US Dollar / Swiss Franc",
+            "displaySymbol": "USD/CHF",
+            "yahooSymbol": "CHF=X",
+            "decimals": 5,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:AUD_USD",
+            "displayName": "Australian Dollar / US Dollar",
+            "displaySymbol": "AUD/USD",
+            "yahooSymbol": "AUDUSD=X",
+            "decimals": 5,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:USD_CAD",
+            "displayName": "US Dollar / Canadian Dollar",
+            "displaySymbol": "USD/CAD",
+            "yahooSymbol": "CAD=X",
+            "decimals": 5,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:NZD_USD",
+            "displayName": "New Zealand Dollar / US Dollar",
+            "displaySymbol": "NZD/USD",
+            "yahooSymbol": "NZDUSD=X",
+            "decimals": 5,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:EUR_GBP",
+            "displayName": "Euro / British Pound",
+            "displaySymbol": "EUR/GBP",
+            "yahooSymbol": "EURGBP=X",
+            "decimals": 5,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:EUR_JPY",
+            "displayName": "Euro / Japanese Yen",
+            "displaySymbol": "EUR/JPY",
+            "yahooSymbol": "EURJPY=X",
+            "decimals": 3,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:GBP_JPY",
+            "displayName": "British Pound / Japanese Yen",
+            "displaySymbol": "GBP/JPY",
+            "yahooSymbol": "GBPJPY=X",
+            "decimals": 3,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:EUR_CHF",
+            "displayName": "Euro / Swiss Franc",
+            "displaySymbol": "EUR/CHF",
+            "yahooSymbol": "EURCHF=X",
+            "decimals": 5,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:EUR_AUD",
+            "displayName": "Euro / Australian Dollar",
+            "displaySymbol": "EUR/AUD",
+            "yahooSymbol": "EURAUD=X",
+            "decimals": 5,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:EUR_CAD",
+            "displayName": "Euro / Canadian Dollar",
+            "displaySymbol": "EUR/CAD",
+            "yahooSymbol": "EURCAD=X",
+            "decimals": 5,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:AUD_JPY",
+            "displayName": "Australian Dollar / Japanese Yen",
+            "displaySymbol": "AUD/JPY",
+            "yahooSymbol": "AUDJPY=X",
+            "decimals": 3,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:GBP_AUD",
+            "displayName": "British Pound / Australian Dollar",
+            "displaySymbol": "GBP/AUD",
+            "yahooSymbol": "GBPAUD=X",
+            "decimals": 5,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:GBP_CAD",
+            "displayName": "British Pound / Canadian Dollar",
+            "displaySymbol": "GBP/CAD",
+            "yahooSymbol": "GBPCAD=X",
+            "decimals": 5,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:AUD_CAD",
+            "displayName": "Australian Dollar / Canadian Dollar",
+            "displaySymbol": "AUD/CAD",
+            "yahooSymbol": "AUDCAD=X",
+            "decimals": 5,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:NZD_JPY",
+            "displayName": "New Zealand Dollar / Japanese Yen",
+            "displaySymbol": "NZD/JPY",
+            "yahooSymbol": "NZDJPY=X",
+            "decimals": 3,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:CHF_JPY",
+            "displayName": "Swiss Franc / Japanese Yen",
+            "displaySymbol": "CHF/JPY",
+            "yahooSymbol": "CHFJPY=X",
+            "decimals": 3,
+            "currency": ""
+        },
+        {
+            "finnhubSymbol": "OANDA:CAD_JPY",
+            "displayName": "Canadian Dollar / Japanese Yen",
+            "displaySymbol": "CAD/JPY",
+            "yahooSymbol": "CADJPY=X",
+            "decimals": 3,
+            "currency": ""
+        }
+    ],
+    "indices": [
+        {
+            "finnhubSymbol": "OANDA:AU200_AUD",
+            "displayName": "S&P/ASX 200",
+            "displaySymbol": "AU200",
+            "yahooSymbol": "^AXJO",
+            "decimals": 1,
+            "currency": "A$"
+        },
+        {
+            "finnhubSymbol": "OANDA:CH20_CHF",
+            "displayName": "Swiss Market Index",
+            "displaySymbol": "SMI",
+            "yahooSymbol": "^SSMI",
+            "decimals": 1,
+            "currency": "CHF "
+        },
+        {
+            "finnhubSymbol": "OANDA:CHINAH_HKD",
+            "displayName": "Hang Seng China Enterprises",
+            "displaySymbol": "CHINA H",
+            "yahooSymbol": "^HSCE",
+            "decimals": 1,
+            "currency": "HK$"
+        },
+        {
+            "finnhubSymbol": "OANDA:CN50_USD",
+            "displayName": "FTSE China A50",
+            "displaySymbol": "CN50",
+            "yahooSymbol": "XIN9.FGI",
+            "decimals": 1,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:DE30_EUR",
+            "displayName": "DAX 40",
+            "displaySymbol": "DAX",
+            "yahooSymbol": "^GDAXI",
+            "decimals": 1,
+            "currency": "€"
+        },
+        {
+            "finnhubSymbol": "OANDA:ESPIX_EUR",
+            "displayName": "IBEX 35",
+            "displaySymbol": "IBEX",
+            "yahooSymbol": "^IBEX",
+            "decimals": 1,
+            "currency": "€"
+        },
+        {
+            "finnhubSymbol": "OANDA:EU50_EUR",
+            "displayName": "EURO STOXX 50",
+            "displaySymbol": "EU50",
+            "yahooSymbol": "^STOXX50E",
+            "decimals": 1,
+            "currency": "€"
+        },
+        {
+            "finnhubSymbol": "OANDA:FR40_EUR",
+            "displayName": "CAC 40",
+            "displaySymbol": "CAC 40",
+            "yahooSymbol": "^FCHI",
+            "decimals": 1,
+            "currency": "€"
+        },
+        {
+            "finnhubSymbol": "OANDA:HK33_HKD",
+            "displayName": "Hang Seng Index",
+            "displaySymbol": "HK33",
+            "yahooSymbol": "^HSI",
+            "decimals": 1,
+            "currency": "HK$"
+        },
+        {
+            "finnhubSymbol": "OANDA:JP225Y_JPY",
+            "displayName": "Nikkei 225 (JPY)",
+            "displaySymbol": "JP225Y",
+            "yahooSymbol": "^N225",
+            "decimals": 1,
+            "currency": "¥"
+        },
+        {
+            "finnhubSymbol": "OANDA:NAS100_USD",
+            "displayName": "Nasdaq 100",
+            "displaySymbol": "NAS100",
+            "yahooSymbol": "^NDX",
+            "decimals": 1,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:NL25_EUR",
+            "displayName": "AEX 25",
+            "displaySymbol": "NL25",
+            "yahooSymbol": "^AEX",
+            "decimals": 1,
+            "currency": "€"
+        },
+        {
+            "finnhubSymbol": "OANDA:SG30_SGD",
+            "displayName": "Straits Times Index",
+            "displaySymbol": "SG30",
+            "yahooSymbol": "^STI",
+            "decimals": 1,
+            "currency": "S$"
+        },
+        {
+            "finnhubSymbol": "OANDA:SPX500_USD",
+            "displayName": "S&P 500",
+            "displaySymbol": "US500",
+            "yahooSymbol": "^GSPC",
+            "decimals": 1,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:UK100_GBP",
+            "displayName": "FTSE 100",
+            "displaySymbol": "UK100",
+            "yahooSymbol": "^FTSE",
+            "decimals": 1,
+            "currency": "£"
+        },
+        {
+            "finnhubSymbol": "OANDA:US2000_USD",
+            "displayName": "Russell 2000",
+            "displaySymbol": "US2000",
+            "yahooSymbol": "^RUT",
+            "decimals": 1,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:US30_USD",
+            "displayName": "Dow Jones Industrial Average",
+            "displaySymbol": "US30",
+            "yahooSymbol": "^DJI",
+            "decimals": 1,
+            "currency": "$"
+        }
+    ],
+    "commodities": [
+        {
+            "finnhubSymbol": "OANDA:BCO_USD",
+            "displayName": "Brent Crude Oil",
+            "displaySymbol": "BRENT",
+            "yahooSymbol": "BZ=F",
+            "decimals": 2,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:WTICO_USD",
+            "displayName": "West Texas Intermediate Crude",
+            "displaySymbol": "WTI",
+            "yahooSymbol": "CL=F",
+            "decimals": 2,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:NATGAS_USD",
+            "displayName": "Natural Gas",
+            "displaySymbol": "NATGAS",
+            "yahooSymbol": "NG=F",
+            "decimals": 3,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:CORN_USD",
+            "displayName": "Corn",
+            "displaySymbol": "CORN",
+            "yahooSymbol": "ZC=F",
+            "decimals": 3,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:SOYBN_USD",
+            "displayName": "Soybeans",
+            "displaySymbol": "SOYBEAN",
+            "yahooSymbol": "ZS=F",
+            "decimals": 3,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:WHEAT_USD",
+            "displayName": "Wheat",
+            "displaySymbol": "WHEAT",
+            "yahooSymbol": "ZW=F",
+            "decimals": 3,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:SUGAR_USD",
+            "displayName": "Sugar",
+            "displaySymbol": "SUGAR",
+            "yahooSymbol": "SB=F",
+            "decimals": 4,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:XAU_USD",
+            "displayName": "Gold",
+            "displaySymbol": "XAU",
+            "yahooSymbol": "GC=F",
+            "decimals": 2,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:XAG_USD",
+            "displayName": "Silver",
+            "displaySymbol": "XAG",
+            "yahooSymbol": "SI=F",
+            "decimals": 3,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:XCU_USD",
+            "displayName": "Copper",
+            "displaySymbol": "COPPER",
+            "yahooSymbol": "HG=F",
+            "decimals": 3,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:XPD_USD",
+            "displayName": "Palladium",
+            "displaySymbol": "PALLADIUM",
+            "yahooSymbol": "PA=F",
+            "decimals": 2,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:XPT_USD",
+            "displayName": "Platinum",
+            "displaySymbol": "PLATINUM",
+            "yahooSymbol": "PL=F",
+            "decimals": 2,
+            "currency": "$"
+        }
+    ],
+    "bonds": [
+        {
+            "finnhubSymbol": "OANDA:DE10YB_EUR",
+            "displayName": "German 10Y Bund",
+            "displaySymbol": "DE10Y",
+            "yahooSymbol": "FGBL=F",
+            "decimals": 3,
+            "currency": "€"
+        },
+        {
+            "finnhubSymbol": "OANDA:UK10YB_GBP",
+            "displayName": "UK 10Y Gilt",
+            "displaySymbol": "UK10Y",
+            "yahooSymbol": "GILT=F",
+            "decimals": 3,
+            "currency": "£"
+        },
+        {
+            "finnhubSymbol": "OANDA:USB02Y_USD",
+            "displayName": "US 2Y Treasury Note",
+            "displaySymbol": "US2Y",
+            "yahooSymbol": "ZT=F",
+            "decimals": 3,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:USB05Y_USD",
+            "displayName": "US 5Y Treasury Note",
+            "displaySymbol": "US5Y",
+            "yahooSymbol": "ZF=F",
+            "decimals": 3,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:USB10Y_USD",
+            "displayName": "US 10Y Treasury Note",
+            "displaySymbol": "US10Y",
+            "yahooSymbol": "ZN=F",
+            "decimals": 3,
+            "currency": "$"
+        },
+        {
+            "finnhubSymbol": "OANDA:USB30Y_USD",
+            "displayName": "US 30Y Treasury Bond",
+            "displaySymbol": "US30Y",
+            "yahooSymbol": "ZB=F",
+            "decimals": 3,
+            "currency": "$"
+        }
+    ],
+    "crypto": [
+        {
+        "finnhubSymbol": "BINANCE:BTCUSDT",
+        "displayName": "Bitcoin",
+        "displaySymbol": "BTC",
+        "yahooSymbol": "BTC-USD",
+        "decimals": 1,
+        "currency": "$"
+        },
+        {
+        "finnhubSymbol": "BINANCE:ETHUSDT",
+        "displayName": "Ethereum",
+        "displaySymbol": "ETH",
+        "yahooSymbol": "ETH-USD",
+        "decimals": 2,
+        "currency": "$"
+        },
+        {
+        "finnhubSymbol": "BINANCE:DOGEUSDT",
+        "displayName": "BNB",
+        "displaySymbol": "BNB",
+        "yahooSymbol": "BNB-USD",
+        "decimals": 4,
+        "currency": "$"
+        },
+        {
+        "finnhubSymbol": "BINANCE:SOLUSDT",
+        "displayName": "Solana",
+        "displaySymbol": "SOL",
+        "yahooSymbol": "SOL-USD",
+        "decimals": 2,
+        "currency": "$"
+        },
+        {
+        "finnhubSymbol": "BINANCE:XRPUSDT",
+        "displayName": "XRP",
+        "displaySymbol": "XRP",
+        "yahooSymbol": "XRP-USD",
+        "decimals": 3,
+        "currency": "$"
+        }
+    ]
+}

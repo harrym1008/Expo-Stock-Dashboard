@@ -5,6 +5,7 @@ import { finnhubWebSocketService } from '../services/finnhubWebSocketService';
 import { yahooFinanceService } from '../services/yahooFinanceService';
 import { getMarketSessionStatus } from '../utils/marketHours';
 import { ingestHolidayData } from '../utils/marketHolidays';
+import { getDisplaySymbol, getFinnhubSymbol, isNonStockSecurity } from '../utils/securityUtils';
 
 function calculateTickUpdate(current, sym, newPrice, timestamp, sessionStatus) {
   const currentQuote = current || {};
@@ -114,13 +115,18 @@ export function MarketDataProvider({ children }) {
 
         for (const tick of ticks) {
           const sym = tick.symbol;
-          next[sym] = calculateTickUpdate(
-            next[sym],
-            sym,
+          const displaySym = getDisplaySymbol(sym);
+
+          const update = calculateTickUpdate(
+            next[displaySym] || next[sym],
+            displaySym,
             tick.price,
             tick.timestamp,
             sessionStatus
           );
+
+          next[sym] = update;
+          next[displaySym] = update;
           hasChanges = true;
         }
 
@@ -135,20 +141,23 @@ export function MarketDataProvider({ children }) {
   const fetchQuote = useCallback(
     async (symbol) => {
       if (!symbol || !apiKey) return null;
-      const sym = symbol.toUpperCase();
+      const finnhubSym = getFinnhubSymbol(symbol);
+      const displaySym = getDisplaySymbol(symbol);
 
-      const quote = await finnhubRestService.fetchQuote(sym, apiKey);
+      const quote = await finnhubRestService.fetchQuote(finnhubSym, apiKey);
       if (quote) {
         setQuotes((prev) => {
-          const existing = prev[sym] || {};
+          const existing = prev[displaySym] || prev[finnhubSym] || {};
+          const merged = {
+            ...quote,
+            ...existing,
+            previousClose: quote.previousClose || existing.previousClose,
+            regularMarketPrice: quote.price || existing.regularMarketPrice,
+          };
           return {
             ...prev,
-            [sym]: {
-              ...quote,
-              ...existing,
-              previousClose: quote.previousClose || existing.previousClose,
-              regularMarketPrice: quote.price || existing.regularMarketPrice,
-            },
+            [finnhubSym]: merged,
+            [displaySym]: merged,
           };
         });
       }
@@ -161,8 +170,9 @@ export function MarketDataProvider({ children }) {
   const fetchProfile = useCallback(
     async (symbol) => {
       if (!symbol || !apiKey) return null;
-      const sym = symbol.toUpperCase();
+      if (isNonStockSecurity(symbol)) return null;
 
+      const sym = symbol.toUpperCase();
       if (profilesRef.current[sym]) return profilesRef.current[sym];
 
       const profile = await finnhubRestService.fetchCompanyProfile(sym, apiKey);
@@ -180,16 +190,17 @@ export function MarketDataProvider({ children }) {
   // 8. Fetch Historical Chart via Yahoo Finance with verified live WebSocket tick overlay only
   const fetchHistoricalChart = useCallback(async (symbol, timeframe = '1D') => {
     if (!symbol) return null;
-    const sym = symbol.toUpperCase();
-    const wsQuote = quotesRef.current[sym];
+    const cleanSym = getDisplaySymbol(symbol);
+    const wsQuote = quotesRef.current[cleanSym] || quotesRef.current[symbol];
     const livePrice = wsQuote?.isLiveWs ? wsQuote.price : null;
-    return await yahooFinanceService.fetchHistoricalData(sym, timeframe, livePrice);
+    return await yahooFinanceService.fetchHistoricalData(cleanSym, timeframe, livePrice);
   }, []);
 
   // 9. Fetch Key Metrics (Finnhub)
   const fetchStockMetrics = useCallback(
     async (symbol) => {
       if (!symbol || !apiKey) return null;
+      if (isNonStockSecurity(symbol)) return null;
       return await finnhubRestService.fetchStockMetrics(symbol, apiKey);
     },
     [apiKey]
@@ -198,13 +209,15 @@ export function MarketDataProvider({ children }) {
   // 10. Fetch Company Description & Overview (Yahoo Finance)
   const fetchCompanyDescription = useCallback(async (symbol) => {
     if (!symbol) return null;
-    return await yahooFinanceService.fetchCompanyDescription(symbol);
+    const cleanSym = getDisplaySymbol(symbol);
+    return await yahooFinanceService.fetchCompanyDescription(cleanSym);
   }, []);
 
   // 11. Fetch Recent Company News (Finnhub)
   const fetchCompanyNews = useCallback(
     async (symbol) => {
       if (!symbol || !apiKey) return [];
+      if (isNonStockSecurity(symbol)) return [];
       return await finnhubRestService.fetchCompanyNews(symbol, apiKey);
     },
     [apiKey]
@@ -247,13 +260,18 @@ export function MarketDataProvider({ children }) {
   // 14. Programmatic Live Price Injection (e.g. from Yahoo Finance order fill)
   const injectLivePrice = useCallback((symbol, newPrice, timestamp = Date.now()) => {
     if (!symbol || typeof newPrice !== 'number' || newPrice <= 0) return;
-    const sym = symbol.toUpperCase();
+    const displaySym = getDisplaySymbol(symbol);
+    const finnhubSym = getFinnhubSymbol(symbol);
     const sessionStatus = getMarketSessionStatus();
 
-    setQuotes((prev) => ({
-      ...prev,
-      [sym]: calculateTickUpdate(prev[sym], sym, newPrice, timestamp, sessionStatus),
-    }));
+    setQuotes((prev) => {
+      const update = calculateTickUpdate(prev[displaySym] || prev[finnhubSym], displaySym, newPrice, timestamp, sessionStatus);
+      return {
+        ...prev,
+        [displaySym]: update,
+        [finnhubSym]: update,
+      };
+    });
   }, []);
 
   const hasValidKey = Boolean(apiKey && apiKey.length > 5);

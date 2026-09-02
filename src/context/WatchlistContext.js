@@ -9,6 +9,13 @@ import React, {
 } from 'react';
 import { storageService } from '../services/storageService';
 import { useMarketData } from './MarketDataContext';
+import {
+  getSecurityBySymbol,
+  getDisplaySymbol,
+  getDisplayName,
+  getCurrency,
+  getDecimals,
+} from '../utils/securityUtils';
 
 const WatchlistContext = createContext(null);
 
@@ -53,7 +60,8 @@ export function WatchlistProvider({ children }) {
     for (const wl of watchlists) {
       if (Array.isArray(wl.items)) {
         for (const item of wl.items) {
-          if (item?.symbol) syms.add(item.symbol.toUpperCase());
+          const sym = item?.displaySymbol || item?.symbol;
+          if (sym) syms.add(getDisplaySymbol(sym));
         }
       }
     }
@@ -70,10 +78,12 @@ export function WatchlistProvider({ children }) {
   const isStockInWatchlist = useCallback(
     (watchlistId, symbol) => {
       if (!symbol) return false;
-      const cleanSym = symbol.toUpperCase();
+      const cleanSym = getDisplaySymbol(symbol).toUpperCase();
       const targetWl = watchlists.find((wl) => wl.id === watchlistId);
       if (!targetWl || !Array.isArray(targetWl.items)) return false;
-      return targetWl.items.some((item) => item?.symbol?.toUpperCase() === cleanSym);
+      return targetWl.items.some(
+        (item) => getDisplaySymbol(item?.displaySymbol || item?.symbol).toUpperCase() === cleanSym
+      );
     },
     [watchlists]
   );
@@ -81,10 +91,14 @@ export function WatchlistProvider({ children }) {
   const isStockInAnyWatchlist = useCallback(
     (symbol) => {
       if (!symbol) return false;
-      const cleanSym = symbol.toUpperCase();
+      const cleanSym = getDisplaySymbol(symbol).toUpperCase();
       for (const wl of watchlists) {
         if (Array.isArray(wl.items)) {
-          if (wl.items.some((item) => item?.symbol?.toUpperCase() === cleanSym)) {
+          if (
+            wl.items.some(
+              (item) => getDisplaySymbol(item?.displaySymbol || item?.symbol).toUpperCase() === cleanSym
+            )
+          ) {
             return true;
           }
         }
@@ -97,27 +111,42 @@ export function WatchlistProvider({ children }) {
   // 5. Stock mutations
   const addStockToWatchlist = useCallback((watchlistId, stockData) => {
     if (!stockData?.symbol) return;
-    const cleanSym = stockData.symbol.toUpperCase();
+    const cleanSym = getDisplaySymbol(stockData.displaySymbol || stockData.symbol);
 
     setWatchlists((prev) =>
       prev.map((wl) => {
         if (wl.id !== watchlistId) return wl;
         const items = Array.isArray(wl.items) ? wl.items : [];
-        if (items.some((item) => item?.symbol?.toUpperCase() === cleanSym)) {
+        if (
+          items.some(
+            (item) => getDisplaySymbol(item?.displaySymbol || item?.symbol).toUpperCase() === cleanSym.toUpperCase()
+          )
+        ) {
           return wl;
         }
 
+        const sec = getSecurityBySymbol(cleanSym);
+        const displaySymbol = sec?.displaySymbol || stockData.displaySymbol || cleanSym;
+        const displayName = sec?.displayName || stockData.displayName || stockData.name || cleanSym;
+        const currency = sec?.currency !== undefined ? sec.currency : (stockData.currency !== undefined ? stockData.currency : '$');
+        const decimals = getDecimals(cleanSym, stockData.price, stockData.decimals);
+        const isStock = sec ? false : (stockData.isStock !== false);
+
         const newItem = {
           id: `stock-${cleanSym}-${Date.now()}`,
-          symbol: cleanSym,
-          name: stockData.name || cleanSym,
+          symbol: displaySymbol,
+          displaySymbol,
+          name: displayName,
+          displayName,
           price: stockData.price || stockData.regularMarketPrice || 0,
           change: stockData.change || 0,
           changePercent: stockData.changePercent || 0,
-          currency: stockData.currency || '$',
+          currency,
+          decimals,
+          isStock,
           sparkline: stockData.sparkline || [],
           logo: stockData.logo || null,
-          exchange: stockData.exchange || '...',
+          exchange: stockData.exchange || (sec ? sec.category.toUpperCase() : '...'),
         };
 
         return {
@@ -130,7 +159,7 @@ export function WatchlistProvider({ children }) {
 
   const removeStockFromWatchlist = useCallback((watchlistId, symbolOrId) => {
     if (!symbolOrId) return;
-    const cleanSym = typeof symbolOrId === 'string' ? symbolOrId.toUpperCase() : '';
+    const cleanSym = typeof symbolOrId === 'string' ? getDisplaySymbol(symbolOrId).toUpperCase() : '';
 
     setWatchlists((prev) =>
       prev.map((wl) => {
@@ -141,7 +170,7 @@ export function WatchlistProvider({ children }) {
           items: items.filter(
             (item) =>
               item.id !== symbolOrId &&
-              item?.symbol?.toUpperCase() !== cleanSym
+              getDisplaySymbol(item?.displaySymbol || item?.symbol).toUpperCase() !== cleanSym
           ),
         };
       })
@@ -151,7 +180,7 @@ export function WatchlistProvider({ children }) {
   const toggleStockInWatchlist = useCallback(
     (watchlistId, stockData) => {
       if (!stockData?.symbol) return;
-      const cleanSym = stockData.symbol.toUpperCase();
+      const cleanSym = getDisplaySymbol(stockData.displaySymbol || stockData.symbol);
       const inWl = isStockInWatchlist(watchlistId, cleanSym);
       if (inWl) {
         removeStockFromWatchlist(watchlistId, cleanSym);

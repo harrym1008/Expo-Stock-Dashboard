@@ -197,7 +197,7 @@ export default function HomeScreen() {
     (stockItem) => {
       if (activeWatchlistId && stockItem) {
         addStockToWatchlist(activeWatchlistId, stockItem);
-        const sym = stockItem.symbol?.toUpperCase();
+        const sym = (stockItem.displaySymbol || stockItem.symbol)?.toUpperCase();
         if (sym) {
           if (hasValidKey) {
             fetchQuote(sym);

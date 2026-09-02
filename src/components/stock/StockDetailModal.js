@@ -22,6 +22,14 @@ import {
   formatShares,
   formatMoney,
 } from '../../utils/formatters';
+import {
+  getSecurityBySymbol,
+  getDisplaySymbol,
+  getDisplayName,
+  getCurrency,
+  getDecimals,
+  isNonStockSecurity,
+} from '../../utils/securityUtils';
 import { storageService } from '../../services/storageService';
 import { useWatchlist } from '../../context/WatchlistContext';
 import { modalStyles, layoutStyles, newsStyles } from '../../styles';
@@ -34,16 +42,6 @@ import StockOrderModal from './StockOrderModal';
 import NewsCard from '../common/NewsCard';
 
 const TIMEFRAMES = ['1H', '1D', '1W', '3M', '1Y', '5Y', 'ALL'];
-
-const TIMEFRAME_SUFFIXES = {
-  '1H': 'last hour',
-  '1D': null,
-  '1W': 'last week',
-  '3M': 'last 3 months',
-  '1Y': 'last year',
-  '5Y': 'last 5 years',
-  'ALL': 'since start',
-};
 
 const memoryStockTimeframes = {};
 
@@ -66,15 +64,15 @@ function getRangePosition(current, low, high) {
   return Math.max(0, Math.min(100, ratio * 100));
 }
 
-function RangeBar({ label, low, high, position, isDark, theme, curSymbol }) {
+function RangeBar({ label, low, high, position, isDark, theme, curSymbol, decimals, symbol }) {
   return (
     <View style={styles.rangeBarGroup}>
       <View style={styles.rangeLabelRow}>
         <AppText style={[styles.rangeSubtitle, { color: theme.textSecondary }]}>{label}</AppText>
         <View style={styles.rangeValuesRow}>
-          <AppText bold style={styles.rangeValueText}>{formatStatPrice(low, curSymbol)}</AppText>
+          <AppText bold style={styles.rangeValueText}>{formatStatPrice(low, curSymbol, decimals, symbol)}</AppText>
           <AppText style={[styles.rangeValueSeparator, { color: theme.textMuted }]}>-</AppText>
-          <AppText bold style={styles.rangeValueText}>{formatStatPrice(high, curSymbol)}</AppText>
+          <AppText bold style={styles.rangeValueText}>{formatStatPrice(high, curSymbol, decimals, symbol)}</AppText>
         </View>
       </View>
       <View style={[styles.rangeTrack, { backgroundColor: isDark ? '#1E2532' : '#E4E7EC' }]}>
@@ -135,7 +133,12 @@ function StockDetailModal({ visible, stock, onClose }) {
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
-  const isFavorite = stock?.symbol ? isStockInAnyWatchlist(stock.symbol) : false;
+  const cleanSymbol = stock?.symbol ? getDisplaySymbol(stock.symbol) : '';
+  const isNonStock = stock?.symbol ? isNonStockSecurity(stock.symbol) : false;
+  const isStock = !isNonStock && stock?.isStock !== false;
+  const isStockPaperTradingAllowed = isPaperTradingEnabled && isStock;
+
+  const isFavorite = cleanSymbol ? isStockInAnyWatchlist(cleanSymbol) : false;
   const latestExtendedPriceRef = useRef(null);
 
   useEffect(() => {
@@ -149,7 +152,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     setIsTimeframeLoading(false);
 
     if (stock?.symbol) {
-      const sym = stock.symbol.toUpperCase();
+      const sym = getDisplaySymbol(stock.symbol);
       setSelectedTimeframe(memoryStockTimeframes[sym] || '1D');
     }
   }, [stock?.symbol]);
@@ -159,7 +162,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     setIsTimeframeLoading(true);
     setSelectedTimeframe(tf);
     if (stock?.symbol) {
-      const sym = stock.symbol.toUpperCase();
+      const sym = getDisplaySymbol(stock.symbol);
       memoryStockTimeframes[sym] = tf;
       storageService.setStockTimeframe(sym, tf);
     }
@@ -172,13 +175,14 @@ function StockDetailModal({ visible, stock, onClose }) {
   useEffect(() => {
     let isMounted = true;
     if (visible && stock?.symbol) {
+      const sym = getDisplaySymbol(stock.symbol);
       setIsTimeframeLoading(true);
-      fetchHistoricalChart(stock.symbol, selectedTimeframe)
+      fetchHistoricalChart(sym, selectedTimeframe)
         .then((data) => {
           if (isMounted) {
             if (data) {
               setChartData(data);
-              if (typeof data.postMarketPrice === 'number' && Math.abs(data.postMarketPrice - data.regularMarketPrice) > 0.001) {
+              if (typeof data.postMarketPrice === 'number' && Math.abs(data.postMarketPrice - data.regularMarketPrice) > 0.000001) {
                 latestExtendedPriceRef.current = data.postMarketPrice;
               }
             }
@@ -204,25 +208,38 @@ function StockDetailModal({ visible, stock, onClose }) {
   useEffect(() => {
     let isMounted = true;
     if (visible && stock?.symbol) {
-      const sym = stock.symbol.toUpperCase();
+      const sym = getDisplaySymbol(stock.symbol);
       setIsLoadingDetails(true);
 
-      Promise.all([
-        fetchQuote(sym).catch(() => null),
-        fetchProfile(sym).catch(() => null),
-        fetchStockMetrics(sym).catch(() => null),
-        fetchCompanyDescription(sym).catch(() => null),
-        fetchCompanyNews(sym).catch(() => []),
-      ]).then(([quote, prof, met, desc, news]) => {
-        if (isMounted) {
-          if (met) setMetrics(met);
-          if (desc) setCompanyDesc(desc);
-          if (Array.isArray(news)) setCompanyNews(news);
-          setIsLoadingDetails(false);
-        }
-      }).catch(() => {
-        if (isMounted) setIsLoadingDetails(false);
-      });
+      if (isNonStockSecurity(sym)) {
+        fetchCompanyDescription(sym)
+          .then((desc) => {
+            if (isMounted) {
+              if (desc) setCompanyDesc(desc);
+              setIsLoadingDetails(false);
+            }
+          })
+          .catch(() => {
+            if (isMounted) setIsLoadingDetails(false);
+          });
+      } else {
+        Promise.all([
+          fetchQuote(sym).catch(() => null),
+          fetchProfile(sym).catch(() => null),
+          fetchStockMetrics(sym).catch(() => null),
+          fetchCompanyDescription(sym).catch(() => null),
+          fetchCompanyNews(sym).catch(() => []),
+        ]).then(([quote, prof, met, desc, news]) => {
+          if (isMounted) {
+            if (met) setMetrics(met);
+            if (desc) setCompanyDesc(desc);
+            if (Array.isArray(news)) setCompanyNews(news);
+            setIsLoadingDetails(false);
+          }
+        }).catch(() => {
+          if (isMounted) setIsLoadingDetails(false);
+        });
+      }
     }
     return () => {
       isMounted = false;
@@ -252,7 +269,6 @@ function StockDetailModal({ visible, stock, onClose }) {
   }, [selectedTimeframe, isTimeframeDisabled]);
 
   const activeDisplayedTimeframe = chartData?.timeframe || selectedTimeframe;
-  const cleanSymbol = stock?.symbol?.toUpperCase() || '';
   const liveWsPrice = (typeof stock?.price === 'number') ? stock.price : null;
 
   if (liveWsPrice) {
@@ -269,13 +285,16 @@ function StockDetailModal({ visible, stock, onClose }) {
   const outOfHoursPriceVal =
     liveWsPrice ??
     latestExtendedPriceRef.current ??
-    (chartData?.postMarketPrice && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.001 ? chartData.postMarketPrice : null) ??
+    (chartData?.postMarketPrice && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.000001 ? chartData.postMarketPrice : null) ??
     (typeof stock?.postMarketPrice === 'number' ? stock.postMarketPrice : null) ??
     regularClosePrice;
 
-  const curSymbol = stock?.currency === 'USD' || !stock?.currency ? '$' : stock.currency;
+  const curSymbol = stock?.currency !== undefined ? stock.currency : getCurrency(cleanSymbol, '$');
+  const decimals = getDecimals(cleanSymbol, leftPrice, stock?.decimals);
+  const secMetadata = getSecurityBySymbol(cleanSymbol);
+
   const profileData = cleanSymbol ? profiles[cleanSymbol] : null;
-  const companyName = profileData?.name || stock?.name || stock?.symbol || '';
+  const companyName = stock?.displayName || getDisplayName(cleanSymbol) || profileData?.name || stock?.name || cleanSymbol;
 
   const currentStatPrice = leftPrice;
   const dayLow = chartData?.regularMarketDayLow ?? (chartData?.timeframe === '1D' ? chartData?.minPrice : null) ?? stock?.low ?? null;
@@ -288,7 +307,7 @@ function StockDetailModal({ visible, stock, onClose }) {
 
   const prevCloseVal = (chartData?.timeframe === '1D' ? chartData?.previousClose : null) ?? stock?.previousClose ?? chartData?.previousClose ?? null;
   const prevCloseStr = prevCloseVal !== null && prevCloseVal !== undefined && !isNaN(prevCloseVal) && prevCloseVal > 0
-    ? `${curSymbol}${Number(prevCloseVal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    ? formatStatPrice(prevCloseVal, curSymbol, decimals, cleanSymbol)
     : '-';
 
   const marketCapVal = metrics?.marketCapitalization ?? profileData?.marketCap ?? stock?.marketCap ?? null;
@@ -314,7 +333,9 @@ function StockDetailModal({ visible, stock, onClose }) {
   const forwardPeStr = typeof forwardPE === 'number' && !isNaN(forwardPE) && forwardPE > 0 ? forwardPE.toFixed(2) : '-';
 
   const epsTTM = metrics?.epsTTM ?? companyDesc?.eps ?? null;
-  const trailingEpsStr = typeof epsTTM === 'number' && !isNaN(epsTTM) ? `${curSymbol}${epsTTM.toFixed(2)}` : '-';
+  const trailingEpsStr = typeof epsTTM === 'number' && !isNaN(epsTTM)
+    ? formatStatPrice(epsTTM, curSymbol, decimals, cleanSymbol)
+    : '-';
 
   const marginTTM = metrics?.netProfitMarginTTM ?? companyDesc?.profitMargin ?? null;
   const profitMarginStr = typeof marginTTM === 'number' && !isNaN(marginTTM) ? `${marginTTM.toFixed(2)}%` : '-';
@@ -354,7 +375,7 @@ function StockDetailModal({ visible, stock, onClose }) {
   const businessSummary = companyDesc?.description || '';
   const sector = companyDesc?.sector || null;
   const industry = companyDesc?.industry || profileData?.industry || null;
-  const exchange = profileData?.exchange || stock?.exchange || null;
+  const exchange = profileData?.exchange || stock?.exchange || (secMetadata ? secMetadata.category.toUpperCase() : null);
   const country = companyDesc?.country || profileData?.country || null;
   const websiteUrl = companyDesc?.website || profileData?.weburl || null;
 
@@ -366,8 +387,8 @@ function StockDetailModal({ visible, stock, onClose }) {
   ].filter(Boolean);
 
   const positionInfo = useMemo(() => {
-    if (!isPaperTradingEnabled || !stock?.symbol) return null;
-    const pos = getPosition(activePortfolioId, stock.symbol);
+    if (!isStockPaperTradingAllowed || !cleanSymbol) return null;
+    const pos = getPosition(activePortfolioId, cleanSymbol);
     const heldShares = pos ? Number(pos.shares) || 0 : 0;
     if (heldShares <= 0) return { hasPosition: false, heldShares: 0 };
     const avgCost = pos ? Number(pos.avgCost) || 0 : 0;
@@ -383,7 +404,7 @@ function StockDetailModal({ visible, stock, onClose }) {
       isPosReturnPositive: posReturnPercent >= 0,
       posReturnColor: posReturnPercent >= 0 ? '#00D084' : '#FF4D4F',
     };
-  }, [isPaperTradingEnabled, stock?.symbol, activePortfolioId, getPosition, marketStatus.isOpen, leftPrice, outOfHoursPriceVal]);
+  }, [isStockPaperTradingAllowed, cleanSymbol, activePortfolioId, getPosition, marketStatus.isOpen, leftPrice, outOfHoursPriceVal]);
 
   if (!stock) return null;
 
@@ -420,7 +441,7 @@ function StockDetailModal({ visible, stock, onClose }) {
               <View style={styles.header}>
                 <View style={styles.headerLeft}>
                   <CompanyLogo
-                    symbol={stock.symbol}
+                    symbol={cleanSymbol}
                     size={46}
                     logoUri={stock.logo || profileData?.logo}
                     style={styles.logo}
@@ -429,14 +450,14 @@ function StockDetailModal({ visible, stock, onClose }) {
                   <View style={styles.titleInfo}>
                     <View style={styles.symbolRow}>
                       <AppText bold style={styles.symbolText}>
-                        {stock.symbol}
+                        {cleanSymbol}
                       </AppText>
                       {exchange && (
                         <AppText
                           numberOfLines={1}
                           style={[styles.exchangeText, { color: theme.textSecondary }]}
                         >
-                           {} - {exchange}
+                          {' '} - {exchange}
                         </AppText>
                       )}
                     </View>
@@ -478,7 +499,12 @@ function StockDetailModal({ visible, stock, onClose }) {
 
               {/* 2 & 3. Interactive Price Header & Chart Area (Isolated Scrub Rendering) */}
               <StockDetailChartSection
-                stock={stock}
+                stock={{
+                  ...stock,
+                  symbol: cleanSymbol,
+                  currency: curSymbol,
+                  decimals,
+                }}
                 chartData={chartData}
                 liveWsPrice={liveWsPrice}
                 latestExtendedPrice={latestExtendedPriceRef.current}
@@ -533,7 +559,7 @@ function StockDetailModal({ visible, stock, onClose }) {
               <View style={styles.sectionContainer}>
                 <View style={styles.sectionHeaderRow}>
                   <AppText bold style={[styles.sectionTitle, { color: theme.textPrimary }]}>
-                    {stock.symbol} Key Statistics
+                    {cleanSymbol} Key Statistics
                   </AppText>
                   {isLoadingDetails && (
                     <ActivityIndicator size="small" color={theme.primary} />
@@ -550,6 +576,8 @@ function StockDetailModal({ visible, stock, onClose }) {
                     isDark={isDark}
                     theme={theme}
                     curSymbol={curSymbol}
+                    decimals={decimals}
+                    symbol={cleanSymbol}
                   />
                   <View style={{ marginTop: spacing.md }}>
                     <RangeBar
@@ -560,6 +588,8 @@ function StockDetailModal({ visible, stock, onClose }) {
                       isDark={isDark}
                       theme={theme}
                       curSymbol={curSymbol}
+                      decimals={decimals}
+                      symbol={cleanSymbol}
                     />
                   </View>
                 </View>
@@ -589,10 +619,10 @@ function StockDetailModal({ visible, stock, onClose }) {
                 </View>
               </View>
 
-              {/* 6. About Company Section */}
+              {/* 6. About Company / Security Section */}
               <View style={styles.sectionContainer}>
                 <AppText bold style={[styles.sectionTitle, { color: theme.textPrimary }]}>
-                  About {stock.symbol}
+                  About {cleanSymbol}
                 </AppText>
 
                 <View style={[styles.cardBox, { backgroundColor: isDark ? '#12161E' : '#FFFFFF', borderColor: theme.border }]}>
@@ -622,7 +652,7 @@ function StockDetailModal({ visible, stock, onClose }) {
                     </View>
                   ) : (
                     <AppText style={[styles.descriptionText, { color: theme.textMuted }]}>
-                      Company profile details are loading or currently unavailable.
+                      {isStock ? 'Company profile details are loading or currently unavailable.' : `${companyName} (${cleanSymbol}) overview and price data.`}
                     </AppText>
                   )}
 
@@ -674,7 +704,7 @@ function StockDetailModal({ visible, stock, onClose }) {
               )}
             </ScrollView>
 
-            {/* 8. Anchored Bottom Price Freshness & Paper Trading Actions */}
+            {/* 8. Anchored Bottom Price Freshness & Paper Trading Actions (Stocks only) */}
             <View
               style={[
                 styles.anchoredFooter,
@@ -685,7 +715,7 @@ function StockDetailModal({ visible, stock, onClose }) {
                 },
               ]}
             >
-              {isPaperTradingEnabled && positionInfo && (
+              {isStockPaperTradingAllowed && positionInfo && (
                 <View style={styles.positionContainer}>
                   {positionInfo.hasPosition && (
                     <>
@@ -700,14 +730,14 @@ function StockDetailModal({ visible, stock, onClose }) {
                           <AppText style={[styles.positionAvgCostLabel, { color: theme.textSecondary }]}>
                             Avg cost:{' '}
                             <AppText bold style={{ color: theme.textPrimary }}>
-                              {formatMoney(positionInfo.avgCost, curSymbol)}
+                              {formatMoney(positionInfo.avgCost, curSymbol, decimals, cleanSymbol)}
                             </AppText>
                           </AppText>
                         </View>
 
                         <View style={styles.positionRightGroup}>
                           <AppText bold style={styles.positionValueText}>
-                            {formatMoney(positionInfo.positionTotalValue, curSymbol)}
+                            {formatMoney(positionInfo.positionTotalValue, curSymbol, decimals, cleanSymbol)}
                           </AppText>
                           <AppText bold style={[styles.positionReturnText, { color: positionInfo.posReturnColor }]}>
                             {positionInfo.isPosReturnPositive ? '+' : '-'}{Math.abs(positionInfo.posReturnPercent).toFixed(2)}%
@@ -768,16 +798,36 @@ function StockDetailModal({ visible, stock, onClose }) {
 
           <AddToWatchlistModal
             visible={watchlistModalVisible}
-            stock={stock}
+            stock={{
+              ...stock,
+              symbol: cleanSymbol,
+              displaySymbol: cleanSymbol,
+              name: companyName,
+              displayName: companyName,
+              currency: curSymbol,
+              decimals,
+              isStock,
+            }}
             onClose={() => setWatchlistModalVisible(false)}
           />
 
-          <StockOrderModal
-            visible={orderModalVisible}
-            stock={stock}
-            mode={orderMode}
-            onClose={() => setOrderModalVisible(false)}
-          />
+          {isStockPaperTradingAllowed && (
+            <StockOrderModal
+              visible={orderModalVisible}
+              stock={{
+                ...stock,
+                symbol: cleanSymbol,
+                displaySymbol: cleanSymbol,
+                name: companyName,
+                displayName: companyName,
+                currency: curSymbol,
+                decimals,
+                isStock,
+              }}
+              mode={orderMode}
+              onClose={() => setOrderModalVisible(false)}
+            />
+          )}
         </View>
       </View>
     </Modal>
@@ -831,79 +881,6 @@ const styles = StyleSheet.create({
   },
   logo: {
     borderRadius: borderRadius.sm,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginVertical: spacing.md,
-  },
-  mainPriceColOpen: {
-    flex: 1,
-  },
-  mainPriceColClosed: {
-    flex: 1.36,
-  },
-  mainPriceText: {
-    fontSize: 32,
-  },
-  mainReturnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginTop: 4,
-  },
-  changeText: {
-    fontSize: 13,
-  },
-  timeframeSuffixLabel: {
-    fontSize: 12,
-  },
-  scrubTimeLabel: {
-    fontSize: 12,
-  },
-  afterHoursColOpen: {
-    flexShrink: 0,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    paddingTop: 6,
-  },
-  afterHoursColClosed: {
-    flex: 1,
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  marketOpenBadgeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  afterHoursPriceText: {
-    fontSize: 22,
-    textAlign: 'right',
-  },
-  afterHoursChangeText: {
-    fontSize: 11,
-    marginTop: 2,
-    textAlign: 'right',
-  },
-  afterHoursLabel: {
-    fontSize: 13,
-    marginTop: 3,
-    textAlign: 'right',
-  },
-  chartCard: {
-    height: 220,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    overflow: 'hidden',
-    marginBottom: spacing.md,
   },
   timeframeSelectorRow: {
     flexDirection: 'row',
@@ -1108,4 +1085,3 @@ const styles = StyleSheet.create({
 });
 
 export default React.memo(StockDetailModal);
-

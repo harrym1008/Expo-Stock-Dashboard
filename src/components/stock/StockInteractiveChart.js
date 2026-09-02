@@ -79,7 +79,7 @@ export function formatTickLabel(value, step) {
       maximumFractionDigits: 2,
     });
   }
-  const decimals = Math.min(4, Math.max(0, -Math.floor(Math.log10(step) + 1e-9)));
+  const decimals = Math.min(6, Math.max(0, -Math.floor(Math.log10(step) + 1e-9)));
   return value.toFixed(decimals);
 }
 

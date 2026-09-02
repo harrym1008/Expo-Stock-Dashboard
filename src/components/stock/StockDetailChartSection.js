@@ -6,6 +6,7 @@ import StockInteractiveChart, { formatCandleDate } from './StockInteractiveChart
 import { useTheme } from '../../context/ThemeContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import { layoutStyles } from '../../styles';
+import { getDecimals, getCurrency } from '../../utils/securityUtils';
 
 const TIMEFRAME_SUFFIXES = {
   '1H': 'last hour',
@@ -39,14 +40,15 @@ function StockDetailChartSection({
     setScrubData(null);
   }, []);
 
-  const curSymbol = stock?.currency === 'USD' || !stock?.currency ? '$' : stock.currency;
-
   const regularClosePrice =
     chartData?.regularMarketPrice || stock?.regularMarketPrice || stock?.price || chartData?.currentPrice || 0;
 
   const leftPrice = marketStatus?.isOpen
     ? (liveWsPrice ?? stock?.price ?? chartData?.currentPrice ?? regularClosePrice)
     : regularClosePrice;
+
+  const curSymbol = stock?.currency !== undefined ? stock.currency : getCurrency(stock?.symbol, '$');
+  const decimals = getDecimals(stock?.symbol, leftPrice, stock?.decimals);
 
   const baseComparison =
     activeDisplayedTimeframe === '1D'
@@ -85,7 +87,7 @@ function StockDetailChartSection({
   const outOfHoursPriceVal =
     liveWsPrice ??
     latestExtendedPrice ??
-    (chartData?.postMarketPrice && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.001 ? chartData.postMarketPrice : null) ??
+    (chartData?.postMarketPrice && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.000001 ? chartData.postMarketPrice : null) ??
     (typeof stock?.postMarketPrice === 'number' ? stock.postMarketPrice : null) ??
     regularClosePrice;
 
@@ -97,13 +99,16 @@ function StockDetailChartSection({
   const outOfHoursTrendColor = isOutOfHoursPositive ? '#00D084' : '#FF4D4F';
 
   const afterHoursPriceStr = outOfHoursPriceVal.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   });
 
   const afterHoursChangeStr = `${isOutOfHoursPositive ? '+' : '-'}${curSymbol}${Math.abs(
     outOfHoursChangeVal
-  ).toFixed(2)} (${Math.abs(outOfHoursChangePercentVal).toFixed(2)}%) since close`;
+  ).toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })} (${Math.abs(outOfHoursChangePercentVal).toFixed(2)}%) since close`;
 
   const baseSparklineData = chartData?.sparkline || stock?.sparkline || [];
   const activeEndPrice = marketStatus?.isOpen ? leftPrice : outOfHoursPriceVal;
@@ -158,8 +163,8 @@ function StockDetailChartSection({
           >
             {curSymbol}
             {displayedMainPrice.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
+              minimumFractionDigits: decimals,
+              maximumFractionDigits: decimals,
             })}
           </AppText>
 
@@ -170,8 +175,8 @@ function StockDetailChartSection({
                   {isScrubPositive ? '+' : '-'}
                   {curSymbol}
                   {Math.abs(scrubDelta).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
+                    minimumFractionDigits: decimals,
+                    maximumFractionDigits: decimals,
                   })}{' '}
                   ({Math.abs(scrubDeltaPercent).toFixed(2)}%)
                 </AppText>
@@ -185,8 +190,8 @@ function StockDetailChartSection({
                   {isPeriodPositive ? '+' : '-'}
                   {curSymbol}
                   {Math.abs(periodChange).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
+                    minimumFractionDigits: decimals,
+                    maximumFractionDigits: decimals,
                   })}{' '}
                   ({Math.abs(periodChangePercent).toFixed(2)}%)
                 </AppText>

@@ -11,7 +11,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import AppText from '../common/AppText';
 import SearchResultItem from './SearchResultItem';
+import NonStockSecuritiesModal from './NonStockSecuritiesModal';
 import searchTickersData from '../../constants/searchTickers.json';
+import { getAllNonStockSecurities } from '../../utils/securityUtils';
 import { logoService } from '../../services/logoService';
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
@@ -20,26 +22,48 @@ import { spacing, borderRadius, fonts } from '../../constants/theme';
 import { layoutStyles, emptyStateStyles } from '../../styles';
 
 // Module-level memoized ticker entries
-const ALL_TICKERS = Object.entries(searchTickersData).map(([symbol, item]) => ({
+const ALL_STOCK_TICKERS = Object.entries(searchTickersData).map(([symbol, item]) => ({
   symbol: symbol.toUpperCase(),
+  displaySymbol: symbol.toUpperCase(),
   name: item?.name || symbol,
+  displayName: item?.name || symbol,
   marketCap: typeof item?.marketCap === 'number' ? item.marketCap : 0,
+  isStock: true,
+  decimals: 2,
+  currency: '$',
 }));
 
+const ALL_NON_STOCK_TICKERS = getAllNonStockSecurities().map((item) => ({
+  symbol: item.displaySymbol,
+  displaySymbol: item.displaySymbol,
+  name: item.displayName,
+  displayName: item.displayName,
+  marketCap: 0,
+  isStock: false,
+  category: item.category,
+  decimals: item.decimals,
+  currency: item.currency,
+  finnhubSymbol: item.finnhubSymbol,
+  yahooSymbol: item.yahooSymbol,
+}));
+
+const ALL_TICKERS = [...ALL_STOCK_TICKERS, ...ALL_NON_STOCK_TICKERS];
+
 // Pre-sorted top 25 tickers by market cap for default view
-const DEFAULT_TOP_TICKERS = [...ALL_TICKERS]
+const DEFAULT_TOP_TICKERS = [...ALL_STOCK_TICKERS]
   .sort((a, b) => b.marketCap - a.marketCap)
   .slice(0, 25);
 
 export default function StockSearchView({
   onSelectStock,
   autoFocus = false,
-  placeholder = 'Search by ticker or company name...',
+  placeholder = 'Search by ticker, security or name...',
   containerStyle,
 }) {
   const { theme } = useTheme();
   const { profiles, apiKey } = useMarketData();
 
+  const [nonStockModalVisible, setNonStockModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [remoteResults, setRemoteResults] = useState([]);
   const [remoteSearchStatus, setRemoteSearchStatus] = useState('idle');
@@ -78,8 +102,13 @@ export default function StockSearchView({
         .filter((item) => item?.symbol)
         .map((item) => ({
           symbol: item.symbol.trim().toUpperCase(),
+          displaySymbol: item.displaySymbol || item.symbol.trim().toUpperCase(),
           name: item.name || item.displaySymbol || item.symbol,
+          displayName: item.name || item.displaySymbol || item.symbol,
           marketCap: 0,
+          isStock: true,
+          currency: '$',
+          decimals: 2,
         }));
 
       setRemoteResults(normalizedResults);
@@ -92,7 +121,7 @@ export default function StockSearchView({
     };
   }, [searchQuery, apiKey]);
 
-  // Filter tickers by symbol or name and sort by market cap descending (max 25 results)
+  // Filter tickers by symbol or name - ALWAYS put non-stock securities above stocks
   const filteredResults = useMemo(() => {
     const trimmedQuery = searchQuery.trim();
     if (!trimmedQuery) {
@@ -104,26 +133,53 @@ export default function StockSearchView({
     const matches = [];
     for (let i = 0; i < ALL_TICKERS.length; i++) {
       const item = ALL_TICKERS[i];
-      if (
-        item.symbol.toLowerCase().includes(query) ||
-        item.name.toLowerCase().includes(query)
-      ) {
+      const sym = item.displaySymbol ? item.displaySymbol.toLowerCase() : item.symbol.toLowerCase();
+      const name = item.displayName ? item.displayName.toLowerCase() : item.name.toLowerCase();
+      if (sym.includes(query) || name.includes(query)) {
         matches.push(item);
       }
     }
 
-    // Sort by marketCap highest to lowest
-    matches.sort((a, b) => b.marketCap - a.marketCap);
+    // Sort: ALWAYS put non-stock securities above stocks
+    matches.sort((a, b) => {
+      if (!a.isStock && b.isStock) return -1;
+      if (a.isStock && !b.isStock) return 1;
+
+      const aSym = (a.displaySymbol || a.symbol).toLowerCase();
+      const bSym = (b.displaySymbol || b.symbol).toLowerCase();
+      const aName = (a.displayName || a.name).toLowerCase();
+      const bName = (b.displayName || b.name).toLowerCase();
+
+      // Exact symbol match
+      if (aSym === query && bSym !== query) return -1;
+      if (bSym === query && aSym !== query) return 1;
+
+      // Exact name match
+      if (aName === query && bName !== query) return -1;
+      if (bName === query && aName !== query) return 1;
+
+      // Prefix symbol match
+      if (aSym.startsWith(query) && !bSym.startsWith(query)) return -1;
+      if (bSym.startsWith(query) && !aSym.startsWith(query)) return 1;
+
+      // Non-stocks sorted alphabetically by displaySymbol
+      if (!a.isStock && !b.isStock) {
+        return (a.displaySymbol || a.symbol).localeCompare(b.displaySymbol || b.symbol);
+      }
+
+      // Stocks sorted by marketCap highest to lowest
+      return b.marketCap - a.marketCap;
+    });
 
     // Limit to max 25 results
     const results = matches.slice(0, 25);
 
     // Append Finnhub matches that are not already present in the local list.
-    const existingSymbols = new Set(results.map((item) => item.symbol));
+    const existingSymbols = new Set(results.map((item) => item.symbol.toUpperCase()));
     remoteResults.forEach((item) => {
-      if (!existingSymbols.has(item.symbol)) {
+      if (!existingSymbols.has(item.symbol.toUpperCase())) {
         results.push(item);
-        existingSymbols.add(item.symbol);
+        existingSymbols.add(item.symbol.toUpperCase());
       }
     });
 
@@ -191,6 +247,22 @@ export default function StockSearchView({
         )}
       </View>
 
+      {/* Default Screen: Tappable Non-Stock Securities Header Row with 24px vertical padding */}
+      {!isSearching && (
+        <TouchableOpacity
+          style={styles.nonStockHeaderButton}
+          onPress={() => setNonStockModalVisible(true)}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Open Non-Stock Securities"
+        >
+          <AppText bold style={[styles.sectionHeaderText, { color: theme.textSecondary }]}>
+            NON-STOCK SECURITIES
+          </AppText>
+          <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+        </TouchableOpacity>
+      )}
+
       {/* Section Header */}
       <View style={styles.sectionHeaderRow}>
         <AppText bold style={[styles.sectionHeaderText, { color: theme.textSecondary }]}>
@@ -205,11 +277,13 @@ export default function StockSearchView({
       {/* Search Results List */}
       <FlatList
         data={filteredResults}
-        keyExtractor={(item) => item.symbol}
+        keyExtractor={(item) => item.displaySymbol || item.symbol}
         renderItem={({ item }) => (
           <SearchResultItem
             item={{
               ...item,
+              symbol: item.displaySymbol || item.symbol,
+              name: item.displayName || item.name,
               logo: profiles[item.symbol]?.logo || null,
             }}
             onPress={() => onSelectStock && onSelectStock(item)}
@@ -236,11 +310,18 @@ export default function StockSearchView({
               <AppText
                 style={[emptyStateStyles.subtitle, { color: theme.textSecondary }]}
               >
-                No results matching that search term. Try searching for another ticker symbol or company name.
+                No results matching that search term. Try searching for another ticker symbol, currency pair, or security name.
               </AppText>
             </View>
           )
         }
+      />
+
+      {/* Grouped Non-Stock Securities Slide-Up Modal */}
+      <NonStockSecuritiesModal
+        visible={nonStockModalVisible}
+        onSelectStock={onSelectStock}
+        onClose={() => setNonStockModalVisible(false)}
       />
     </View>
   );
@@ -254,7 +335,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     paddingHorizontal: spacing.md,
     height: 46,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
   },
   searchIcon: {
     marginRight: spacing.sm,
@@ -270,6 +351,12 @@ const styles = StyleSheet.create({
     padding: spacing.xs,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  nonStockHeaderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 24,
   },
   sectionHeaderRow: {
     paddingVertical: spacing.xs,

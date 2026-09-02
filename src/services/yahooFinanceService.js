@@ -1,6 +1,7 @@
 import { yahooRateLimiter } from '../utils/rateLimiter';
 import { persistentLruCache } from './persistentLruCache';
 import { getMarketSessionStatus } from '../utils/marketHours';
+import { getYahooSymbol, getDecimals, getDisplaySymbol } from '../utils/securityUtils';
 
 const TIMEFRAME_CONFIG = {
   '1H': { range: '1d', interval: '1m' },
@@ -105,14 +106,14 @@ function applyLivePriceOverlay(chartData, latestLivePrice) {
 export const yahooFinanceService = {
   async fetchHistoricalData(symbol, timeframe = '1D', latestLivePrice = null) {
     if (!symbol) return null;
-    const cleanSymbol = symbol.trim().toUpperCase();
+    const cleanSymbol = getDisplaySymbol(symbol);
     const config = TIMEFRAME_CONFIG[timeframe] || TIMEFRAME_CONFIG['1D'];
     const cacheKey = `chart_${timeframe}_${cleanSymbol}`;
 
     // 1. Check persistent 50MB LRU cache first (with boundary-aligned TTL)
     const cached = await persistentLruCache.getJson(cacheKey);
     if (cached && Array.isArray(cached.sparkline) && cached.sparkline.length > 0) {
-      if (latestKnownAfterHoursPrices[cleanSymbol] && (!cached.postMarketPrice || Math.abs(cached.postMarketPrice - cached.regularMarketPrice) < 0.001)) {
+      if (latestKnownAfterHoursPrices[cleanSymbol] && (!cached.postMarketPrice || Math.abs(cached.postMarketPrice - cached.regularMarketPrice) < 0.000001)) {
         cached.postMarketPrice = latestKnownAfterHoursPrices[cleanSymbol];
         cached.postMarketChange = cached.postMarketPrice - cached.regularMarketPrice;
         cached.postMarketChangePercent = cached.regularMarketPrice !== 0 ? (cached.postMarketChange / cached.regularMarketPrice) * 100 : 0;
@@ -122,7 +123,7 @@ export const yahooFinanceService = {
 
       if (typeof latestLivePrice === 'number' && latestLivePrice > 0) {
         console.log(
-          `[Yahoo Finance] ⚡ Cache HIT (${timeframe} Chart) for ${cleanSymbol} | Overlaid live endmost price: $${latestLivePrice.toFixed(2)}`
+          `[Yahoo Finance] ⚡ Cache HIT (${timeframe} Chart) for ${cleanSymbol} | Overlaid live endmost price: ${latestLivePrice}`
         );
       } else {
         console.log(`[Yahoo Finance] ⚡ Cache HIT (${timeframe} Chart) for ${cleanSymbol} (No network call needed)`);
@@ -131,8 +132,8 @@ export const yahooFinanceService = {
       return withLiveOverlay;
     }
 
-    // 2. Normalize ticker for Yahoo Finance (e.g. BRK.B -> BRK-B, BF.B -> BF-B)
-    const yahooSymbol = cleanSymbol.replace(/\./g, '-');
+    // 2. Resolve Yahoo Finance symbol (e.g. EUR/USD -> EURUSD=X, US500 -> ^GSPC, BRK.B -> BRK-B)
+    const yahooSymbol = getYahooSymbol(cleanSymbol);
 
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
       yahooSymbol
@@ -175,8 +176,9 @@ export const yahooFinanceService = {
           if (validIndices.length > 0) {
             for (const i of validIndices) {
               const t = (rawTimestamps[i] || 0) * 1000;
-              let price = rawCloses[i];
-              points.push({ time: t, price: Number(price.toFixed(2)) });
+              const price = rawCloses[i];
+              const dec = getDecimals(cleanSymbol, price);
+              points.push({ time: t, price: Number(price.toFixed(dec)) });
             }
           }
         }
@@ -208,7 +210,7 @@ export const yahooFinanceService = {
 
         // Extract and globally preserve after-hours trade prices
         if (timeframe === '1D' || timeframe === '1W' || timeframe === '1H') {
-          if (Math.abs(endmostPrice - regularMarketPrice) > 0.001) {
+          if (Math.abs(endmostPrice - regularMarketPrice) > 0.000001) {
             latestKnownAfterHoursPrices[cleanSymbol] = endmostPrice;
           }
         }
@@ -273,7 +275,7 @@ export const yahooFinanceService = {
 
         const ttlSecs = Math.round(alignedTtl / 1000);
         console.log(
-          `[Yahoo Finance] 💾 Cached ${points.length} candles for ${cleanSymbol} (${timeframe}) | RegClose: $${regularMarketPrice} | Post: $${postMarketPrice} | Aligned TTL: ${ttlSecs}s`
+          `[Yahoo Finance] 💾 Cached ${points.length} candles for ${cleanSymbol} (${timeframe}) | RegClose: ${regularMarketPrice} | Post: ${postMarketPrice} | Aligned TTL: ${ttlSecs}s`
         );
 
         // 4. Always apply live price overlay if available
@@ -367,7 +369,7 @@ export const yahooFinanceService = {
 
   async fetchCompanyDescription(symbol, isRetry = false) {
     if (!symbol) return null;
-    const cleanSymbol = symbol.trim().toUpperCase();
+    const cleanSymbol = getDisplaySymbol(symbol);
     const cacheKey = `company_desc_${cleanSymbol}`;
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
     const USER_AGENT =
@@ -380,7 +382,7 @@ export const yahooFinanceService = {
       return cached;
     }
 
-    const yahooSymbol = cleanSymbol.replace(/\./g, '-');
+    const yahooSymbol = getYahooSymbol(cleanSymbol);
 
     return yahooRateLimiter.schedule(async () => {
       try {
@@ -453,8 +455,9 @@ export const yahooFinanceService = {
    */
   async getMostRecentPrice(symbol) {
     if (!symbol) return null;
-    const cleanSymbol = symbol.trim().toUpperCase();
-    const yahooSymbol = cleanSymbol.replace(/\./g, '-');
+    const cleanSymbol = getDisplaySymbol(symbol);
+    const yahooSymbol = getYahooSymbol(cleanSymbol);
+    const dec = getDecimals(cleanSymbol);
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
       yahooSymbol
     )}?range=1d&interval=1m&includePrePost=true`;
@@ -485,15 +488,18 @@ export const yahooFinanceService = {
 
         if (validCloses.length > 0) {
           const lastClose = validCloses[validCloses.length - 1];
-          return Number(lastClose.toFixed(2));
+          const calculatedDec = getDecimals(cleanSymbol, lastClose, dec);
+          return Number(lastClose.toFixed(calculatedDec));
         }
 
         // Fallback to meta prices
         const meta = result.meta || {};
         const metaPrice = meta.regularMarketPrice ?? meta.previousClose ?? null;
-        return typeof metaPrice === 'number' && metaPrice > 0
-          ? Number(metaPrice.toFixed(2))
-          : null;
+        if (typeof metaPrice === 'number' && metaPrice > 0) {
+          const calculatedDec = getDecimals(cleanSymbol, metaPrice, dec);
+          return Number(metaPrice.toFixed(calculatedDec));
+        }
+        return null;
       } catch (err) {
         console.warn(`[Yahoo Finance] Error getting most recent price for ${cleanSymbol}:`, err.message || err);
         return null;

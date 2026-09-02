@@ -12,6 +12,7 @@ import { stockItemStyles } from '../../styles';
 import AppText from '../common/AppText';
 import Sparkline from './Sparkline';
 import CompanyLogo from '../common/CompanyLogo';
+import { getCurrency, getDecimals } from '../../utils/securityUtils';
 
 function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
   const { theme } = useTheme();
@@ -24,6 +25,11 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
       onPress(item);
     }
   };
+
+  const displaySymbol = item?.displaySymbol || item?.symbol || '';
+  const displayName = item?.displayName || item?.name || displaySymbol;
+  const curSymbol = item?.currency !== undefined ? item.currency : getCurrency(item?.symbol, '$');
+  const decimals = getDecimals(item?.symbol, item?.price, item?.decimals);
 
   return (
     <Animated.View layout={LinearTransition.duration(200)}>
@@ -58,20 +64,20 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
           style={styles.leftSection}
         >
           <CompanyLogo
-            symbol={item?.symbol}
+            symbol={displaySymbol}
             logoUri={item?.logo}
             size={32}
           />
 
           <View style={styles.titleWrapper}>
             <AppText bold style={stockItemStyles.symbolText}>
-              {item?.symbol}
+              {displaySymbol}
             </AppText>
             <AppText
               style={[stockItemStyles.nameText, styles.nameText, { color: theme.textSecondary }]}
               numberOfLines={1}
             >
-              {item?.name}
+              {displayName}
             </AppText>
           </View>
         </Animated.View>
@@ -89,10 +95,10 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
         {/* Right: Price & Percent Change */}
         <View style={styles.rightSection}>
           <AppText style={stockItemStyles.priceText}>
-            {item?.currency || '$'}
-            {(item?.price ?? 0).toLocaleString('en-GB', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
+            {curSymbol}
+            {(item?.price ?? 0).toLocaleString('en-US', {
+              minimumFractionDigits: decimals,
+              maximumFractionDigits: decimals,
             })}
           </AppText>
           <AppText style={[stockItemStyles.changeText, { color: trendColor }]}>
@@ -117,11 +123,14 @@ function areEqual(prevProps, nextProps) {
 
   return (
     prevItem.symbol === nextItem.symbol &&
+    prevItem.displaySymbol === nextItem.displaySymbol &&
     prevItem.price === nextItem.price &&
     prevItem.changePercent === nextItem.changePercent &&
     prevItem.name === nextItem.name &&
+    prevItem.displayName === nextItem.displayName &&
     prevItem.logo === nextItem.logo &&
     prevItem.currency === nextItem.currency &&
+    prevItem.decimals === nextItem.decimals &&
     prevItem.sparkline === nextItem.sparkline
   );
 }
@@ -160,5 +169,3 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-
-

@@ -1,0 +1,158 @@
+import React from 'react';
+import {
+  Modal,
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  SectionList,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../context/ThemeContext';
+import { useMarketData } from '../../context/MarketDataContext';
+import { spacing } from '../../constants/theme';
+import { modalStyles, layoutStyles } from '../../styles';
+import AppText from '../common/AppText';
+import SearchResultItem from './SearchResultItem';
+import { getGroupedNonStockSecurities } from '../../utils/securityUtils';
+
+const GROUPED_NON_STOCK_DATA = getGroupedNonStockSecurities();
+
+export default function NonStockSecuritiesModal({
+  visible,
+  onSelectStock,
+  onClose,
+}) {
+  const { theme } = useTheme();
+  const { profiles } = useMarketData();
+
+  if (!visible) return null;
+
+  const handleSelect = (item) => {
+    if (onClose) onClose();
+    if (onSelectStock) onSelectStock(item);
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+    >
+      <View style={modalStyles.modalOverlay}>
+        {/* Top Gap - Tap to dismiss */}
+        <TouchableOpacity
+          style={modalStyles.topBackdropGap}
+          activeOpacity={1}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close modal"
+        />
+
+        {/* Sheet Container */}
+        <View
+          style={[
+            modalStyles.sheetContainer,
+            { backgroundColor: theme.background },
+          ]}
+        >
+          <SafeAreaView
+            style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
+            edges={['bottom', 'left', 'right']}
+          >
+            {/* Header: Title and Close Button */}
+            <View
+              style={[
+                modalStyles.header,
+                { borderBottomColor: theme.borderSubtle },
+              ]}
+            >
+              <View style={styles.headerLeft}>
+                <AppText bold style={styles.headerTitle}>
+                  Non-Stock Securities
+                </AppText>
+                <AppText style={[styles.headerSubtitle, { color: theme.textSecondary }]}>
+                  Browse forex, indices, commodities, bonds & crypto
+                </AppText>
+              </View>
+
+              <TouchableOpacity
+                onPress={onClose}
+                style={modalStyles.closeBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Close non-stock securities modal"
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Ionicons name="close" size={26} color={theme.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Grouped SectionList */}
+            <SectionList
+              sections={GROUPED_NON_STOCK_DATA}
+              keyExtractor={(item) => item.displaySymbol}
+              renderSectionHeader={({ section: { title, data } }) => (
+                <View
+                  style={[
+                    styles.sectionHeaderRow,
+                    { backgroundColor: theme.background },
+                  ]}
+                >
+                  <AppText
+                    bold
+                    style={[styles.sectionHeaderText, { color: theme.textSecondary }]}
+                  >
+                    {title} ({data.length})
+                  </AppText>
+                </View>
+              )}
+              renderItem={({ item }) => (
+                <SearchResultItem
+                  item={{
+                    ...item,
+                    symbol: item.displaySymbol,
+                    name: item.displayName,
+                    logo: profiles[item.symbol]?.logo || null,
+                  }}
+                  onPress={() => handleSelect(item)}
+                />
+              )}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContent}
+              stickySectionHeadersEnabled={false}
+            />
+          </SafeAreaView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  headerLeft: {
+    flex: 1,
+    paddingRight: spacing.sm,
+  },
+  headerTitle: {
+    fontSize: 20,
+    letterSpacing: 0.2,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  sectionHeaderRow: {
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+  },
+  sectionHeaderText: {
+    fontSize: 12,
+    letterSpacing: 0.8,
+  },
+  listContent: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+});

@@ -1,14 +1,27 @@
 /**
  * Unified formatting and stock quote calculation utilities.
  */
+import {
+  getSecurityBySymbol,
+  getCurrency,
+  getDecimals,
+  getDisplaySymbol,
+  getDisplayName,
+} from './securityUtils';
 
 /**
- * Formats a monetary value as currency (e.g. $10,000.00).
+ * Formats a monetary value as currency with dynamic or explicit decimals.
+ * - Non-stock securities: uses defined decimals in nonStockSecurities.json
+ * - Stocks: >= $1.00 -> 2 d.p.; < $1.00 & >= $0.10 -> 3 d.p.; < $0.10 -> 4 d.p. (max 4 d.p.)
  */
-export function formatMoney(val, currency = '$') {
-  return `${currency}${Number(val || 0).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+export function formatMoney(val, currency = '$', decimals = null, symbol = null) {
+  if (val === null || val === undefined || isNaN(val)) return '-';
+  const num = Number(val || 0);
+  const cur = currency !== undefined && currency !== null ? currency : '$';
+  const dec = getDecimals(symbol, num, decimals);
+  return `${cur}${num.toLocaleString('en-US', {
+    minimumFractionDigits: dec,
+    maximumFractionDigits: dec,
   })}`;
 }
 
@@ -30,29 +43,33 @@ export function formatShares(val) {
 export function formatLargeNum(num, currency = '') {
   if (num === null || num === undefined || isNaN(num) || num === 0) return '-';
   const abs = Math.abs(num);
+  const cur = currency !== undefined && currency !== null ? currency : '';
   if (abs >= 1e12) {
-    return `${currency}${(num / 1e12).toFixed(2)}T`;
+    return `${cur}${(num / 1e12).toFixed(2)}T`;
   }
   if (abs >= 1e9) {
-    return `${currency}${(num / 1e9).toFixed(2)}B`;
+    return `${cur}${(num / 1e9).toFixed(2)}B`;
   }
   if (abs >= 1e6) {
-    return `${currency}${(num / 1e6).toFixed(2)}M`;
+    return `${cur}${(num / 1e6).toFixed(2)}M`;
   }
   if (abs >= 1e3) {
-    return `${currency}${(num / 1e3).toFixed(1)}K`;
+    return `${cur}${(num / 1e3).toFixed(1)}K`;
   }
-  return `${currency}${num.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  return `${cur}${num.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
 /**
- * Formats statistical prices (e.g. $123.45 or '-').
+ * Formats statistical prices (e.g. $123.45, 1.08456, or '-').
  */
-export function formatStatPrice(val, currency = '$') {
+export function formatStatPrice(val, currency = '$', decimals = null, symbol = null) {
   if (val === null || val === undefined || isNaN(val) || val === 0) return '-';
-  return `${currency}${Number(val).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+  const num = Number(val);
+  const cur = currency !== undefined && currency !== null ? currency : '$';
+  const dec = getDecimals(symbol, num, decimals);
+  return `${cur}${num.toLocaleString(undefined, {
+    minimumFractionDigits: dec,
+    maximumFractionDigits: dec,
   })}`;
 }
 
@@ -129,7 +146,7 @@ export function formatStockQuote(item, liveQuote, liveProfile, y1D, marketStatus
     const hasLiveWsTrade =
       liveQuote?.isLiveWs &&
       typeof liveQuote?.price === 'number' &&
-      Math.abs(liveQuote.price - regularClose) > 0.001;
+      Math.abs(liveQuote.price - regularClose) > 0.000001;
 
     const postPrice =
       (marketStatus?.isPreMarket ? y1D?.preMarketPrice : y1D?.postMarketPrice) ||
@@ -138,7 +155,7 @@ export function formatStockQuote(item, liveQuote, liveProfile, y1D, marketStatus
 
     const hasPostMarketDelta =
       typeof postPrice === 'number' &&
-      Math.abs(postPrice - regularClose) > 0.001;
+      Math.abs(postPrice - regularClose) > 0.000001;
 
     if (hasLiveWsTrade) {
       displayPrice = liveQuote.price;
@@ -161,15 +178,30 @@ export function formatStockQuote(item, liveQuote, liveProfile, y1D, marketStatus
       ? [...baseSparkline.slice(0, -1), displayPrice]
       : baseSparkline;
 
+  const sec = getSecurityBySymbol(item?.symbol);
+  const displaySymbol = sec?.displaySymbol || item?.displaySymbol || item?.symbol;
+  const displayName = sec?.displayName || liveProfile?.name || item?.displayName || item?.name;
+  const currency = sec && sec.currency !== undefined
+    ? sec.currency
+    : (item?.currency !== undefined ? item.currency : '$');
+  const decimals = getDecimals(item?.symbol, displayPrice, item?.decimals);
+  const isStock = sec ? false : (item?.isStock !== false);
+
   return {
     ...item,
+    symbol: displaySymbol,
+    displaySymbol,
+    name: displayName,
+    displayName,
+    currency,
+    decimals,
+    isStock,
     price: displayPrice,
     postMarketPrice: y1D?.postMarketPrice || displayPrice,
     regularMarketPrice: regularClose,
     change: displayChange,
     changePercent: displayChangePercent,
-    name: liveProfile?.name || item?.name,
-    exchange: liveProfile?.exchange || item?.exchange || '...',
+    exchange: liveProfile?.exchange || item?.exchange || (sec ? sec.category.toUpperCase() : '...'),
     logo: liveProfile?.logo || item?.logo || null,
     sparkline: dynamicSparkline,
     lastUpdated:
