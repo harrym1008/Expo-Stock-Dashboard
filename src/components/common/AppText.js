@@ -1,9 +1,8 @@
-import React from 'react';
 import { Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { fonts } from '../../constants/theme';
 
-// Themed text: resolves bold/italic fonts + default color from theme
+// Share the same font family across the whole app using AppText for every text element
 export default function AppText({
   style,
   bold,
@@ -14,12 +13,11 @@ export default function AppText({
 }) {
   const { theme } = useTheme();
 
-  // Merge incoming style so prop-driven fontWeight/italic are honored
+  // Merge incoming style so prop-driven fontWeight and italic are honored
   const flattened = StyleSheet.flatten(style) || {};
   const isBold = bold || flattened.fontWeight === 'bold' || Number(flattened.fontWeight) >= 600;
   const isItalic = italic || flattened.fontStyle === 'italic';
 
-  // Pick font family by bold/italic combination (default regular)
   let fontFamily = fonts.regular;
   if (isBold && isItalic) {
     fontFamily = fonts.boldItalic;
@@ -29,30 +27,12 @@ export default function AppText({
     fontFamily = fonts.italic;
   }
 
-  // Strip fontWeight & fontStyle to prevent Android from failing custom font lookup
   const { fontWeight, fontStyle, ...sanitizedStyle } = flattened;
   const textColor = color || sanitizedStyle.color || theme.textPrimary;
 
   return (
-    {/* Text with resolved font + theme color */}
-    <Text
-      style={[
-        styles.base,
-        sanitizedStyle,
-        {
-          color: textColor,
-          fontFamily,
-        },
-      ]}
-      {...props}
-    >
+    <Text style={[{fontSize: 14}, sanitizedStyle, {color: textColor, fontFamily}]} {...props}>
       {children}
     </Text>
   );
 }
-
-const styles = StyleSheet.create({
-  base: {
-    fontSize: 14,
-  },
-});

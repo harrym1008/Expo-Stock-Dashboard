@@ -1,16 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Modal,
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  Switch,
-  TextInput,
-  ScrollView,
-  Alert,
-  BackHandler,
-  Platform,
-} from 'react-native';
+import { useState, useEffect } from 'react';
+import {Modal, View, StyleSheet, TouchableOpacity, Switch, TextInput, ScrollView, Alert, BackHandler, Platform} from 'react-native';
 import * as Updates from 'expo-updates';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,7 +12,7 @@ import { spacing, borderRadius } from '../../constants/theme';
 import { modalStyles } from '../../styles';
 import AppText from './AppText';
 
-// Slide-up settings sheet: theme toggle, paper trading, API key, cache mgmt
+// Slideup settings modal
 export default function SettingsModal({ visible, onClose }) {
   const { theme, isDark, toggleTheme } = useTheme();
   const { apiKey, updateApiKey } = useMarketData();
@@ -33,12 +22,12 @@ export default function SettingsModal({ visible, onClose }) {
   const [showKey, setShowKey] = useState(false);
   const [cacheStats, setCacheStats] = useState({ totalMB: '0.00', itemCount: 0 });
 
-  // Pull current cache usage stats
+  // Pull current cache usage stats from the storage service
   const loadStats = () => {
     storageService.getCacheStats().then(setCacheStats);
   };
 
-  // Reset fields + load stats when the modal opens or key changes
+  // Reset fields and load stats when the modal opens
   useEffect(() => {
     if (visible) {
       setInputKey(apiKey || '');
@@ -47,13 +36,14 @@ export default function SettingsModal({ visible, onClose }) {
     }
   }, [visible, apiKey]);
 
-  // Save the API key (trims); show a transient "saved" state
+  // Save the API key to persistent storage
   const handleSaveKey = async () => {
     await updateApiKey(inputKey.trim());
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2500);
   };
 
+  // Clear the persistent cache and restart the app
   const handleClearCache = () => {
     Alert.alert(
       'Clear Cache & Restart',
@@ -69,10 +59,8 @@ export default function SettingsModal({ visible, onClose }) {
           onPress: async () => {
             // 1. Stop all WebSocket & background services
             finnhubWebSocketService.destroy();
-
             // 2. Wipe the single 50MB persistent LRU cache file
             await storageService.clearCache();
-
             // 3. Reload the app
             await Updates.reloadAsync(); 
           },
@@ -89,14 +77,12 @@ export default function SettingsModal({ visible, onClose }) {
       onRequestClose={onClose}
     >
       <View style={modalStyles.modalOverlayLight}>
-        {/* Top Gap - Tapping here dismisses the modal */}
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
           onPress={onClose}
         />
 
-        {/* Sheet Container */}
         <View
           style={[
             modalStyles.sheetContainer,
@@ -107,7 +93,6 @@ export default function SettingsModal({ visible, onClose }) {
             style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
-            {/* Header */}
             <View
               style={[
                 modalStyles.header,
@@ -128,7 +113,7 @@ export default function SettingsModal({ visible, onClose }) {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={modalStyles.content}>
-              {/* Appearance Section */}
+
               <AppText bold style={[modalStyles.sectionLabel, { color: theme.textSecondary }]}>
                 APPEARANCE
               </AppText>
@@ -150,7 +135,7 @@ export default function SettingsModal({ visible, onClose }) {
                 />
               </View>
 
-              {/* Simulated Paper Trading Section */}
+
               <AppText bold style={[modalStyles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}>
                 SIMULATED TRADING
               </AppText>
@@ -172,7 +157,7 @@ export default function SettingsModal({ visible, onClose }) {
                 />
               </View>
 
-              {/* Market Data API Configuration Section */}
+
               <AppText bold style={[modalStyles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}>
                 FINNHUB API CONFIGURATION
               </AppText>
@@ -220,7 +205,7 @@ export default function SettingsModal({ visible, onClose }) {
                 </TouchableOpacity>
               </View>
 
-              {/* Persistent cache section */}
+
               <AppText
                 bold
                 style={[modalStyles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}
@@ -257,7 +242,7 @@ export default function SettingsModal({ visible, onClose }) {
   );
 }
 
-// Settings sheet layout styles
+
 const styles = StyleSheet.create({
   title: {
     fontSize: 20,

@@ -488,7 +488,7 @@ export default function StockOrderModal({
           </View>
         </View>
 
-        {/* Portfolio Selection Dialog */}
+        {/* Portfolio Selection Dialogue */}
         {portfolioPickerVisible && (
           <Modal
             visible={portfolioPickerVisible}

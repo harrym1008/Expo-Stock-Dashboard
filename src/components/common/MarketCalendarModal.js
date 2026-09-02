@@ -1,11 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  Modal,
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-} from 'react-native';
+import { useState, useEffect, useMemo } from 'react';
+import {Modal, View, StyleSheet, TouchableOpacity, ScrollView} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -15,14 +9,14 @@ import { getNextUpcomingHolidays } from '../../utils/marketHolidays';
 import { modalStyles } from '../../styles';
 import AppText from './AppText';
 
-// Fixed weekday session schedule with color codes
+// Standard US market session
 const STANDARD_SESSIONS = [
   { name: 'Pre-Market', time: '04:00 - 09:30 ET', color: '#FFA500' },
   { name: 'Regular Market', time: '09:30 - 16:00 ET', color: '#00D084' },
   { name: 'Post-Market', time: '16:00 - 20:00 ET', color: '#B872FF' },
 ];
 
-// Slide-up sheet: live NY clock, current session, standard sessions, upcoming holidays
+// Slide-up market calendar showing live NY clock, current session, standard sessions and upcoming holidays
 export default function MarketCalendarModal({ visible, onClose }) {
   const { theme, isDark } = useTheme();
   const { marketStatus } = useMarketData();
@@ -33,7 +27,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
   useEffect(() => {
     if (!visible) return;
 
-    // 1-second NY-time clock (24h format) + date string
+    // Update clock every second while modal is visible
     const updateClock = () => {
       const now = new Date();
       const timeFmt = new Intl.DateTimeFormat('en-US', {
@@ -164,7 +158,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
                 </View>
               </View>
 
-              {/* 2. Standard Market Sessions */}
+              {/* 2. Standard Market Sessions (non holidays) */}
               <AppText bold style={[modalStyles.sectionLabel, { color: theme.textSecondary }]}>
                 STANDARD MARKET SESSIONS
               </AppText>
@@ -227,6 +221,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
                   year: 'numeric',
                 }).format(dt);
 
+                // Some 'holidays' have early close times instead of full closure
                 const closeTime = hol.regularHours?.end
                   ? `${Math.floor(hol.regularHours.end / 3600)}:${String(Math.floor((hol.regularHours.end % 3600) / 60)).padStart(2, '0')}`
                   : '13:00';
@@ -282,7 +277,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
   );
 }
 
-// Calendar sheet layout styles
+
 const styles = StyleSheet.create({
   title: {
     fontSize: 20,

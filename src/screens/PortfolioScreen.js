@@ -375,7 +375,7 @@ export default function PortfolioScreen() {
           onCancel={() => setCreateModalVisible(false)}
         />
 
-        {/* Rename Portfolio Dialog Modal */}
+        {/* Rename Portfolio Dialogue Modal */}
         <TextInputModal
           visible={renameModalVisible}
           title="Rename Portfolio"

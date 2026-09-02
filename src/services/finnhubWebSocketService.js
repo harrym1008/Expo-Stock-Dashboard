@@ -290,7 +290,7 @@ class FinnhubWebSocketManager {
     );
   }
 
-  // Fisher–Yates shuffle, take `size` (random watchlist rotation)
+  // Fisher-Yates shuffle, take `size` (random watchlist rotation)
   getRandomSubset(array, size) {
     const shuffled = [...array].sort(() => 0.5 - Math.random());
     return shuffled.slice(0, size);

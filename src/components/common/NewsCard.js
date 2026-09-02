@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, TouchableOpacity, Image, Linking } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { formatTimeAgo } from '../../utils/formatters';
 import { newsStyles } from '../../styles';
 import AppText from './AppText';
 
-// News row: meta line, headline, optional summary + thumbnail; tappable to open URL
+// Standard news card for a single article with source, time, headline, summary and optional thumbnail
 export default function NewsCard({ item }) {
   const { theme, isDark } = useTheme();
   const [imageError, setImageError] = useState(false);
@@ -23,7 +23,7 @@ export default function NewsCard({ item }) {
   const hasValidImage = Boolean(item.image && typeof item.image === 'string' && item.image.trim().length > 0);
   const showImage = !hideImageBySource && hasValidImage && !imageError;
 
-  // Open the article URL on press
+  // Open the article URL in default browser on press
   const handlePress = () => {
     if (item.url) {
       Linking.openURL(item.url).catch(() => {});
@@ -31,7 +31,6 @@ export default function NewsCard({ item }) {
   };
 
   return (
-    {/* Tappable card: content block + optional thumbnail */}
     <TouchableOpacity
       style={[
         newsStyles.newsCard,
@@ -65,11 +64,11 @@ export default function NewsCard({ item }) {
       </View>
 
       {showImage && (
-        {/* Thumbnail; hides on image error */}
         <Image
           source={{ uri: item.image }}
           style={newsStyles.newsThumbnail}
           resizeMode="cover"
+          // Hide the image if it fails to load
           onError={() => setImageError(true)}
         />
       )}

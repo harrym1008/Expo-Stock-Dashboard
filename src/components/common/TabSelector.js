@@ -1,19 +1,14 @@
-import React, { useCallback } from 'react';
+import { useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, {
-  FadeInLeft,
-  FadeOutLeft,
-  FadeInRight,
-  FadeOutRight,
-  LinearTransition,
-} from 'react-native-reanimated';
+import Animated, {FadeInLeft, FadeOutLeft, FadeInRight, FadeOutRight, LinearTransition} from 'react-native-reanimated';
 import { useTheme } from '../../context/ThemeContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import AppText from './AppText';
 
-// Horizontal pill tab bar: select, add, reorder (edit-mode arrows), delete, rename
+// Horizontal tabbed selector (used to select active watchlist and portfolios)
+// Supports editing via reordering, renaming and deleting   
 export default function TabSelector({
   tabs = [],
   activeTabId,
@@ -26,14 +21,12 @@ export default function TabSelector({
   itemTypeLabel = 'Item',
 }) {
   const { theme, isDark } = useTheme();
-
-  // Active vs inactive pill backgrounds (theme-aware)
   const activeBg = isDark ? '#4A4A4A' : '#D0D5DD';
   const inactiveBg = isDark ? '#1C1F26' : '#E4E7EC';
 
-  // Delete active tab (with confirmation); refuses when only one remains
+  // On delete active tab
   const handleDeleteItem = () => {
-    if (tabs.length <= 1) return;
+    if (tabs.length <= 1) return;   // Refuse when only one tab remains
 
     const activeItem = tabs.find((t) => t.id === activeTabId);
     const title = activeItem?.title || `this ${itemTypeLabel.toLowerCase()}`;
@@ -52,10 +45,11 @@ export default function TabSelector({
     );
   };
 
-  // Trigger rename flow for the active tab
+  // On rename active tab
   const handleRenameItem = () => {
     onRenameTab?.(activeTabId);
   };
+
 
   // Move pill up in order (swap with previous)
   const handleMoveUp = useCallback((index) => {
@@ -73,8 +67,8 @@ export default function TabSelector({
     onReorderTabs(reordered);
   }, [tabs, onReorderTabs]);
 
+
   return (
-    {/* Wrapper holding the horizontal scroll area + edge fade gradients */}
     <View style={styles.wrapper}>
       <ScrollView
         horizontal
@@ -87,13 +81,13 @@ export default function TabSelector({
           const isLast = index === tabs.length - 1;
 
           return (
-            {/* Animated pill: left arrow (edit), body, right arrow (edit) */}
+            // Animated pill: left arrow (edit), body, right arrow (edit)
             <Animated.View
               key={tab.id}
               layout={LinearTransition.duration(200)}
               style={styles.pillWrapper}
             >
-              {/* Left arrow - move earlier in order (edit mode only) */}
+              {/* Show left arrow only in edit mode */}
               {isEditMode && (
                 <Animated.View
                   entering={FadeInLeft.duration(200)}
@@ -116,7 +110,7 @@ export default function TabSelector({
                 </Animated.View>
               )}
 
-              {/* Pill Body */}
+              {/* Body of the tab */}
               <TouchableOpacity
                 style={[
                   styles.tabItem,
@@ -127,7 +121,7 @@ export default function TabSelector({
                 onPress={() => onSelectTab?.(tab.id)}
                 activeOpacity={0.8}
               >
-                {/* Pill label: bold when active */}
+                {/* Tab label, bold when active */}
                 <AppText
                   bold={isActive}
                   style={[
@@ -141,7 +135,7 @@ export default function TabSelector({
                 </AppText>
               </TouchableOpacity>
 
-              {/* Right arrow - move later in order (edit mode only) */}
+              {/* Show right arrow only in edit mode */}
               {isEditMode && (
                 <Animated.View
                   entering={FadeInRight.duration(200)}
@@ -167,7 +161,7 @@ export default function TabSelector({
           );
         })}
 
-        {/* Edit mode action icons inline after pills */}
+        {/* Rightmost edit actions when in edit mode */}
         {isEditMode && (
           <Animated.View
             entering={FadeInRight.duration(250)}
@@ -175,7 +169,7 @@ export default function TabSelector({
             layout={LinearTransition.duration(200)}
             style={styles.editActions}
           >
-            {/* Bin: Delete active item */}
+            {/* Bin deletes the active tab only if another one is available */}
             {tabs.length > 1 && (
               <TouchableOpacity
                 style={styles.editActionBtn}
@@ -189,7 +183,7 @@ export default function TabSelector({
               </TouchableOpacity>
             )}
 
-            {/* Pencil: Rename active item */}
+            {/* Pencil renames the active tab */}
             <TouchableOpacity
               style={styles.editActionBtn}
               onPress={handleRenameItem}
@@ -203,7 +197,7 @@ export default function TabSelector({
           </Animated.View>
         )}
 
-        {/* Add Plus Button */}
+        {/* Rightmost add plus button which always exists */}
         <Animated.View layout={LinearTransition.duration(200)}>
           <TouchableOpacity
             key="add-btn"
@@ -218,7 +212,7 @@ export default function TabSelector({
         </Animated.View>
       </ScrollView>
 
-      {/* Left Gradient Fade */}
+      {/* Gradient left fade */}
       <LinearGradient
         colors={[theme.background, 'rgba(0,0,0,0)']}
         start={{ x: 0, y: 0 }}
@@ -227,7 +221,7 @@ export default function TabSelector({
         pointerEvents="none"
       />
 
-      {/* Right Gradient Fade */}
+      {/* Gradient right fade */}
       <LinearGradient
         colors={['rgba(0,0,0,0)', theme.background]}
         start={{ x: 0, y: 0 }}
@@ -239,7 +233,7 @@ export default function TabSelector({
   );
 }
 
-// Pill bar + edit-action + gradient fade styles
+
 const styles = StyleSheet.create({
   wrapper: {
     position: 'relative',

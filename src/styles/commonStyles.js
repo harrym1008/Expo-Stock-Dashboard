@@ -41,8 +41,8 @@ export const modalStyles = StyleSheet.create({
   },
 });
 
-// Centered dialog card (TextInputModal, CreatePortfolioModal, alerts)
-export const dialogStyles = StyleSheet.create({
+// Centered dialogue card (TextInputModal, CreatePortfolioModal, alerts)
+export const dialogueStyles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.65)',

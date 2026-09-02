@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +8,7 @@ import { layoutStyles } from '../../styles';
 import AppText from './AppText';
 import SettingsModal from './SettingsModal';
 
-// Screen chrome: safe-area wrapper + optional title, edit + settings header buttons
+// The main screen container which contains a header with title and optional action buttons
 export default function ScreenContainer({
   title,
   children,
@@ -70,7 +70,6 @@ export default function ScreenContainer({
   );
 
   return (
-    {/* Full-screen safe wrapper with theme background */}
     <SafeAreaView
       style={[layoutStyles.flex1, { backgroundColor: theme.background }]}
       edges={['top', 'left', 'right']}

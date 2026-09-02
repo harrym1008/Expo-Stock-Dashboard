@@ -4,7 +4,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { borderRadius } from '../../constants/theme';
 import { logoService } from '../../services/logoService';
 
-// Rounded logo image; subscribes to the logo service and falls back on error
+// Just a rounded logo image which gets its URI from the logo service 
 export default function CompanyLogo({
   symbol,
   size = 32,
@@ -60,7 +60,6 @@ export default function CompanyLogo({
   const displayUri = hasError || !imageUri ? placeholder : imageUri;
 
   return (
-    {/* Square rounded container holding the logo image */}
     <View
       style={[
         styles.container,

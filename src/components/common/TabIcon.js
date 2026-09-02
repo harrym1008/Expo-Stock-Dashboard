@@ -1,7 +1,6 @@
-import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
 
-// Route -> Ionicons name map (focused vs outline variant)
+// Map a route to its focused and outline icon names for the tab bar
 const iconMap = {
   Home: { focused: 'home', outline: 'home-outline' },
   Search: { focused: 'search', outline: 'search-outline' },
@@ -9,7 +8,7 @@ const iconMap = {
   News: { focused: 'newspaper', outline: 'newspaper-outline' },
 };
 
-// Tab bar icon: picks focused/outline icon per route
+// Icon in the bottom tab bar
 export default function TabIcon({ routeName, focused, color, size = 22 }) {
   const iconConfig = iconMap[routeName] || { focused: 'apps', outline: 'apps-outline' };
   const iconName = focused ? iconConfig.focused : iconConfig.outline;
