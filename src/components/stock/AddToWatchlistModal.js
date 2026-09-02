@@ -1,11 +1,4 @@
-import React from 'react';
-import {
-  Modal,
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-} from 'react-native';
+import { Modal, View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -15,7 +8,7 @@ import { modalStyles } from '../../styles';
 import AppText from '../common/AppText';
 import CompanyLogo from '../common/CompanyLogo';
 
-// Bottom sheet: tick through existing watchlists, toggle membership per list
+// Modal to toggle a stock's presence inside each watchlist
 export default function AddToWatchlistModal({ visible, stock, onClose }) {
   const { theme, isDark } = useTheme();
   const {
@@ -24,10 +17,8 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
     toggleStockInWatchlist,
   } = useWatchlist();
 
-  // Bail out if no stock was passed
   if (!stock) return null;
 
-  // Derive display fields with safe fallbacks
   const displaySymbol = stock.displaySymbol || stock.symbol || '';
   const displayName = stock.displayName || stock.name || displaySymbol;
 
@@ -43,7 +34,6 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
       onRequestClose={onClose}
     >
       <View style={modalStyles.modalOverlay}>
-        {/* Top Gap - Tap to dismiss */}
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
@@ -52,7 +42,6 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
           accessibilityLabel="Close modal"
         />
 
-        {/* Bottom Sheet Container */}
         <View
           style={[
             modalStyles.sheetContainer,
@@ -63,7 +52,6 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
             style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
-            {/* Header: Matches StockDetailModal layout with Logo, Ticker, Exchange & Company Name */}
             <View
               style={[
                 modalStyles.header,
@@ -97,7 +85,6 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                 </View>
               </View>
 
-              {/* Close Button: Cross icon matching other modals */}
               <TouchableOpacity
                 onPress={onClose}
                 style={[modalStyles.closeBtn, styles.closeBtn]}
@@ -109,7 +96,6 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
               </TouchableOpacity>
             </View>
 
-            {/* Vertical List of All Watchlists */}
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={modalStyles.content}
@@ -135,6 +121,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                 ]}
               >
                 {watchlists.map((wl, index) => {
+                  // For each watchlist, determine if the stock is already present and how many items are in the watchlist
                   const isChecked = isStockInWatchlist(wl.id, displaySymbol);
                   const itemCount = Array.isArray(wl.items) ? wl.items.length : 0;
                   const isLast = index === watchlists.length - 1;
@@ -163,7 +150,6 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                       accessibilityState={{ checked: isChecked }}
                       accessibilityLabel={`${wl.title}, ${isChecked ? 'selected' : 'not selected'}`}
                     >
-                      {/* Left: Watchlist Title & Stock Count */}
                       <View style={styles.rowLeft}>
                         <AppText bold style={styles.rowTitle}>
                           {wl.title}
@@ -178,7 +164,6 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                         </AppText>
                       </View>
 
-                      {/* Right: Checkbox */}
                       <View
                         style={[
                           styles.checkbox,
@@ -217,7 +202,6 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
   );
 }
 
-// Modal layout: header, per-watchlist row, checkbox
 const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',

@@ -1,35 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import {
-  Modal,
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Linking,
-} from 'react-native';
+import { Modal, View, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useTrading } from '../../context/TradingContext';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { spacing, borderRadius } from '../../constants/theme';
-import {
-  formatTimeAgo,
-  formatLargeNum,
-  formatStatPrice,
-  formatShares,
-  formatMoney,
-} from '../../utils/formatters';
-import {
-  getSecurityBySymbol,
-  getDisplaySymbol,
-  getDisplayName,
-  getCurrency,
-  getDecimals,
-  isNonStockSecurity,
-} from '../../utils/securityUtils';
+import { formatTimeAgo, formatLargeNum, formatStatPrice, formatShares, formatMoney } from '../../utils/formatters';
+import { getSecurityBySymbol, getDisplaySymbol, getDisplayName, getCurrency, getDecimals, isNonStockSecurity } from '../../utils/securityUtils';
 import { storageService } from '../../services/storageService';
 import { useWatchlist } from '../../context/WatchlistContext';
 import { modalStyles, layoutStyles, newsStyles } from '../../styles';
@@ -41,20 +21,18 @@ import AddToWatchlistModal from './AddToWatchlistModal';
 import StockOrderModal from './StockOrderModal';
 import NewsCard from '../common/NewsCard';
 
-// Timeframe options shown as pills
+// Timeframe options and in-memory cache of the user's last selected timeframe for each stock (persisted to storage)
 const TIMEFRAMES = ['1H', '1D', '1W', '3M', '1Y', '5Y', 'ALL'];
-
-// In-memory cache of each symbol's last-selected timeframe
 const memoryStockTimeframes = {};
 
-// Hydrate the timeframe cache from persisted storage
+// Populate the timeframe cache from persisted storage
 storageService.getStockTimeframes().then((saved) => {
   if (saved && typeof saved === 'object') {
     Object.assign(memoryStockTimeframes, saved);
   }
 });
 
-// Position of current price within [low, high] as 0-100%
+// Return the percent position of a value between a range
 function getRangePosition(current, low, high) {
   if (
     typeof current !== 'number' ||
@@ -68,6 +46,7 @@ function getRangePosition(current, low, high) {
   return Math.max(0, Math.min(100, ratio * 100));
 }
 
+// Render a single range bar with label, low/high values, and a pin for the current value
 function RangeBar({ label, low, high, position, isDark, theme, curSymbol, decimals, symbol }) {
   return (
     <View style={styles.rangeBarGroup}>
@@ -87,6 +66,7 @@ function RangeBar({ label, low, high, position, isDark, theme, curSymbol, decima
   );
 }
 
+// Render a "Latest price updated X ago" text that refreshes every second
 const LastUpdatedFreshness = React.memo(function LastUpdatedFreshness({ timestamp, textStyle, textColor }) {
   const [text, setText] = useState(() => formatTimeAgo(timestamp));
 
@@ -94,7 +74,7 @@ const LastUpdatedFreshness = React.memo(function LastUpdatedFreshness({ timestam
     setText(formatTimeAgo(timestamp));
     const interval = setInterval(() => {
       setText(formatTimeAgo(timestamp));
-    }, 5000);
+    }, 1000);
     return () => clearInterval(interval);
   }, [timestamp]);
 
@@ -139,7 +119,7 @@ function StockDetailModal({ visible, stock, onClose }) {
   const [isDescExpanded, setIsDescExpanded] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
-  // Uppercased display symbol + non-stock classification (category/flags)
+  // Clean the symbol data for display
   const cleanSymbol = stock?.symbol ? getDisplaySymbol(stock.symbol) : '';
   const isNonStock = Boolean(
     (stock?.symbol && (isNonStockSecurity(stock.symbol) || isNonStockSecurity(cleanSymbol))) ||
@@ -153,7 +133,7 @@ function StockDetailModal({ visible, stock, onClose }) {
   const isStock = !isNonStock && stock?.isStock !== false;
   const isStockPaperTradingAllowed = isPaperTradingEnabled && isStock;
 
-  // Non-stocks always show as "Market Open"
+  // Determine the effective market status based on the stock type
   const effectiveMarketStatus = useMemo(() => {
     if (isNonStock) {
       return {
@@ -175,6 +155,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     () => (typeof stock?.previousClose === 'number' && stock.previousClose > 0 ? stock.previousClose : null)
   );
 
+  // Reset state when the stock symbol changes or modal is closed
   useEffect(() => {
     latestExtendedPriceRef.current = null;
     setChartData(null);
@@ -203,7 +184,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     }
   }, [visible, cleanSymbol, fetchQuote]);
 
-  // Switch timeframe; persist choice to storage (skips if unchanged)
+  // Switch timeframe, persist choice to storage (skips if unchanged)
   const handleSelectTimeframe = (tf) => {
     if (tf === selectedTimeframe) return;
     setIsTimeframeLoading(true);
@@ -215,12 +196,14 @@ function StockDetailModal({ visible, stock, onClose }) {
     }
   };
 
+  // Open the market calendar modal only for stocks
   const handleOpenCalendar = useCallback(() => {
     if (!isNonStock) {
       setCalendarVisible(true);
     }
   }, [isNonStock]);
 
+  // Fetches the historical chart data for symbol or timeframe or market session changes, update the chart and record extended hours price
   useEffect(() => {
     let isMounted = true;
     if (visible && stock?.symbol) {
@@ -230,6 +213,7 @@ function StockDetailModal({ visible, stock, onClose }) {
         .then((data) => {
           if (isMounted) {
             if (data) {
+              // Update the chart data
               setChartData(data);
               const extCandidate = marketStatus?.isPreMarket
                 ? (data.preMarketPrice || data.postMarketPrice)
@@ -257,18 +241,21 @@ function StockDetailModal({ visible, stock, onClose }) {
     };
   }, [visible, stock?.symbol, selectedTimeframe, marketStatus.session, fetchHistoricalChart]);
 
+
+  // Persist the previous close price for the stock if available, to avoid flickering when switching timeframes or re-rendering
   useEffect(() => {
     if (typeof stock?.previousClose === 'number' && stock.previousClose > 0) {
       setPersistentPrevClose(stock.previousClose);
     }
   }, [stock?.previousClose]);
-
   useEffect(() => {
     if (typeof chartData?.previousClose === 'number' && chartData.previousClose > 0) {
       setPersistentPrevClose(chartData.previousClose);
     }
   }, [chartData?.previousClose]);
 
+
+  // Use the 1D chart to provide the previous close price  if it doesnt exist
   useEffect(() => {
     let isMounted = true;
     if (visible && stock?.symbol && !persistentPrevClose) {
@@ -286,6 +273,8 @@ function StockDetailModal({ visible, stock, onClose }) {
     };
   }, [visible, stock?.symbol, persistentPrevClose, fetchHistoricalChart]);
 
+
+  // Fetch the stock profile, metrics, description, and news when the modal opens or the symbol changes
   useEffect(() => {
     let isMounted = true;
     if (visible && stock?.symbol) {
@@ -326,6 +315,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     };
   }, [visible, stock?.symbol, apiKey, marketStatus.session, fetchProfile, fetchStockMetrics, fetchCompanyDescription, fetchCompanyNews]);
 
+
   // Timeframes disabled when the stock is too young to have that much history
   const isTimeframeDisabled = useMemo(() => {
     const firstTrade = chartData?.firstTradeDate || null;
@@ -343,16 +333,18 @@ function StockDetailModal({ visible, stock, onClose }) {
     };
   }, [chartData?.firstTradeDate]);
 
-  // Auto-escalate to ALL if the active timeframe is unavailable for this stock
+  // Automatically switch to 1D timeframe if the selected timeframe is disabled due to stock age
+  // Shouldnt really be possible
   useEffect(() => {
     if (isTimeframeDisabled(selectedTimeframe)) {
-      handleSelectTimeframe('ALL');
+      handleSelectTimeframe('1D');
     }
   }, [selectedTimeframe, isTimeframeDisabled]);
 
+
   const isPos = (n) => typeof n === 'number' && !isNaN(n) && n > 0;
 
-  // Timeframe to display (chart-provided, else selected) + resolved live quote
+  // Timeframe to display and the live quote for the stock
   const activeDisplayedTimeframe = chartData?.timeframe || selectedTimeframe;
   const liveQuote = cleanSymbol ? (quotes[cleanSymbol] || quotes[stock?.symbol] || {}) : {};
   const liveWsPrice = isPos(liveQuote?.price) ? liveQuote.price : (isPos(stock?.price) ? stock.price : null);
@@ -362,6 +354,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     latestExtendedPriceRef.current = liveWsPrice;
   }
 
+  // Determine the left price to display in the chart section
   const regularClosePrice =
     (isPos(chartData?.regularMarketPrice) ? chartData.regularMarketPrice : null) ??
     (isPos(liveQuote?.regularMarketPrice) ? liveQuote.regularMarketPrice : null) ??
@@ -374,6 +367,8 @@ function StockDetailModal({ visible, stock, onClose }) {
     ? (liveWsPrice ?? (isPos(liveQuote?.price) ? liveQuote.price : null) ?? (isPos(stock?.price) ? stock.price : null) ?? (isPos(chartData?.currentPrice) ? chartData.currentPrice : null) ?? regularClosePrice)
     : regularClosePrice;
 
+
+  // Determine the extended session price to display in the chart section, if it is actually required
   const isPreMarket = marketStatus?.isPreMarket;
   const targetChartExtPrice = isPreMarket
     ? (isPos(chartData?.preMarketPrice) && Math.abs(chartData.preMarketPrice - regularClosePrice) > 0.000001 ? chartData.preMarketPrice : null) ??
@@ -394,13 +389,14 @@ function StockDetailModal({ visible, stock, onClose }) {
     targetStockExtPrice ??
     regularClosePrice;
 
-  // Currency + decimals for the security
+
+  // Get the number of decimals and the currency for this security
   const curSymbol = stock?.currency !== undefined ? stock.currency : getCurrency(cleanSymbol, '$');
   const decimals = getDecimals(cleanSymbol, leftPrice, stock?.decimals);
   const secMetadata = getSecurityBySymbol(cleanSymbol);
 
-  const profileData = cleanSymbol ? profiles[cleanSymbol] : null;
   // Company name from stock, symbol metadata, or fetched profile
+  const profileData = cleanSymbol ? profiles[cleanSymbol] : null;
   const companyName = stock?.displayName || getDisplayName(cleanSymbol) || profileData?.name || stock?.name || cleanSymbol;
 
   // Normalized stock object for the chart section (symbol/currency/decimals resolved)
@@ -413,17 +409,18 @@ function StockDetailModal({ visible, stock, onClose }) {
     isNonStock,
   }), [stock, cleanSymbol, curSymbol, decimals, isStock, isNonStock]);
 
-  // Current price + day range bar inputs
+  // Current price and day range bar inputs
   const currentStatPrice = leftPrice;
   const dayLow = chartData?.regularMarketDayLow ?? (chartData?.timeframe === '1D' ? chartData?.minPrice : null) ?? stock?.low ?? null;
   const dayHigh = chartData?.regularMarketDayHigh ?? (chartData?.timeframe === '1D' ? chartData?.maxPrice : null) ?? stock?.high ?? null;
   const dayRangePos = getRangePosition(currentStatPrice, dayLow, dayHigh);
 
-  // 52-week range bar inputs (metrics with either naming convention)
+  // 52-week range bar inputs
   const fiftyTwoLow = metrics?.['52WeekLow'] ?? metrics?.fiftyTwoWeekLow ?? chartData?.fiftyTwoWeekLow ?? null;
   const fiftyTwoHigh = metrics?.['52WeekHigh'] ?? metrics?.fiftyTwoWeekHigh ?? chartData?.fiftyTwoWeekHigh ?? null;
   const fiftyTwoRangePos = getRangePosition(currentStatPrice, fiftyTwoLow, fiftyTwoHigh);
 
+  // Statistics section: previous close, market cap, volume, avg volume, P/E, EPS, profit margin, beta, dividend yield
   const prevCloseVal =
     persistentPrevClose ??
     (typeof chartData?.previousClose === 'number' && chartData.previousClose > 0 ? chartData.previousClose : null) ??
@@ -472,6 +469,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     ? `${numDivYield.toFixed(2)}%`
     : (metrics ? '0.00%' : '-');
 
+  // Define the grid for the stats section
   const statRows = [
     [
       { label: 'Previous Close', value: prevCloseStr },
@@ -514,18 +512,22 @@ function StockDetailModal({ visible, stock, onClose }) {
   // Paper-trading position summary: shares, avg cost, value, gain/loss %
   const positionInfo = useMemo(() => {
     if (!isStockPaperTradingAllowed || !cleanSymbol) return null;
+
     const pos = getPosition(activePortfolioId, cleanSymbol);
     const heldShares = pos ? Number(pos.shares) || 0 : 0;
     if (heldShares <= 0) return { hasPosition: false, heldShares: 0 };
+
     const avgCost = pos ? Number(pos.avgCost) || 0 : 0;
     const totalCost = pos ? (pos.totalCost ?? heldShares * avgCost) : heldShares * avgCost;
     const currentValuationPrice = marketStatus.isOpen ? leftPrice : outOfHoursPriceVal;
     const positionTotalValue = heldShares * currentValuationPrice;
     const gainLoss = positionTotalValue - totalCost;
+
     const posReturnPercent =
       totalCost > 0
         ? (gainLoss / totalCost) * 100
         : (avgCost > 0 ? ((currentValuationPrice - avgCost) / avgCost) * 100 : 0);
+
     return {
       hasPosition: true,
       heldShares,
@@ -547,6 +549,7 @@ function StockDetailModal({ visible, stock, onClose }) {
 
   if (!stock) return null;
 
+  // Create the complete modal using all of this data
   return (
     <Modal
       visible={visible}
@@ -839,7 +842,7 @@ function StockDetailModal({ visible, stock, onClose }) {
               )}
             </ScrollView>
 
-            {/* 8. Anchored Bottom Price Freshness & Paper Trading Actions (Stocks only) */}
+            {/* 8. Anchored Bottom Price Freshness & Paper Trading Actions (Only show for stocks) */}
             <View
               style={[
                 styles.anchoredFooter,
@@ -926,6 +929,7 @@ function StockDetailModal({ visible, stock, onClose }) {
             </View>
           </SafeAreaView>
 
+          {/* Market calendar modal */}
           {!isNonStock && (
             <MarketCalendarModal
               visible={calendarVisible}
@@ -933,6 +937,7 @@ function StockDetailModal({ visible, stock, onClose }) {
             />
           )}
 
+          {/* Add to watchlist modal */}
           <AddToWatchlistModal
             visible={watchlistModalVisible}
             stock={{
@@ -948,6 +953,7 @@ function StockDetailModal({ visible, stock, onClose }) {
             onClose={() => setWatchlistModalVisible(false)}
           />
 
+          {/* Stock order modal */}
           {isStockPaperTradingAllowed && (
             <StockOrderModal
               visible={orderModalVisible}
@@ -971,7 +977,6 @@ function StockDetailModal({ visible, stock, onClose }) {
   );
 }
 
-// Detail modal layout: header, sections, cards, stats grid, footer
 const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.lg,

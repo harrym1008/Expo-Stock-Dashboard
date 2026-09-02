@@ -1,11 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Modal,
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+import { useState, useEffect } from 'react';
+import { Modal, View, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -17,7 +11,7 @@ import { modalStyles, layoutStyles } from '../../styles';
 import { formatMoney, formatShares } from '../../utils/formatters';
 import AppText from '../common/AppText';
 
-// Confirms an order: fetches a real price, executes the paper trade, shows result
+// Confirms a paper order and shows an 'order receipt' summary of the executed trade
 export default function OrderExecutedModal({
   visible,
   orderParams,
@@ -32,7 +26,7 @@ export default function OrderExecutedModal({
   const [executionResult, setExecutionResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Prefer onComplete (order flow), fall back to onClose
+  
   const handleDismiss = () => {
     if (onComplete) {
       onComplete();
@@ -41,6 +35,7 @@ export default function OrderExecutedModal({
     }
   };
 
+  // When the modal becomes visible, execute the order and fetch the most recent price
   useEffect(() => {
     let isMounted = true;
 
@@ -52,16 +47,18 @@ export default function OrderExecutedModal({
       async function processTrade() {
         try {
           const sym = orderParams.symbol;
-          const liveRecentPrice = await yahooFinanceService.getMostRecentPrice(sym);
+          // Download the immediate last price to use in the trade
+          const liveRecentPrice = await yahooFinanceService.getMostRecentPrice(sym); 
           const fillPrice =
             typeof liveRecentPrice === 'number' && liveRecentPrice > 0
               ? liveRecentPrice
               : (orderParams.fallbackPrice || 100.0);
 
           if (typeof fillPrice === 'number' && fillPrice > 0 && injectLivePrice) {
-            injectLivePrice(sym, fillPrice);
+            injectLivePrice(sym, fillPrice);  // Also update the market context with this price
           }
 
+          // Execute the actual order
           const result = executeOrder({
             portfolioId: orderParams.portfolioId,
             symbol: sym,
@@ -95,23 +92,22 @@ export default function OrderExecutedModal({
     };
   }, [visible, orderParams, executeOrder]);
 
-  // Render nothing while hidden
   if (!visible) return null;
 
-  // Resolve display fields from result (post-trade) or original order params
+  // Trade summary
   const symbol = orderParams?.symbol?.toUpperCase() || 'NVDA';
   const isBuy = (orderParams?.mode || executionResult?.mode || 'BUY') === 'BUY';
   const tradedShares = executionResult?.shares ?? orderParams?.shares ?? 0;
   const fillPrice = executionResult?.fillPrice ?? orderParams?.fallbackPrice ?? 0;
   const orderCost = executionResult?.orderCost ?? (tradedShares * fillPrice);
 
-  // Derived post-trade position summary
+  // Post-trade position summary
   const newPosition = executionResult?.newPosition || null;
   const totalPositionShares = newPosition?.shares ?? 0;
   const positionAvgCost = newPosition?.avgCost ?? 0;
   const totalPositionValue = totalPositionShares * fillPrice;
 
-  // Order summary rows rendered at the top of the confirmation
+  // Order summary rows to display in the modal
   const orderRows = [
     { label: 'TICKER', value: symbol, isTicker: true },
     { label: 'SHARE COUNT', value: formatShares(tradedShares) },
@@ -259,7 +255,7 @@ export default function OrderExecutedModal({
   );
 }
 
-// Confirmation layout: header, loading/error/content states, position block, continue
+
 const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,

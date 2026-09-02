@@ -311,7 +311,7 @@ export default function StockSearchView({
         }
       />
 
-      {/* Grouped Non-Stock Securities Slide-Up Modal */}
+      {/* Grouped Non-Stock Securities slide-up modal */}
       <NonStockSecuritiesModal
         visible={nonStockModalVisible}
         onSelectStock={onSelectStock}

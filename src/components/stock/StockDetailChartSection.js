@@ -8,10 +8,10 @@ import { spacing, borderRadius } from '../../constants/theme';
 import { layoutStyles } from '../../styles';
 import { getDecimals, getCurrency, isNonStockSecurity } from '../../utils/securityUtils';
 
-// Human-readable period labels per timeframe (null for 1D)
+// Nice timeframe suffixes to append to the end of the price change text
 const TIMEFRAME_SUFFIXES = {
   '1H': 'last hour',
-  '1D': null,
+  '1D': null,   // Changes to "since open" or "today" depending on market status
   '1W': 'last week',
   '3M': 'last 3 months',
   '1Y': 'last year',
@@ -19,14 +19,11 @@ const TIMEFRAME_SUFFIXES = {
   'ALL': 'since start',
 };
 
-// Max rate for live chart price updates
+// Only update the interactive chart every 10 seconds 
 const CHART_UPDATE_THROTTLE_MS = 10000;
 
-/**
- * Throttles incoming live WebSocket price updates so that each chart updates
- * at a maximum of once every 10 seconds, and does not update if the price has not changed.
- */
-// Debounces live WS prices into a chart-friendly price (≤10s cadence, no-op if unchanged)
+
+// Debounces live WS prices into a chart-friendly price
 function useThrottledChartPrice(liveWsPrice, chartKey) {
   const isPos = (n) => typeof n === 'number' && !isNaN(n) && n > 0;
   const validLivePrice = isPos(liveWsPrice) ? liveWsPrice : null;
@@ -42,7 +39,7 @@ function useThrottledChartPrice(liveWsPrice, chartKey) {
     activeChartKey: chartKey,
   });
 
-  // When chartKey (stock symbol or timeframe) changes, immediately reset and display fresh for the new chart
+  // When symbol or time frame changes, immediately reset and display a fresh chart
   useEffect(() => {
     if (throttleRef.current.timer) {
       clearTimeout(throttleRef.current.timer);
@@ -55,7 +52,7 @@ function useThrottledChartPrice(liveWsPrice, chartKey) {
     setChartPrice(validLivePrice);
   }, [chartKey]);
 
-  // When liveWsPrice changes
+  // Upon websocket price updates
   useEffect(() => {
     if (!validLivePrice) return;
 
@@ -70,8 +67,8 @@ function useThrottledChartPrice(liveWsPrice, chartKey) {
       return;
     }
 
-    // Do not update if the price has not changed
-    if (Math.abs(validLivePrice - state.lastAppliedPrice) < 0.000001) {
+    // Price did not change... cancel the pending update if any
+    if (Math.abs(validLivePrice - state.lastAppliedPrice) < 0.0001) {
       // If a pending update was waiting but current price reverted back to last applied,
       // cancel the pending update
       state.pendingPrice = null;
@@ -82,7 +79,7 @@ function useThrottledChartPrice(liveWsPrice, chartKey) {
     const elapsed = now - state.lastUpdateTime;
 
     if (elapsed >= CHART_UPDATE_THROTTLE_MS) {
-      // 10+ seconds have passed: update immediately
+      // Over 10 seconds have passed, update the chart immediately
       if (state.timer) {
         clearTimeout(state.timer);
         state.timer = null;
@@ -92,7 +89,7 @@ function useThrottledChartPrice(liveWsPrice, chartKey) {
       state.pendingPrice = null;
       setChartPrice(validLivePrice);
     } else {
-      // Less than 10 seconds: throttle and schedule trailing update
+      // Less than 10 seconds has passed, throttle and schedule trailing update
       state.pendingPrice = validLivePrice;
       if (!state.timer) {
         const remaining = CHART_UPDATE_THROTTLE_MS - elapsed;
@@ -103,7 +100,7 @@ function useThrottledChartPrice(liveWsPrice, chartKey) {
             typeof target === 'number' &&
             !isNaN(target) &&
             target > 0 &&
-            Math.abs(target - state.lastAppliedPrice) >= 0.000001
+            Math.abs(target - state.lastAppliedPrice) >= 0.0001
           ) {
             state.lastUpdateTime = Date.now();
             state.lastAppliedPrice = target;
@@ -130,7 +127,7 @@ function useThrottledChartPrice(liveWsPrice, chartKey) {
   return chartPrice;
 }
 
-// Price + chart section for a single security (live/extended session aware)
+// Price + chart section for a single security
 function StockDetailChartSection({
   stock,
   chartData,
@@ -146,7 +143,7 @@ function StockDetailChartSection({
   const { theme } = useTheme();
   const [scrubData, setScrubData] = useState(null);
 
-  // Resolve non-stock status from any of the available flags
+  // Resolve non-stock status
   const isNonStock = Boolean(
     isNonStockProp ||
     stock?.isNonStock ||
@@ -154,7 +151,7 @@ function StockDetailChartSection({
     (stock?.symbol && isNonStockSecurity(stock.symbol))
   );
 
-  // Non-stocks are always treated as "open"
+  // Non-stocks are always treated as 'open' (the right side will not be rendered so this doesnt really matter)
   const isMarketOpen = isNonStock ? true : Boolean(marketStatus?.isOpen);
 
   const handleScrub = useCallback((curr, prev) => {
@@ -167,7 +164,7 @@ function StockDetailChartSection({
 
   const isPos = (n) => typeof n === 'number' && !isNaN(n) && n > 0;
 
-  // Regular-session close price: prefer chart data, fall back to stock fields
+  // Regular-session close price... prefer chart data, fall back to stock fields
   const regularClosePrice =
     (isPos(chartData?.regularMarketPrice) ? chartData.regularMarketPrice : null) ??
     (isPos(stock?.regularMarketPrice) ? stock.regularMarketPrice : null) ??
@@ -176,20 +173,21 @@ function StockDetailChartSection({
 
   const rawLiveWsPrice = isPos(liveWsPrice) ? liveWsPrice : null;
 
-  // 1. Textual Display Prices: Updated immediately in real-time with incoming WebSocket ticks
+  // Update the textual display prices immediately upon incoming websocket msgs
   const leftPrice = isMarketOpen
     ? (rawLiveWsPrice ?? (isPos(stock?.price) ? stock.price : null) ?? (isPos(chartData?.currentPrice) ? chartData.currentPrice : null) ?? regularClosePrice)
     : regularClosePrice;
 
-  // Currency + decimal formatting derived from symbol
+  // Derive currency and formatting from the stock object
   const curSymbol = stock?.currency !== undefined ? stock.currency : getCurrency(stock?.symbol, '$');
   const decimals = getDecimals(stock?.symbol, leftPrice, stock?.decimals);
 
   // Baseline for the period change: previous close (1D) or period start (others)
   const baseComparison =
     activeDisplayedTimeframe === '1D'
-      ? (chartData?.previousClose || stock?.previousClose || regularClosePrice)
-      : (chartData?.startPrice || chartData?.sparkline?.[0] || stock?.sparkline?.[0] || regularClosePrice);
+      ? (chartData?.previousClose || stock?.previousClose || regularClosePrice) // Only if timeframe is 1D
+      : (chartData?.startPrice || chartData?.sparkline?.[0] || stock?.sparkline?.[0] || regularClosePrice); 
+    // otherwise compare from the first value in the chart data or sparkline
 
   const displayedMainPrice = scrubData?.current?.price ?? leftPrice;
   const periodChange = chartData?.priceChange ?? stock?.change ?? (leftPrice - baseComparison);
@@ -216,7 +214,7 @@ function StockDetailChartSection({
 
   const scrubTrendColor = isScrubPositive ? '#00D084' : '#FF4D4F';
 
-  // Timeframe suffix label (today for non-stocks, market suffix for 1D)
+  // Work out timeframe suffix label
   const timeframeSuffix =
     activeDisplayedTimeframe === '1D'
       ? (isNonStock ? 'today' : marketStatus?.suffix)
@@ -225,10 +223,10 @@ function StockDetailChartSection({
   // Extended-session price target: pre-market if pre-market status, else post-market
   const isPreMarket = marketStatus?.isPreMarket;
   const targetChartExtPrice = isPreMarket
-    ? (isPos(chartData?.preMarketPrice) && Math.abs(chartData.preMarketPrice - regularClosePrice) > 0.000001 ? chartData.preMarketPrice : null) ??
-      (isPos(chartData?.postMarketPrice) && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.000001 ? chartData.postMarketPrice : null)
-    : (isPos(chartData?.postMarketPrice) && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.000001 ? chartData.postMarketPrice : null) ??
-      (isPos(chartData?.preMarketPrice) && Math.abs(chartData.preMarketPrice - regularClosePrice) > 0.000001 ? chartData.preMarketPrice : null);
+    ? (isPos(chartData?.preMarketPrice) && Math.abs(chartData.preMarketPrice - regularClosePrice) > 0.00001 ? chartData.preMarketPrice : null) ??
+      (isPos(chartData?.postMarketPrice) && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.00001 ? chartData.postMarketPrice : null)
+    : (isPos(chartData?.postMarketPrice) && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.00001 ? chartData.postMarketPrice : null) ??
+      (isPos(chartData?.preMarketPrice) && Math.abs(chartData.preMarketPrice - regularClosePrice) > 0.00001 ? chartData.preMarketPrice : null);
 
   const targetStockExtPrice = isPreMarket
     ? (isPos(stock?.preMarketPrice) ? stock.preMarketPrice : null) ??
@@ -236,7 +234,7 @@ function StockDetailChartSection({
     : (isPos(stock?.postMarketPrice) ? stock.postMarketPrice : null) ??
       (isPos(stock?.preMarketPrice) ? stock.preMarketPrice : null);
 
-  // Extended-session price to display when markets are closed (highest-priority source)
+  // Extended-session price to display when markets are closed using the highest-priority
   const outOfHoursPriceVal =
     rawLiveWsPrice ??
     (isPos(latestExtendedPrice) ? latestExtendedPrice : null) ??
@@ -270,7 +268,8 @@ function StockDetailChartSection({
       })} (${Math.abs(outOfHoursChangePercentVal).toFixed(2)}%) since close`
     : '-';
 
-  // 2. Chart Rendering Prices: Throttled at a maximum of once every 10 seconds (only if price changed)
+
+  // 2. Chart Rendering Prices
   const chartKey = `${stock?.symbol || ''}_${activeDisplayedTimeframe}`;
   const chartWsPrice = useThrottledChartPrice(liveWsPrice, chartKey);
   const effectiveChartWsPrice = isPos(chartWsPrice) ? chartWsPrice : null;
@@ -387,7 +386,7 @@ function StockDetailChartSection({
           </View>
         </View>
 
-        {/* Right: Extended Session or Market Open Indicator (Tap to open Market Calendar) */}
+        {/* Right: Extended Session Data (if market closed) and Market Status Indicator */}
         {!isNonStock && (
           <TouchableOpacity
             style={
@@ -395,6 +394,7 @@ function StockDetailChartSection({
                 ? styles.afterHoursColOpen
                 : styles.afterHoursColClosed
             }
+            // Tapping opens the market calendar
             onPress={onOpenCalendar}
             activeOpacity={0.7}
             accessibilityRole="button"
@@ -450,7 +450,7 @@ function StockDetailChartSection({
               onScrub={handleScrub}
               onScrubEnd={handleScrubEnd}
             />
-            {/* 40% Darkening Animated Overlay during timeframe loading */}
+            {/* Darken the chart while it is loading */}
             <Animated.View
               pointerEvents="none"
               style={[
@@ -468,7 +468,7 @@ function StockDetailChartSection({
 
 export default React.memo(StockDetailChartSection);
 
-// Price section layout: dual columns, text sizes, chart card
+
 const styles = StyleSheet.create({
   priceRow: {
     flexDirection: 'row',

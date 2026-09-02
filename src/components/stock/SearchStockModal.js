@@ -1,10 +1,4 @@
-import React from 'react';
-import {
-  Modal,
-  View,
-  StyleSheet,
-  TouchableOpacity,
-} from 'react-native';
+import { Modal, View, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -13,7 +7,7 @@ import { modalStyles } from '../../styles';
 import AppText from '../common/AppText';
 import StockSearchView from '../search/StockSearchView';
 
-// Full-screen search modal (reuses StockSearchView) for adding a stock to a watchlist
+// Full-screen search modal for adding a stock/security to a watchlist
 export default function SearchStockModal({
   visible,
   watchlistTitle = '',
@@ -30,7 +24,6 @@ export default function SearchStockModal({
       onRequestClose={onClose}
     >
       <View style={modalStyles.modalOverlay}>
-        {/* Top Gap - Tap to dismiss */}
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
@@ -39,7 +32,6 @@ export default function SearchStockModal({
           accessibilityLabel="Close modal"
         />
 
-        {/* Sheet Container */}
         <View
           style={[
             modalStyles.sheetContainer,
@@ -50,7 +42,6 @@ export default function SearchStockModal({
             style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
-            {/* Header: Title and Close Button */}
             <View
               style={[
                 modalStyles.header,
@@ -77,7 +68,6 @@ export default function SearchStockModal({
               </TouchableOpacity>
             </View>
 
-            {/* Embedded Reusable Search View */}
             <StockSearchView
               onSelectStock={onSelectStock}
               autoFocus={true}
@@ -90,7 +80,6 @@ export default function SearchStockModal({
   );
 }
 
-// Search modal layout: header + embedded search container
 const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,

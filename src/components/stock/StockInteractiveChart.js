@@ -3,12 +3,10 @@ import { View, StyleSheet, PanResponder } from 'react-native';
 import Svg, { Path, Line, Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
 import AppText from '../common/AppText';
 import { useTheme } from '../../context/ThemeContext';
-import { spacing, borderRadius } from '../../constants/theme';
+import { borderRadius } from '../../constants/theme';
 
-/**
- * Calculates neat tick values where the gap is strictly in {1, 2, 4, 5} * 10^n
- * and all ticks are exact multiples of the step.
- */
+// Calculate neat tick values for the Y-axis given a min/max range and a target number of intervals
+// Example input (0.123, 0.987, 4) => output [0.2, 0.4, 0.6, 0.8]
 export function calculateNeatTicks(minVal, maxVal, targetIntervals = 4) {
   if (minVal == null || maxVal == null || isNaN(minVal) || isNaN(maxVal)) {
     return { ticks: [], step: 1, yMin: 0, yMax: 100 };
@@ -65,9 +63,7 @@ export function calculateNeatTicks(minVal, maxVal, targetIntervals = 4) {
   };
 }
 
-/**
- * Formats tick numbers cleanly according to their precision.
- */
+// Format tick label for display, with decimal places tending to step size
 export function formatTickLabel(value, step) {
   if (value == null || isNaN(value)) return '';
   if (step >= 1) {
@@ -83,9 +79,7 @@ export function formatTickLabel(value, step) {
   return value.toFixed(decimals);
 }
 
-/**
- * Formats candle timestamp according to the selected timeframe.
- */
+// Formats candle timestamp while scrubbing into human readable date
 export function formatCandleDate(timestamp, timeframe = '1D') {
   if (!timestamp) return '';
   const date = new Date(timestamp);
@@ -123,10 +117,7 @@ export function formatCandleDate(timestamp, timeframe = '1D') {
   });
 }
 
-/**
- * Static portion of the chart that never changes during scrubbing.
- * Memoised so it only re-renders when the data or dimensions change.
- */
+// Static portion of the chart (gridlines, sparkline, gradient fill) that does not change when scrubbing
 const StaticChart = React.memo(function StaticChart({
   chartWidth,
   chartHeight,
@@ -178,10 +169,7 @@ const StaticChart = React.memo(function StaticChart({
   );
 });
 
-/**
- * Scrub crosshair overlay rendered as a separate small SVG.
- * Only this layer re-renders when scrubIndex changes.
- */
+// Scrub overlay, updates upon scrubbing (vertical hairline, intersection dot, halo) ... does not re-render the static chart
 const ScrubOverlay = React.memo(function ScrubOverlay({
   activeX,
   activeY,
@@ -234,7 +222,7 @@ const ScrubOverlay = React.memo(function ScrubOverlay({
   );
 });
 
-// Interactive touch-scrubbable SVG chart; static + overlay layers split for perf
+// Create the full interactive touch-scrubbable SVG chart with static and overlay layers 
 function StockInteractiveChart({
   points = [],
   sparkline = [],
@@ -252,13 +240,14 @@ function StockInteractiveChart({
   const containerRef = useRef(null);
   const containerPageXRef = useRef(0);
 
-  // Stable refs for callbacks so PanResponder never rebuilds due to prop changes
+  // Stable refs for callbacks so the PanResponder doesnt rebuild due to prop changes
   const onScrubRef = useRef(onScrub);
   const onScrubEndRef = useRef(onScrubEnd);
   onScrubRef.current = onScrub;
   onScrubEndRef.current = onScrubEnd;
 
-  // Throttle parent onScrub callback: fire at most once per 50ms (~20fps)
+
+  // Throttle parent onScrub callback: fire at most once per 33ms (~30fps)
   // to avoid cascading parent re-renders on every touch-move frame
   const lastScrubCallTimeRef = useRef(0);
   const pendingScrubRafRef = useRef(null);
@@ -282,7 +271,7 @@ function StockInteractiveChart({
   // Extract just the price axis values
   const prices = useMemo(() => chartPoints.map((p) => p.price), [chartPoints]);
 
-  // Y-axis range + neat tick layout for the grid/labels
+  // Y-axis range and the neat tick layout for the grid/labels
   const { minVal, maxVal, neatY } = useMemo(() => {
     if (prices.length === 0) {
       return { minVal: 0, maxVal: 100, neatY: { ticks: [], step: 1, yMin: 0, yMax: 100 } };
@@ -307,19 +296,17 @@ function StockInteractiveChart({
     const maxChars = Math.max(
       ...neatY.ticks.map((t) => formatTickLabel(t, neatY.step).length)
     );
-    // Dynamic width: ~7.2px per character + 8px right padding
     return Math.max(26, Math.ceil(maxChars * 7.2 + 8));
   }, [neatY.ticks, neatY.step]);
 
-  // Layout metrics: chart region + usable height (minus padding)
+  
+  // Calculate usable height and chart region with different vertical pardding
   const paddingTop = 16;
   const paddingBottom = 8;
   const chartWidth = Math.max(10, layout.width - yAxisWidth);
   const chartHeight = Math.max(10, layout.height);
   const usableHeight = Math.max(10, chartHeight - paddingTop - paddingBottom);
-
-  // Y range guard against zero division
-  const yRange = maxVal - minVal === 0 ? 1 : maxVal - minVal;
+  const yRange = maxVal - minVal === 0 ? 1 : maxVal - minVal;  // Prevent divide by zero if all prices are the same
 
   // Pre-compute coordinate lookup arrays so scrub doesn't call functions per-frame
   const { xCoords, yCoords } = useMemo(() => {
@@ -338,14 +325,14 @@ function StockInteractiveChart({
     return { xCoords: xs, yCoords: ys };
   }, [chartPoints, chartWidth, chartHeight, minVal, yRange, usableHeight, paddingBottom]);
 
-  // Compute SVG line path and area gradient path
+  // Calculate the SVG line path and area gradient path
   const { linePath, areaPath } = useMemo(() => {
     const len = chartPoints.length;
     if (len < 2 || chartWidth <= 0 || chartHeight <= 0) {
       return { linePath: '', areaPath: '' };
     }
 
-    // Build path string via array join (faster than repeated string concat)
+    // Build the SVG line path string
     const parts = new Array(len);
     parts[0] = `M ${xCoords[0].toFixed(2)} ${yCoords[0].toFixed(2)}`;
     for (let i = 1; i < len; i++) {
@@ -358,11 +345,10 @@ function StockInteractiveChart({
     const bottomY = chartHeight.toFixed(2);
 
     const dArea = `${dLine} L ${lastX} ${bottomY} L ${firstX} ${bottomY} Z`;
-
     return { linePath: dLine, areaPath: dArea };
   }, [chartPoints.length, chartWidth, chartHeight, xCoords, yCoords]);
 
-  // Pre-compute grid line Y positions (avoids calling getYCoordinate during render)
+  // Pre calculate the grid lines for the Y-axis based on the neat ticks
   const gridLines = useMemo(() => {
     return neatY.ticks.map((tickVal) => ({
       key: `grid-${tickVal}`,
@@ -373,12 +359,13 @@ function StockInteractiveChart({
 
   const lastScrubIdxRef = useRef(null);
 
-  // Touch & Scrub Handler - uses coordinate lookup arrays instead of functions
+  // Touch and Scrub Handler
   const updateTouch = useCallback(
     (evt, gestureState) => {
       const len = chartPoints.length;
       if (len === 0 || chartWidth <= 0) return;
 
+      // Convert touch X to local chart X, clamp to chart width, then map to nearest index in the points array
       const pageX = evt?.nativeEvent?.pageX ?? gestureState?.moveX ?? 0;
       const localX = pageX - containerPageXRef.current;
       const clampedX = Math.max(0, Math.min(chartWidth, localX));
@@ -389,12 +376,13 @@ function StockInteractiveChart({
       if (lastScrubIdxRef.current === clampedIdx) return;
       lastScrubIdxRef.current = clampedIdx;
 
+      // Update the scrub index state and call the parent onScrub callback
       setScrubIndex((prev) => (prev === clampedIdx ? prev : clampedIdx));
 
       const cb = onScrubRef.current;
       if (cb) {
         const now = Date.now();
-        if (now - lastScrubCallTimeRef.current >= 50) {   // Throttle to 20 fps
+        if (now - lastScrubCallTimeRef.current >= 33) {   // Throttle to 30 fps
           lastScrubCallTimeRef.current = now;
           const curr = chartPoints[clampedIdx];
           const prev = clampedIdx > 0 ? chartPoints[clampedIdx - 1] : null;
@@ -415,7 +403,7 @@ function StockInteractiveChart({
     [chartPoints, chartWidth]
   );
 
-  // On release/cancel: drop pending call, clear scrub, notify parent
+  // On release/cancel drop pending call, clear scrub, notify parent (to change the text price back)
   const handleTouchEnd = useCallback(() => {
     // Cancel any pending trailing scrub call
     if (pendingScrubRafRef.current) {
@@ -427,7 +415,7 @@ function StockInteractiveChart({
     onScrubEndRef.current?.();
   }, []);
 
-  // PanResponder - stable because updateTouch and handleTouchEnd have minimal deps
+  // Define the PanResponder to handle touch gestures for scrubbing
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -458,7 +446,7 @@ function StockInteractiveChart({
     [updateTouch, handleTouchEnd]
   );
 
-  // Measure container size + window offset (only when they actually change)
+  // Measure container size and window offset only when they actually change
   const handleLayout = useCallback((event) => {
     const { width, height } = event.nativeEvent.layout;
     setLayout((prev) => {
@@ -477,7 +465,7 @@ function StockInteractiveChart({
     });
   }, []);
 
-  // Active scrubbed point data - simple lookups into pre-computed arrays
+  // Access the active point and its coordinates for the scrub overlay and date badge
   const activePoint = scrubIndex !== null && chartPoints[scrubIndex] ? chartPoints[scrubIndex] : null;
   const activeX = activePoint ? xCoords[scrubIndex] : null;
   const activeY = activePoint ? yCoords[scrubIndex] : null;
@@ -497,7 +485,7 @@ function StockInteractiveChart({
     >
       {layout.width > 0 && layout.height > 0 && chartPoints.length > 1 && (
         <View style={styles.chartWrapper}>
-          {/* Static chart layer - never re-renders during scrub */}
+          {/* Static chart layer */}
           <StaticChart
             chartWidth={chartWidth}
             chartHeight={chartHeight}
@@ -509,7 +497,7 @@ function StockInteractiveChart({
             gridLines={gridLines}
           />
 
-          {/* Scrub overlay - lightweight SVG with only crosshair + dot */}
+          {/* Scrub overlay*/}
           <ScrubOverlay
             activeX={activeX}
             activeY={activeY}
@@ -521,7 +509,7 @@ function StockInteractiveChart({
             visible={scrubIndex !== null}
           />
 
-          {/* Top Date-Time Pill: Always at top, centered on the line, clamped at borders */}
+          {/* Top neat datetime pill */}
           {activePoint && activeX !== null && (
             <View
               pointerEvents="none"
@@ -547,7 +535,7 @@ function StockInteractiveChart({
             </View>
           )}
 
-          {/* Right-Hand Y-Axis Labels Column */}
+          {/* Right hand Y-Axis labels column */}
           <View style={[styles.yAxisLabelsColumn, { width: yAxisWidth, borderLeftColor: gridLineColor }]}>
             {gridLines.map(({ tickVal, y }) => (
               <View
@@ -571,7 +559,7 @@ function StockInteractiveChart({
   );
 }
 
-// Chart layout: container, wrapper, date badge, y-axis label column
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,

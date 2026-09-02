@@ -1,17 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import {
-  Modal,
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  ScrollView,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Modal, View, StyleSheet, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
 import { usePortfolio } from '../../context/PortfolioContext';
@@ -23,12 +14,12 @@ import CompanyLogo from '../common/CompanyLogo';
 import StockInteractiveChart from './StockInteractiveChart';
 import OrderExecutedModal from './OrderExecutedModal';
 
-// Paper-order entry sheet: portfolio picker, quantity/USD toggle, live cost, mini chart
+// Modal for entering a paper trade order (buy or sell) for a stock (cannot trade non-stock securities)
 export default function StockOrderModal({
   visible,
   onClose,
   stock,
-  mode = 'BUY',
+  mode,
 }) {
   const { theme, isDark } = useTheme();
   const { quotes, fetchHistoricalChart } = useMarketData();
@@ -49,7 +40,7 @@ export default function StockOrderModal({
   const [pendingOrderParams, setPendingOrderParams] = useState(null);
   const [validationError, setValidationError] = useState('');
 
-  // Keep selected portfolio in sync with the active one
+  // Make sure the selected portfolio in the portfolio tab is the default when the modal opens (user can change)
   useEffect(() => {
     if (activePortfolioId) {
       setSelectedPortfolioId(activePortfolioId);
@@ -65,18 +56,23 @@ export default function StockOrderModal({
     );
   }, [portfolios, selectedPortfolioId]);
 
-  // Current price: live WS > stock field > quote > fallback 100
+  // Current price: live WS > stock field > quote > fallback to null, dont render if null
   const cleanSymbol = (stock?.symbol || 'NVDA').toUpperCase();
   const wsQuote = quotes[cleanSymbol] || quotes[stock?.symbol];
   const liveWsPrice =
     wsQuote?.isLiveWs && typeof wsQuote?.price === 'number' ? wsQuote.price : null;
   const currentPrice =
-    liveWsPrice ?? stock?.price ?? wsQuote?.price ?? 100.0;
+    liveWsPrice ?? stock?.price ?? wsQuote?.price ?? null;
+  
+  if (!currentPrice) {
+    return null;
+  }
 
   const initialCash = selectedPortfolioObj?.cash ?? 10000.0;
   const positionObj = getPosition(selectedPortfolioId, cleanSymbol);
   const ownedShares = positionObj ? Number(positionObj.shares) || 0 : 0;
 
+  // Fetch 1D historical chart data for the stock when the modal opens, to display in the mini chart
   useEffect(() => {
     if (!visible || !stock?.symbol) return;
     let isMounted = true;
@@ -96,6 +92,7 @@ export default function StockOrderModal({
     };
   }, [visible, stock?.symbol, fetchHistoricalChart]);
 
+  // Reset input fields and validation error when the modal opens
   useEffect(() => {
     if (visible) {
       setIsInputUsdMode(false);
@@ -105,7 +102,7 @@ export default function StockOrderModal({
     }
   }, [visible]);
 
-  // Toggle between shares and USD for the "owned" value
+  // Toggle between shares and USD for the owned value
   const handleToggleOwnedUnit = useCallback(() => {
     setIsOwnedUsdMode((prev) => !prev);
   }, []);
@@ -146,7 +143,7 @@ export default function StockOrderModal({
     setQuantityInput(cleaned);
   }, [isInputUsdMode]);
 
-  // Resolve input into shares + cost depending on unit mode
+  // Resolve input into shares and cost depending on unit mode
   const parsedInput = parseFloat(quantityInput) || 0;
   const orderShares = isInputUsdMode
     ? currentPrice > 0
@@ -174,9 +171,11 @@ export default function StockOrderModal({
   // Buy = green, sell = red
   const buttonBgColor = isBuy ? '#38C172' : '#FF4D4F';
 
-  // Validate the order (non-zero shares, cash coverage, share availability) then stage it
+  // Validate the order then open the confirmation modal with the order params
   const handleSubmitOrder = () => {
     setValidationError('');
+
+    // Validate the order for positive quantity, sufficient cash for buy, and sufficient shares for sell
     if (orderShares <= 0) {
       setValidationError('Please enter a valid quantity.');
       return;
@@ -208,6 +207,7 @@ export default function StockOrderModal({
     onClose();
   };
 
+  // Return the populated order modal
   return (
     <>
       <Modal
@@ -264,7 +264,7 @@ export default function StockOrderModal({
                   keyboardShouldPersistTaps="handled"
                   contentContainerStyle={styles.scrollContainer}
                 >
-                  {/* 1. SELECT PORTFOLIO */}
+                  {/* Portfolio selector */}
                   <View style={styles.portfolioSection}>
                     <AppText
                       bold
@@ -302,7 +302,7 @@ export default function StockOrderModal({
                     ]}
                   />
 
-                  {/* 2. FINANCIAL DATA ROWS */}
+                  {/* Order data rows */}
                   <View style={styles.dataRowsContainer}>
                     {/* Row 1: FREE CASH */}
                     <View style={styles.dataRow}>
@@ -423,7 +423,7 @@ export default function StockOrderModal({
                     ) : null}
                   </View>
 
-                  {/* 3. BOTTOM SECTION: Latest Price + Submit & 1D Mini Chart */}
+                  {/* Latest Price, Submit and 1 day Chart at the bottom */}
                   <View style={styles.bottomSection}>
                     <View style={styles.priceAndSubmitRow}>
                       <View style={styles.latestPriceRow}>
@@ -488,7 +488,7 @@ export default function StockOrderModal({
           </View>
         </View>
 
-        {/* Portfolio Selection Dialogue */}
+        {/* Portfolio selection dialogue box */}
         {portfolioPickerVisible && (
           <Modal
             visible={portfolioPickerVisible}
@@ -544,6 +544,7 @@ export default function StockOrderModal({
         )}
       </Modal>
 
+      {/* Order Receipt Modal */}
       <OrderExecutedModal
         visible={executedModalVisible}
         orderParams={pendingOrderParams}
@@ -554,7 +555,6 @@ export default function StockOrderModal({
   );
 }
 
-// Order sheet layout: header, portfolio selector, data rows, submit button, picker
 const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
