@@ -17,8 +17,15 @@ import { formatMoney, formatStockQuote } from '../utils/formatters';
 
 export default function PortfolioScreen() {
   const { theme, isDark } = useTheme();
-  const { isPaperTradingEnabled } = useTrading();
-  const { quotes, profiles, marketStatus } = useMarketData();
+  const {
+    quotes,
+    profiles,
+    marketStatus,
+    fetchQuote,
+    fetchProfile,
+    setActiveModalSymbol,
+    hasValidKey,
+  } = useMarketData();
   const {
     portfolios,
     activePortfolioId,
@@ -90,42 +97,83 @@ export default function PortfolioScreen() {
     [reorderPortfolios]
   );
 
-  const handleOpenStockDetail = useCallback((position) => {
-    setSelectedStock({
-      symbol: position.symbol,
-      name: position.name,
-    });
-  }, []);
+  const handleOpenStockDetail = useCallback(
+    (position) => {
+      setSelectedStock({
+        symbol: position.symbol,
+        name: position.name,
+      });
+      if (setActiveModalSymbol) {
+        setActiveModalSymbol(position.symbol);
+      }
+      if (fetchQuote && position.symbol) {
+        fetchQuote(position.symbol);
+      }
+    },
+    [setActiveModalSymbol, fetchQuote]
+  );
 
-  // 1. Live Position Valuations & Returns (updated on every WebSocket trade tick)
+  const handleCloseStockDetail = useCallback(() => {
+    setSelectedStock(null);
+    if (setActiveModalSymbol) {
+      setActiveModalSymbol(null);
+    }
+  }, [setActiveModalSymbol]);
+
+  // Fetch live quotes and profiles for active portfolio positions on mount, tab change & session transition
+  useEffect(() => {
+    if (!activePortfolio?.positions || !fetchQuote) return;
+    for (const pos of activePortfolio.positions) {
+      const sym = pos.symbol?.toUpperCase();
+      if (sym) {
+        fetchQuote(sym);
+        if (hasValidKey && fetchProfile) {
+          fetchProfile(sym);
+        }
+      }
+    }
+  }, [
+    activePortfolioId,
+    marketStatus.session,
+    fetchQuote,
+    fetchProfile,
+    hasValidKey,
+    activePortfolio?.positions,
+  ]);
+
+  // 1. Live Position Valuations & Returns (unified with formatStockQuote & StockDetailModal)
   const positionsWithLiveMetrics = useMemo(() => {
     if (!activePortfolio || !Array.isArray(activePortfolio.positions)) return [];
     return activePortfolio.positions.map((pos) => {
       const sym = pos.symbol?.toUpperCase();
       const quote = quotes[sym] || quotes[pos.symbol] || {};
+      const profile = profiles[sym] || profiles[pos.symbol];
+      const formatted = formatStockQuote(pos, quote, profile, null, marketStatus);
       const livePrice =
-        (quote.isLiveWs && typeof quote.price === 'number')
-          ? quote.price
-          : quote.price ?? pos.avgCost;
+        typeof formatted.price === 'number' && formatted.price > 0
+          ? formatted.price
+          : (typeof pos.avgCost === 'number' && pos.avgCost > 0 ? pos.avgCost : 0);
       const sharesNum = Number(pos.shares) || 0;
       const totalVal = sharesNum * livePrice;
       const avgCost = Number(pos.avgCost) || livePrice;
       const totalCost = pos.totalCost ?? sharesNum * avgCost;
       const gainLoss = totalVal - totalCost;
       const gainLossPercent = totalCost > 0 ? (gainLoss / totalCost) * 100 : 0;
-      const todayChange = (quote.change || 0) * sharesNum;
+      const todayChange = (formatted.change || 0) * sharesNum;
 
       return {
         ...pos,
+        name: formatted.displayName || pos.name || sym,
         livePrice,
         totalValue: totalVal,
         changePercent: gainLossPercent,
         gainLoss,
         todayChange,
-        quoteChangePercent: quote.changePercent || 0,
+        quoteChangePercent: formatted.changePercent || 0,
+        formattedStock: formatted,
       };
     });
-  }, [activePortfolio, quotes]);
+  }, [activePortfolio, quotes, profiles, marketStatus]);
 
   // 2. Real-time Total Portfolio Value & Overall Returns
   const portfolioMetrics = useMemo(() => {
@@ -151,6 +199,12 @@ export default function PortfolioScreen() {
   const modalStock = useMemo(() => {
     if (!selectedStock) return null;
     const sym = selectedStock.symbol?.toUpperCase();
+    const activePosition = positionsWithLiveMetrics.find(
+      (p) => p.symbol?.toUpperCase() === sym
+    );
+    if (activePosition?.formattedStock) {
+      return activePosition.formattedStock;
+    }
     return formatStockQuote(
       selectedStock,
       quotes[sym],
@@ -158,7 +212,7 @@ export default function PortfolioScreen() {
       null,
       marketStatus
     );
-  }, [selectedStock, quotes, profiles, marketStatus]);
+  }, [selectedStock, positionsWithLiveMetrics, quotes, profiles, marketStatus]);
 
   const isStartPos = portfolioMetrics.sinceStartChangePercent >= 0;
 
@@ -333,7 +387,7 @@ export default function PortfolioScreen() {
         <StockDetailModal
           visible={Boolean(selectedStock)}
           stock={modalStock}
-          onClose={() => setSelectedStock(null)}
+          onClose={handleCloseStockDetail}
         />
       </View>
     </ScreenContainer>

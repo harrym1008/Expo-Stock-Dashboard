@@ -77,7 +77,7 @@ class FinnhubWebSocketManager {
           const message = JSON.parse(event.data);
           if (message.type === 'trade' && Array.isArray(message.data)) {
             for (const trade of message.data) {
-              if (trade.s && typeof trade.p === 'number') {
+              if (trade.s && typeof trade.p === 'number' && trade.p > 0) {
                 const sym = trade.s.toUpperCase();
                 const price = trade.p;
                 const volume = trade.v;
@@ -105,7 +105,7 @@ class FinnhubWebSocketManager {
         this.scheduleReconnect();
       };
     } catch (err) {
-      console.warn('[Finnhub WS] Connection initialization failed:', err.message || err);
+      console.log('[Finnhub WS] Connection initialization failed:', err.message || err);
       this.scheduleReconnect();
     }
   }
@@ -176,7 +176,7 @@ class FinnhubWebSocketManager {
       try {
         listener(updates);
       } catch (e) {
-        console.warn('[Finnhub WS] Error in tick listener:', e);
+        console.log('[Finnhub WS] Error in tick listener:', e);
       }
     }
   }
@@ -285,7 +285,7 @@ class FinnhubWebSocketManager {
       try {
         this.ws.send(JSON.stringify({ type, symbol }));
       } catch (err) {
-        console.warn(`[Finnhub WS] Failed to send ${type} for ${symbol}:`, err.message || err);
+        console.log(`[Finnhub WS] Failed to send ${type} for ${symbol}:`, err.message || err);
       }
     }
   }

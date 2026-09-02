@@ -130,51 +130,80 @@ export function formatTimeAgo(timestamp) {
  * Coalesces live WebSocket quotes, 1D chart data, and profiles for a stock into unified display fields.
  */
 export function formatStockQuote(item, liveQuote, liveProfile, y1D, marketStatus) {
-  const regularClose = y1D?.regularMarketPrice || item?.price || 0;
-  const prevDayClose = y1D?.previousClose || item?.price || 0;
+  const isPos = (n) => typeof n === 'number' && !isNaN(n) && n > 0;
+
+  const regularClose =
+    (isPos(y1D?.regularMarketPrice) ? y1D.regularMarketPrice : null) ??
+    (isPos(liveQuote?.regularMarketPrice) ? liveQuote.regularMarketPrice : null) ??
+    (isPos(item?.regularMarketPrice) ? item.regularMarketPrice : null) ??
+    (isPos(item?.price) ? item.price : 0);
+
+  const prevDayClose =
+    (isPos(y1D?.previousClose) ? y1D.previousClose : null) ??
+    (isPos(liveQuote?.previousClose) ? liveQuote.previousClose : null) ??
+    (isPos(item?.previousClose) ? item.previousClose : null) ??
+    regularClose;
 
   let displayPrice;
   let displayChange;
   let displayChangePercent;
 
   if (marketStatus?.isOpen) {
-    displayPrice = liveQuote?.price ?? y1D?.price ?? item?.price ?? 0;
+    displayPrice =
+      (isPos(liveQuote?.price) ? liveQuote.price : null) ??
+      (isPos(y1D?.price) ? y1D.price : null) ??
+      (isPos(item?.price) ? item.price : null) ??
+      regularClose;
+
     const refClose = prevDayClose || displayPrice;
     displayChange = displayPrice - refClose;
     displayChangePercent = refClose !== 0 ? (displayChange / refClose) * 100 : 0;
   } else {
     const hasLiveWsTrade =
       liveQuote?.isLiveWs &&
-      typeof liveQuote?.price === 'number' &&
+      isPos(liveQuote?.price) &&
       Math.abs(liveQuote.price - regularClose) > 0.000001;
 
-    const postPrice =
-      (marketStatus?.isPreMarket ? y1D?.preMarketPrice : y1D?.postMarketPrice) ||
-      y1D?.postMarketPrice ||
-      y1D?.preMarketPrice;
+    const prePrice =
+      (isPos(y1D?.preMarketPrice) ? y1D.preMarketPrice : null) ??
+      (isPos(liveQuote?.preMarketPrice) ? liveQuote.preMarketPrice : null) ??
+      (isPos(item?.preMarketPrice) ? item.preMarketPrice : null);
 
-    const hasPostMarketDelta =
-      typeof postPrice === 'number' &&
-      Math.abs(postPrice - regularClose) > 0.000001;
+    const postPrice =
+      (isPos(y1D?.postMarketPrice) ? y1D.postMarketPrice : null) ??
+      (isPos(liveQuote?.postMarketPrice) ? liveQuote.postMarketPrice : null) ??
+      (isPos(item?.postMarketPrice) ? item.postMarketPrice : null);
+
+    const extendedPrice = marketStatus?.isPreMarket
+      ? (prePrice ?? postPrice)
+      : (postPrice ?? prePrice);
+
+    const hasExtendedDelta =
+      isPos(extendedPrice) &&
+      regularClose > 0 &&
+      Math.abs(extendedPrice - regularClose) > 0.000001;
 
     if (hasLiveWsTrade) {
       displayPrice = liveQuote.price;
       displayChange = liveQuote.price - regularClose;
       displayChangePercent = regularClose !== 0 ? (displayChange / regularClose) * 100 : 0;
-    } else if (hasPostMarketDelta) {
-      displayPrice = postPrice;
-      displayChange = postPrice - regularClose;
+    } else if (hasExtendedDelta) {
+      displayPrice = extendedPrice;
+      displayChange = extendedPrice - regularClose;
       displayChangePercent = regularClose !== 0 ? (displayChange / regularClose) * 100 : 0;
     } else {
       displayPrice = regularClose;
-      displayChange = y1D?.change ?? item?.change ?? 0;
-      displayChangePercent = y1D?.changePercent ?? item?.changePercent ?? 0;
+      displayChange = y1D?.change ?? item?.change ?? (regularClose - prevDayClose);
+      displayChangePercent =
+        y1D?.changePercent ??
+        item?.changePercent ??
+        (prevDayClose !== 0 ? ((regularClose - prevDayClose) / prevDayClose) * 100 : 0);
     }
   }
 
   const baseSparkline = y1D?.sparkline || liveQuote?.sparkline || item?.sparkline || [];
   const dynamicSparkline =
-    typeof displayPrice === 'number' && baseSparkline.length > 0
+    isPos(displayPrice) && baseSparkline.length > 0
       ? [...baseSparkline.slice(0, -1), displayPrice]
       : baseSparkline;
 
@@ -187,6 +216,16 @@ export function formatStockQuote(item, liveQuote, liveProfile, y1D, marketStatus
   const decimals = getDecimals(item?.symbol, displayPrice, item?.decimals);
   const isStock = sec ? false : (item?.isStock !== false);
 
+  const resolvedPreMarket =
+    (isPos(y1D?.preMarketPrice) ? y1D.preMarketPrice : null) ??
+    (isPos(liveQuote?.preMarketPrice) ? liveQuote.preMarketPrice : null) ??
+    (marketStatus?.isPreMarket && isPos(displayPrice) ? displayPrice : null);
+
+  const resolvedPostMarket =
+    (isPos(y1D?.postMarketPrice) ? y1D.postMarketPrice : null) ??
+    (isPos(liveQuote?.postMarketPrice) ? liveQuote.postMarketPrice : null) ??
+    (!marketStatus?.isPreMarket && !marketStatus?.isOpen && isPos(displayPrice) ? displayPrice : null);
+
   return {
     ...item,
     symbol: displaySymbol,
@@ -197,7 +236,9 @@ export function formatStockQuote(item, liveQuote, liveProfile, y1D, marketStatus
     decimals,
     isStock,
     price: displayPrice,
-    postMarketPrice: y1D?.postMarketPrice || displayPrice,
+    previousClose: isPos(prevDayClose) ? prevDayClose : (isPos(item?.previousClose) ? item.previousClose : null),
+    preMarketPrice: resolvedPreMarket,
+    postMarketPrice: resolvedPostMarket,
     regularMarketPrice: regularClose,
     change: displayChange,
     changePercent: displayChangePercent,

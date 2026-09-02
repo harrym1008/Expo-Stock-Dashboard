@@ -29,7 +29,7 @@ export default function NewsScreen() {
         setNews(articles);
       }
     } catch (err) {
-      console.warn('[NewsScreen] Error loading market news:', err);
+      console.log('[NewsScreen] Error loading market news:', err);
     } finally {
       setIsLoading(false);
     }

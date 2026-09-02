@@ -58,6 +58,18 @@ export default function HomeScreen() {
 
   // Track symbols already fetched in the current active watchlist
   const fetchedSparklinesRef = useRef(new Set());
+  const [sparklineRefreshTrigger, setSparklineRefreshTrigger] = useState(0);
+
+  // Auto-refresh sparklines every 3 minutes
+  useEffect(() => {
+    const THREE_MINUTES_MS = 3 * 60 * 1000;
+    const timer = setInterval(() => {
+      fetchedSparklinesRef.current.clear();
+      setSparklineRefreshTrigger((prev) => prev + 1);
+    }, THREE_MINUTES_MS);
+
+    return () => clearInterval(timer);
+  }, []);
 
   // Fetch real 1D sparklines & Finnhub profiles/quotes for active watchlist stocks
   useEffect(() => {
@@ -98,13 +110,15 @@ export default function HomeScreen() {
         });
       }
 
-      // Fetch Finnhub profile & quote if API key is active
+      // Fetch live quote via Yahoo Finance
+      fetchQuote(sym);
+
+      // Fetch Finnhub profile if API key is active
       if (hasValidKey) {
-        fetchQuote(sym);
         fetchProfile(sym);
       }
     }
-  }, [activeWatchlistId, marketStatus.session, hasValidKey, fetchQuote, fetchProfile, fetchHistoricalChart, activeWatchlist?.items]);
+  }, [activeWatchlistId, marketStatus.session, sparklineRefreshTrigger, hasValidKey, fetchQuote, fetchProfile, fetchHistoricalChart, activeWatchlist?.items]);
 
   // --- Stock detail modal ---
   const handleOpenStockDetail = useCallback((item) => {
@@ -199,8 +213,8 @@ export default function HomeScreen() {
         addStockToWatchlist(activeWatchlistId, stockItem);
         const sym = (stockItem.displaySymbol || stockItem.symbol)?.toUpperCase();
         if (sym) {
+          fetchQuote(sym);
           if (hasValidKey) {
-            fetchQuote(sym);
             fetchProfile(sym);
           }
           fetchHistoricalChart(sym, '1D');

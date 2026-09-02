@@ -8,6 +8,9 @@ import { ingestHolidayData } from '../utils/marketHolidays';
 import { getDisplaySymbol, getFinnhubSymbol, isNonStockSecurity } from '../utils/securityUtils';
 
 function calculateTickUpdate(current, sym, newPrice, timestamp, sessionStatus) {
+  if (typeof newPrice !== 'number' || isNaN(newPrice) || newPrice <= 0) {
+    return current;
+  }
   const currentQuote = current || {};
   const refClose = sessionStatus.isOpen
     ? (currentQuote.previousClose || newPrice)
@@ -137,33 +140,38 @@ export function MarketDataProvider({ children }) {
     return unsubscribe;
   }, []);
 
-  // 6. Fetch Stock Quote via REST (does not override real WebSocket live ticks)
+  // 6. Fetch Stock Quote via Yahoo Finance (accurate pre/post-market, no API key required)
   const fetchQuote = useCallback(
     async (symbol) => {
-      if (!symbol || !apiKey) return null;
+      if (!symbol) return null;
+      const cleanSym = getDisplaySymbol(symbol);
       const finnhubSym = getFinnhubSymbol(symbol);
-      const displaySym = getDisplaySymbol(symbol);
 
-      const quote = await finnhubRestService.fetchQuote(finnhubSym, apiKey);
-      if (quote) {
+      const quote = await yahooFinanceService.fetchQuote(cleanSym);
+      if (quote && typeof quote.price === 'number' && quote.price > 0) {
         setQuotes((prev) => {
-          const existing = prev[displaySym] || prev[finnhubSym] || {};
+          const existing = prev[cleanSym] || prev[finnhubSym] || {};
+          const isLiveWs = Boolean(existing.isLiveWs && existing.price > 0);
           const merged = {
             ...quote,
             ...existing,
+            price: isLiveWs ? existing.price : quote.price,
             previousClose: quote.previousClose || existing.previousClose,
-            regularMarketPrice: quote.price || existing.regularMarketPrice,
+            regularMarketPrice: quote.regularMarketPrice || existing.regularMarketPrice || quote.price,
+            preMarketPrice: quote.preMarketPrice || existing.preMarketPrice,
+            postMarketPrice: quote.postMarketPrice || existing.postMarketPrice,
           };
           return {
             ...prev,
             [finnhubSym]: merged,
-            [displaySym]: merged,
+            [cleanSym]: merged,
           };
         });
+        return quote;
       }
-      return quote;
+      return null;
     },
-    [apiKey]
+    []
   );
 
   // 7. Fetch Company Profile & Logo via REST (Cached)

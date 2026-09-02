@@ -21,8 +21,10 @@ const BOUNDARY_INTERVALS = {
   '1Y': 7 * 24 * 60 * 60 * 1000,
 };
 
-// Global in-memory cache to preserve the latest 1D after-hours trade price across all timeframe queries
+// Global in-memory cache to preserve the latest 1D after-hours and pre-market trade prices across all timeframe queries
 const latestKnownAfterHoursPrices = {};
+const latestKnownPreMarketPrices = {};
+const latestKnownPreviousCloses = {};
 
 /**
  * Calculates cache TTL to expire exactly 3 seconds after the next candle boundary.
@@ -36,6 +38,63 @@ export function getBoundaryAlignedTtl(timeframe) {
   const nextBoundary = Math.ceil(now / intervalMs) * intervalMs;
   const remaining = nextBoundary - now;
   return (remaining <= 0 ? intervalMs : remaining) + THREE_SECONDS;
+}
+
+/**
+ * Executes a fetch request with automatic handling for HTTP 429 (Too Many Requests),
+ * exponential/header backoff, rate limiter notification, and retries.
+ */
+async function fetchWithBackoff(url, options = {}, { maxRetries = 2, tag = 'Yahoo Finance' } = {}) {
+  let attempt = 0;
+  while (attempt <= maxRetries) {
+    try {
+      const res = await fetch(url, options);
+
+      if (res.status === 429) {
+        let retryAfterSeconds = null;
+        if (res.headers?.get) {
+          const headerVal = res.headers.get('Retry-After');
+          if (headerVal) {
+            const parsed = parseInt(headerVal, 10);
+            if (!isNaN(parsed) && parsed > 0) {
+              retryAfterSeconds = parsed;
+            }
+          }
+        }
+
+        const backoffMs = yahooRateLimiter.handle429(retryAfterSeconds);
+
+        if (attempt < maxRetries) {
+          attempt++;
+          console.warn(
+            `[${tag}] ⚠️ HTTP 429 (Rate Limited). Easing off for ${Math.round(backoffMs)}ms before retry (${attempt}/${maxRetries})...`
+          );
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          continue;
+        } else {
+          console.error(
+            `[${tag}] ❌ HTTP 429 (Rate Limited). Exhausted all ${maxRetries} retries.`
+          );
+          return res;
+        }
+      }
+
+      if (res.ok) {
+        yahooRateLimiter.notifySuccess();
+      }
+
+      return res;
+    } catch (err) {
+      if (attempt < maxRetries) {
+        attempt++;
+        const backoffMs = 1000 * attempt;
+        console.warn(`[${tag}] Network error (${err.message || err}). Retrying in ${backoffMs}ms (${attempt}/${maxRetries})...`);
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 function applyLivePriceOverlay(chartData, latestLivePrice) {
@@ -118,6 +177,16 @@ export const yahooFinanceService = {
         cached.postMarketChange = cached.postMarketPrice - cached.regularMarketPrice;
         cached.postMarketChangePercent = cached.regularMarketPrice !== 0 ? (cached.postMarketChange / cached.regularMarketPrice) * 100 : 0;
       }
+      if (latestKnownPreMarketPrices[cleanSymbol] && (!cached.preMarketPrice || Math.abs(cached.preMarketPrice - cached.regularMarketPrice) < 0.000001)) {
+        cached.preMarketPrice = latestKnownPreMarketPrices[cleanSymbol];
+        cached.preMarketChange = cached.preMarketPrice - cached.regularMarketPrice;
+        cached.preMarketChangePercent = cached.regularMarketPrice !== 0 ? (cached.preMarketChange / cached.regularMarketPrice) * 100 : 0;
+      }
+      if (typeof cached.previousClose === 'number' && cached.previousClose > 0) {
+        latestKnownPreviousCloses[cleanSymbol] = cached.previousClose;
+      } else if (latestKnownPreviousCloses[cleanSymbol]) {
+        cached.previousClose = latestKnownPreviousCloses[cleanSymbol];
+      }
 
       const withLiveOverlay = applyLivePriceOverlay(cached, latestLivePrice);
 
@@ -145,15 +214,15 @@ export const yahooFinanceService = {
           `[Yahoo Finance] 📈 Fetching fresh ${timeframe} candles (${config.interval} resolution with pre/post) for: ${cleanSymbol} (API symbol: ${yahooSymbol})`
         );
         const requestSentTime = Date.now();
-        const res = await fetch(url, {
+        const res = await fetchWithBackoff(url, {
           headers: {
             'User-Agent':
               'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
           },
-        });
+        }, { tag: `Yahoo Finance ${timeframe} Chart (${cleanSymbol})` });
 
         if (!res.ok) {
-          console.warn(`[Yahoo Finance] Failed to fetch chart for ${cleanSymbol} (${yahooSymbol}): HTTP ${res.status}`);
+          console.log(`[Yahoo Finance] Failed to fetch chart for ${cleanSymbol} (${yahooSymbol}): HTTP ${res.status}`);
           return null;
         }
 
@@ -161,7 +230,7 @@ export const yahooFinanceService = {
         const result = json?.chart?.result?.[0];
         if (!result) return null;
 
-        const meta = result.meta || {};
+        let meta = result.meta || {};
         const rawTimestamps = result.timestamp || [];
         const rawQuotes = result.indicators?.quote?.[0] || {};
         const rawCloses = rawQuotes.close || [];
@@ -183,6 +252,62 @@ export const yahooFinanceService = {
           }
         }
 
+        // Fallback for indices and sessions where 1d has 0 candles yet today (e.g. US indices in pre-market or holidays)
+        if (points.length === 0 && (timeframe === '1D' || timeframe === '1H')) {
+          console.log(
+            `[Yahoo Finance] ℹ️ 0 intraday candles for ${cleanSymbol} (${yahooSymbol}) on ${timeframe}. Fetching 5d fallback for last active session...`
+          );
+          const fallbackUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+            yahooSymbol
+          )}?interval=${config.interval}&range=5d&includePrePost=true&events=div%2Csplit`;
+
+          try {
+            const fbRes = await fetchWithBackoff(fallbackUrl, {
+              headers: {
+                'User-Agent':
+                  'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+              },
+            }, { tag: `Yahoo Finance 5d Fallback (${cleanSymbol})` });
+
+            if (fbRes.ok) {
+              const fbJson = await fbRes.json();
+              const fbResult = fbJson?.chart?.result?.[0];
+              if (fbResult) {
+                meta = { ...fbResult.meta, ...meta, previousClose: fbResult.meta?.previousClose ?? meta.previousClose };
+                const fbTimestamps = fbResult.timestamp || [];
+                const fbQuotes = fbResult.indicators?.quote?.[0] || {};
+                const fbCloses = fbQuotes.close || [];
+
+                if (Array.isArray(fbCloses) && fbCloses.length > 0) {
+                  let lastValidTs = null;
+                  for (let i = fbCloses.length - 1; i >= 0; i--) {
+                    if (typeof fbCloses[i] === 'number' && !isNaN(fbCloses[i]) && fbCloses[i] > 0) {
+                      lastValidTs = fbTimestamps[i];
+                      break;
+                    }
+                  }
+
+                  if (lastValidTs) {
+                    const lastDateStr = new Date(lastValidTs * 1000).toDateString();
+                    for (let i = 0; i < fbCloses.length; i++) {
+                      const v = fbCloses[i];
+                      const t = (fbTimestamps[i] || 0) * 1000;
+                      if (typeof v === 'number' && !isNaN(v) && v > 0) {
+                        if (new Date(t).toDateString() === lastDateStr) {
+                          const dec = getDecimals(cleanSymbol, v);
+                          points.push({ time: t, price: Number(v.toFixed(dec)) });
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn(`[Yahoo Finance] 5d fallback fetch failed for ${cleanSymbol}:`, e?.message || e);
+          }
+        }
+
         if (points.length === 0) return null;
 
         // For 1H timeframe: Slice to the last 60 minutes of trades
@@ -197,9 +322,30 @@ export const yahooFinanceService = {
         const startPrice = prices[0];
         const endmostPrice = prices[prices.length - 1];
         const chartPreviousClose = typeof meta.chartPreviousClose === 'number' ? meta.chartPreviousClose : startPrice;
-        const previousClose = typeof meta.previousClose === 'number'
+        let previousClose = typeof meta.previousClose === 'number'
           ? meta.previousClose
-          : (timeframe === '1D' || timeframe === '1H' ? chartPreviousClose : null);
+          : (timeframe === '1D' || timeframe === '1H'
+              ? chartPreviousClose
+              : (latestKnownPreviousCloses[cleanSymbol] ?? null));
+
+        if (
+          typeof previousClose !== 'number' &&
+          typeof meta.regularMarketPrice === 'number' &&
+          typeof meta.regularMarketChangePercent === 'number' &&
+          meta.regularMarketChangePercent !== -100
+        ) {
+          const calculatedDec = getDecimals(cleanSymbol, meta.regularMarketPrice);
+          const computedPrev = Number(
+            (meta.regularMarketPrice / (1 + meta.regularMarketChangePercent / 100)).toFixed(calculatedDec)
+          );
+          if (typeof computedPrev === 'number' && !isNaN(computedPrev) && computedPrev > 0) {
+            previousClose = computedPrev;
+          }
+        }
+
+        if (typeof previousClose === 'number' && previousClose > 0) {
+          latestKnownPreviousCloses[cleanSymbol] = previousClose;
+        }
         const minPrice = Math.min(...prices);
         const maxPrice = Math.max(...prices);
 
@@ -208,20 +354,30 @@ export const yahooFinanceService = {
           ? meta.regularMarketPrice
           : endmostPrice;
 
-        // Extract and globally preserve after-hours trade prices
+        // Extract and globally preserve after-hours and pre-market trade prices
+        const sessionStatus = getMarketSessionStatus();
         if (timeframe === '1D' || timeframe === '1W' || timeframe === '1H') {
-          if (Math.abs(endmostPrice - regularMarketPrice) > 0.000001) {
-            latestKnownAfterHoursPrices[cleanSymbol] = endmostPrice;
+          if (Math.abs(endmostPrice - regularMarketPrice) > 0.000001 && endmostPrice > 0) {
+            if (sessionStatus.isPreMarket) {
+              latestKnownPreMarketPrices[cleanSymbol] = endmostPrice;
+            } else {
+              latestKnownAfterHoursPrices[cleanSymbol] = endmostPrice;
+            }
           }
         }
 
+        const validMetaPost = typeof meta.postMarketPrice === 'number' && meta.postMarketPrice > 0 ? meta.postMarketPrice : null;
+        const validMetaPre = typeof meta.preMarketPrice === 'number' && meta.preMarketPrice > 0 ? meta.preMarketPrice : null;
+
         let postMarketPrice =
+          validMetaPost ||
           latestKnownAfterHoursPrices[cleanSymbol] ||
-          (typeof meta.postMarketPrice === 'number' ? meta.postMarketPrice : endmostPrice);
+          (sessionStatus.isPreMarket ? regularMarketPrice : endmostPrice);
 
         let preMarketPrice =
-          latestKnownAfterHoursPrices[cleanSymbol] ||
-          (typeof meta.preMarketPrice === 'number' ? meta.preMarketPrice : endmostPrice);
+          validMetaPre ||
+          latestKnownPreMarketPrices[cleanSymbol] ||
+          (sessionStatus.isPreMarket ? endmostPrice : regularMarketPrice);
 
         const postMarketChange = postMarketPrice - regularMarketPrice;
         const postMarketChangePercent = regularMarketPrice !== 0 ? (postMarketChange / regularMarketPrice) * 100 : 0;
@@ -281,7 +437,7 @@ export const yahooFinanceService = {
         // 4. Always apply live price overlay if available
         return applyLivePriceOverlay(chartData, latestLivePrice);
       } catch (err) {
-        console.warn(`[Yahoo Finance] Error fetching data for ${cleanSymbol}:`, err.message || err);
+        console.log(`[Yahoo Finance] Error fetching data for ${cleanSymbol}:`, err.message || err);
         return null;
       }
     });
@@ -306,12 +462,12 @@ export const yahooFinanceService = {
     try {
       console.log('[Yahoo Finance] 🔑 Fetching fresh session cookie & crumb...');
       // 1. Fetch cookie from fc.yahoo.com
-      const cookieRes = await fetch('https://fc.yahoo.com', {
+      const cookieRes = await fetchWithBackoff('https://fc.yahoo.com', {
         headers: { 'User-Agent': USER_AGENT },
-      });
+      }, { tag: 'Yahoo Finance Cookie (fc)' });
 
-      let cookie = cookieRes.headers.get('set-cookie');
-      if (!cookie && typeof cookieRes.headers.getSetCookie === 'function') {
+      let cookie = cookieRes?.headers?.get ? cookieRes.headers.get('set-cookie') : null;
+      if (!cookie && typeof cookieRes?.headers?.getSetCookie === 'function') {
         const rawArr = cookieRes.headers.getSetCookie();
         if (Array.isArray(rawArr) && rawArr.length > 0) {
           cookie = rawArr.join('; ');
@@ -320,34 +476,34 @@ export const yahooFinanceService = {
 
       if (!cookie) {
         // Fallback request to finance.yahoo.com
-        const fallbackRes = await fetch('https://finance.yahoo.com', {
+        const fallbackRes = await fetchWithBackoff('https://finance.yahoo.com', {
           headers: { 'User-Agent': USER_AGENT },
-        });
-        cookie = fallbackRes.headers.get('set-cookie');
+        }, { tag: 'Yahoo Finance Cookie (finance)' });
+        cookie = fallbackRes?.headers?.get ? fallbackRes.headers.get('set-cookie') : null;
       }
 
       // 2. Fetch crumb using the session cookie
-      const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+      const crumbRes = await fetchWithBackoff('https://query2.finance.yahoo.com/v1/test/getcrumb', {
         headers: {
           'User-Agent': USER_AGENT,
           'Cookie': cookie || '',
         },
-      });
+      }, { tag: 'Yahoo Finance Crumb (q2)' });
 
       let crumb = null;
-      if (crumbRes.ok) {
+      if (crumbRes && crumbRes.ok) {
         crumb = (await crumbRes.text()).trim();
       }
 
       // If query2 failed, try query1
       if (!crumb || crumb.includes('<') || crumb.includes('error')) {
-        const crumbRes1 = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
+        const crumbRes1 = await fetchWithBackoff('https://query1.finance.yahoo.com/v1/test/getcrumb', {
           headers: {
             'User-Agent': USER_AGENT,
             'Cookie': cookie || '',
           },
-        });
-        if (crumbRes1.ok) {
+        }, { tag: 'Yahoo Finance Crumb (q1)' });
+        if (crumbRes1 && crumbRes1.ok) {
           crumb = (await crumbRes1.text()).trim();
         }
       }
@@ -359,10 +515,10 @@ export const yahooFinanceService = {
         return session;
       }
 
-      console.warn('[Yahoo Finance] Failed to obtain valid crumb from Yahoo Finance');
+      console.log('[Yahoo Finance] Failed to obtain valid crumb from Yahoo Finance');
       return null;
     } catch (err) {
-      console.warn('[Yahoo Finance] Error getting session cookie/crumb:', err.message || err);
+      console.log('[Yahoo Finance] Error getting session cookie/crumb:', err.message || err);
       return null;
     }
   },
@@ -395,20 +551,20 @@ export const yahooFinanceService = {
         )}?modules=summaryProfile,assetProfile,defaultKeyStatistics,financialData${crumbParam}`;
 
         console.log(`[Yahoo Finance] 🏢 Fetching company profile/description for: ${cleanSymbol}`);
-        const res = await fetch(url, {
+        const res = await fetchWithBackoff(url, {
           headers: {
             'User-Agent': USER_AGENT,
             ...cookieHeader,
           },
-        });
+        }, { tag: `Yahoo Finance Profile (${cleanSymbol})` });
 
-        if (res.status === 401 && !isRetry) {
-          console.warn(`[Yahoo Finance] 401 for ${cleanSymbol}, refreshing cookie + crumb session and retrying...`);
+        if (res?.status === 401 && !isRetry) {
+          console.log(`[Yahoo Finance] 401 for ${cleanSymbol}, refreshing cookie + crumb session and retrying...`);
           return this.fetchCompanyDescription(symbol, true);
         }
 
-        if (!res.ok) {
-          console.warn(`[Yahoo Finance] Failed to fetch profile summary for ${cleanSymbol}: HTTP ${res.status}`);
+        if (!res || !res.ok) {
+          console.log(`[Yahoo Finance] Failed to fetch profile summary for ${cleanSymbol}: HTTP ${res?.status}`);
           return null;
         }
 
@@ -443,7 +599,7 @@ export const yahooFinanceService = {
 
         return data;
       } catch (err) {
-        console.warn(`[Yahoo Finance] Error fetching description for ${cleanSymbol}:`, err.message || err);
+        console.log(`[Yahoo Finance] Error fetching description for ${cleanSymbol}:`, err.message || err);
         return null;
       }
     });
@@ -465,15 +621,15 @@ export const yahooFinanceService = {
     return yahooRateLimiter.schedule(async () => {
       try {
         console.log(`[Yahoo Finance] ⚡ Fetching most recent price for ${cleanSymbol} (API symbol: ${yahooSymbol})`);
-        const res = await fetch(url, {
+        const res = await fetchWithBackoff(url, {
           headers: {
             'User-Agent':
               'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
           },
-        });
+        }, { tag: `Yahoo Finance Recent Price (${cleanSymbol})` });
 
-        if (!res.ok) {
-          console.warn(`[Yahoo Finance] Failed to fetch most recent price for ${cleanSymbol}: HTTP ${res.status}`);
+        if (!res || !res.ok) {
+          console.log(`[Yahoo Finance] Failed to fetch most recent price for ${cleanSymbol}: HTTP ${res?.status}`);
           return null;
         }
 
@@ -501,9 +657,43 @@ export const yahooFinanceService = {
         }
         return null;
       } catch (err) {
-        console.warn(`[Yahoo Finance] Error getting most recent price for ${cleanSymbol}:`, err.message || err);
+        console.log(`[Yahoo Finance] Error getting most recent price for ${cleanSymbol}:`, err.message || err);
         return null;
       }
     });
+  },
+
+  /**
+   * Fetches a unified stock quote via Yahoo Finance 1D chart/candles.
+   * Utilizes boundary-aligned 2m LRU cache to share network calls with chart loading.
+   */
+  async fetchQuote(symbol) {
+    if (!symbol) return null;
+    const cleanSymbol = getDisplaySymbol(symbol);
+    const chart = await this.fetchHistoricalData(cleanSymbol, '1D');
+    if (!chart) return null;
+
+    const sessionStatus = getMarketSessionStatus();
+    const effectivePrice = sessionStatus.isOpen
+      ? (chart.regularMarketPrice || chart.currentPrice)
+      : (sessionStatus.isPreMarket
+          ? (chart.preMarketPrice || chart.currentPrice || chart.regularMarketPrice)
+          : (chart.postMarketPrice || chart.currentPrice || chart.regularMarketPrice));
+
+    return {
+      symbol: cleanSymbol,
+      price: effectivePrice,
+      regularMarketPrice: chart.regularMarketPrice,
+      preMarketPrice: chart.preMarketPrice,
+      postMarketPrice: chart.postMarketPrice,
+      previousClose: chart.previousClose,
+      change: chart.priceChange,
+      changePercent: chart.priceChangePercent,
+      high: chart.regularMarketDayHigh,
+      low: chart.regularMarketDayLow,
+      volume: chart.regularMarketVolume,
+      sparkline: chart.sparkline,
+      timestamp: chart.lastUpdated || Date.now(),
+    };
   },
 };

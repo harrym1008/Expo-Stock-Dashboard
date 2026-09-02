@@ -104,9 +104,10 @@ const LastUpdatedFreshness = React.memo(function LastUpdatedFreshness({ timestam
 function StockDetailModal({ visible, stock, onClose }) {
   const { theme, isDark } = useTheme();
   const {
+    quotes,
+    fetchQuote,
     fetchHistoricalChart,
     profiles,
-    fetchQuote,
     fetchProfile,
     fetchStockMetrics,
     fetchCompanyDescription,
@@ -134,12 +135,38 @@ function StockDetailModal({ visible, stock, onClose }) {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
   const cleanSymbol = stock?.symbol ? getDisplaySymbol(stock.symbol) : '';
-  const isNonStock = stock?.symbol ? isNonStockSecurity(stock.symbol) : false;
+  const isNonStock = Boolean(
+    (stock?.symbol && (isNonStockSecurity(stock.symbol) || isNonStockSecurity(cleanSymbol))) ||
+    stock?.isStock === false ||
+    stock?.isNonStock ||
+    stock?.category === 'crypto' ||
+    stock?.category === 'forex' ||
+    stock?.category === 'commodities' ||
+    stock?.category === 'indices'
+  );
   const isStock = !isNonStock && stock?.isStock !== false;
   const isStockPaperTradingAllowed = isPaperTradingEnabled && isStock;
 
+  const effectiveMarketStatus = useMemo(() => {
+    if (isNonStock) {
+      return {
+        session: 'OPEN',
+        label: 'Market Open',
+        color: '#00D084',
+        isOpen: true,
+        isPreMarket: false,
+        isAfterHours: false,
+        suffix: 'today',
+      };
+    }
+    return marketStatus;
+  }, [isNonStock, marketStatus]);
+
   const isFavorite = cleanSymbol ? isStockInAnyWatchlist(cleanSymbol) : false;
   const latestExtendedPriceRef = useRef(null);
+  const [persistentPrevClose, setPersistentPrevClose] = useState(
+    () => (typeof stock?.previousClose === 'number' && stock.previousClose > 0 ? stock.previousClose : null)
+  );
 
   useEffect(() => {
     latestExtendedPriceRef.current = null;
@@ -150,12 +177,24 @@ function StockDetailModal({ visible, stock, onClose }) {
     setIsDescExpanded(false);
     setIsInitialStockLoading(true);
     setIsTimeframeLoading(false);
+    setPersistentPrevClose(
+      typeof stock?.previousClose === 'number' && stock.previousClose > 0
+        ? stock.previousClose
+        : null
+    );
 
     if (stock?.symbol) {
       const sym = getDisplaySymbol(stock.symbol);
       setSelectedTimeframe(memoryStockTimeframes[sym] || '1D');
     }
   }, [stock?.symbol]);
+
+  // Fetch live REST quote whenever modal opens or symbol changes
+  useEffect(() => {
+    if (visible && cleanSymbol && fetchQuote) {
+      fetchQuote(cleanSymbol);
+    }
+  }, [visible, cleanSymbol, fetchQuote]);
 
   const handleSelectTimeframe = (tf) => {
     if (tf === selectedTimeframe) return;
@@ -169,8 +208,10 @@ function StockDetailModal({ visible, stock, onClose }) {
   };
 
   const handleOpenCalendar = useCallback(() => {
-    setCalendarVisible(true);
-  }, []);
+    if (!isNonStock) {
+      setCalendarVisible(true);
+    }
+  }, [isNonStock]);
 
   useEffect(() => {
     let isMounted = true;
@@ -182,8 +223,11 @@ function StockDetailModal({ visible, stock, onClose }) {
           if (isMounted) {
             if (data) {
               setChartData(data);
-              if (typeof data.postMarketPrice === 'number' && Math.abs(data.postMarketPrice - data.regularMarketPrice) > 0.000001) {
-                latestExtendedPriceRef.current = data.postMarketPrice;
+              const extCandidate = marketStatus?.isPreMarket
+                ? (data.preMarketPrice || data.postMarketPrice)
+                : (data.postMarketPrice || data.preMarketPrice);
+              if (typeof extCandidate === 'number' && extCandidate > 0 && Math.abs(extCandidate - (data.regularMarketPrice || 0)) > 0.000001) {
+                latestExtendedPriceRef.current = extCandidate;
               }
             }
             setIsInitialStockLoading(false);
@@ -206,6 +250,35 @@ function StockDetailModal({ visible, stock, onClose }) {
   }, [visible, stock?.symbol, selectedTimeframe, marketStatus.session, fetchHistoricalChart]);
 
   useEffect(() => {
+    if (typeof stock?.previousClose === 'number' && stock.previousClose > 0) {
+      setPersistentPrevClose(stock.previousClose);
+    }
+  }, [stock?.previousClose]);
+
+  useEffect(() => {
+    if (typeof chartData?.previousClose === 'number' && chartData.previousClose > 0) {
+      setPersistentPrevClose(chartData.previousClose);
+    }
+  }, [chartData?.previousClose]);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (visible && stock?.symbol && !persistentPrevClose) {
+      const sym = getDisplaySymbol(stock.symbol);
+      fetchHistoricalChart(sym, '1D')
+        .then((d1) => {
+          if (isMounted && typeof d1?.previousClose === 'number' && d1.previousClose > 0) {
+            setPersistentPrevClose(d1.previousClose);
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [visible, stock?.symbol, persistentPrevClose, fetchHistoricalChart]);
+
+  useEffect(() => {
     let isMounted = true;
     if (visible && stock?.symbol) {
       const sym = getDisplaySymbol(stock.symbol);
@@ -224,12 +297,11 @@ function StockDetailModal({ visible, stock, onClose }) {
           });
       } else {
         Promise.all([
-          fetchQuote(sym).catch(() => null),
           fetchProfile(sym).catch(() => null),
           fetchStockMetrics(sym).catch(() => null),
           fetchCompanyDescription(sym).catch(() => null),
           fetchCompanyNews(sym).catch(() => []),
-        ]).then(([quote, prof, met, desc, news]) => {
+        ]).then(([prof, met, desc, news]) => {
           if (isMounted) {
             if (met) setMetrics(met);
             if (desc) setCompanyDesc(desc);
@@ -244,7 +316,7 @@ function StockDetailModal({ visible, stock, onClose }) {
     return () => {
       isMounted = false;
     };
-  }, [visible, stock?.symbol, apiKey, marketStatus.session, fetchQuote, fetchProfile, fetchStockMetrics, fetchCompanyDescription, fetchCompanyNews]);
+  }, [visible, stock?.symbol, apiKey, marketStatus.session, fetchProfile, fetchStockMetrics, fetchCompanyDescription, fetchCompanyNews]);
 
   const isTimeframeDisabled = useMemo(() => {
     const firstTrade = chartData?.firstTradeDate || null;
@@ -268,25 +340,46 @@ function StockDetailModal({ visible, stock, onClose }) {
     }
   }, [selectedTimeframe, isTimeframeDisabled]);
 
+  const isPos = (n) => typeof n === 'number' && !isNaN(n) && n > 0;
+
   const activeDisplayedTimeframe = chartData?.timeframe || selectedTimeframe;
-  const liveWsPrice = (typeof stock?.price === 'number') ? stock.price : null;
+  const liveQuote = cleanSymbol ? (quotes[cleanSymbol] || quotes[stock?.symbol] || {}) : {};
+  const liveWsPrice = isPos(liveQuote?.price) ? liveQuote.price : (isPos(stock?.price) ? stock.price : null);
 
   if (liveWsPrice) {
     latestExtendedPriceRef.current = liveWsPrice;
   }
 
   const regularClosePrice =
-    chartData?.regularMarketPrice || stock?.regularMarketPrice || stock?.price || chartData?.currentPrice || 0;
+    (isPos(chartData?.regularMarketPrice) ? chartData.regularMarketPrice : null) ??
+    (isPos(liveQuote?.regularMarketPrice) ? liveQuote.regularMarketPrice : null) ??
+    (isPos(stock?.regularMarketPrice) ? stock.regularMarketPrice : null) ??
+    (isPos(liveQuote?.price) ? liveQuote.price : null) ??
+    (isPos(stock?.price) ? stock.price : null) ??
+    (isPos(chartData?.currentPrice) ? chartData.currentPrice : 0);
 
-  const leftPrice = marketStatus.isOpen
-    ? (liveWsPrice ?? stock?.price ?? chartData?.currentPrice ?? regularClosePrice)
+  const leftPrice = effectiveMarketStatus.isOpen
+    ? (liveWsPrice ?? (isPos(liveQuote?.price) ? liveQuote.price : null) ?? (isPos(stock?.price) ? stock.price : null) ?? (isPos(chartData?.currentPrice) ? chartData.currentPrice : null) ?? regularClosePrice)
     : regularClosePrice;
+
+  const isPreMarket = marketStatus?.isPreMarket;
+  const targetChartExtPrice = isPreMarket
+    ? (isPos(chartData?.preMarketPrice) && Math.abs(chartData.preMarketPrice - regularClosePrice) > 0.000001 ? chartData.preMarketPrice : null) ??
+      (isPos(chartData?.postMarketPrice) && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.000001 ? chartData.postMarketPrice : null)
+    : (isPos(chartData?.postMarketPrice) && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.000001 ? chartData.postMarketPrice : null) ??
+      (isPos(chartData?.preMarketPrice) && Math.abs(chartData.preMarketPrice - regularClosePrice) > 0.000001 ? chartData.preMarketPrice : null);
+
+  const targetStockExtPrice = isPreMarket
+    ? (isPos(liveQuote?.preMarketPrice) ? liveQuote.preMarketPrice : (isPos(stock?.preMarketPrice) ? stock.preMarketPrice : null)) ??
+      (isPos(liveQuote?.postMarketPrice) ? liveQuote.postMarketPrice : (isPos(stock?.postMarketPrice) ? stock.postMarketPrice : null))
+    : (isPos(liveQuote?.postMarketPrice) ? liveQuote.postMarketPrice : (isPos(stock?.postMarketPrice) ? stock.postMarketPrice : null)) ??
+      (isPos(liveQuote?.preMarketPrice) ? liveQuote.preMarketPrice : (isPos(stock?.preMarketPrice) ? stock.preMarketPrice : null));
 
   const outOfHoursPriceVal =
     liveWsPrice ??
-    latestExtendedPriceRef.current ??
-    (chartData?.postMarketPrice && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.000001 ? chartData.postMarketPrice : null) ??
-    (typeof stock?.postMarketPrice === 'number' ? stock.postMarketPrice : null) ??
+    (isPos(latestExtendedPriceRef.current) ? latestExtendedPriceRef.current : null) ??
+    targetChartExtPrice ??
+    targetStockExtPrice ??
     regularClosePrice;
 
   const curSymbol = stock?.currency !== undefined ? stock.currency : getCurrency(cleanSymbol, '$');
@@ -295,6 +388,15 @@ function StockDetailModal({ visible, stock, onClose }) {
 
   const profileData = cleanSymbol ? profiles[cleanSymbol] : null;
   const companyName = stock?.displayName || getDisplayName(cleanSymbol) || profileData?.name || stock?.name || cleanSymbol;
+
+  const chartSectionStock = useMemo(() => ({
+    ...stock,
+    symbol: cleanSymbol,
+    currency: curSymbol,
+    decimals,
+    isStock,
+    isNonStock,
+  }), [stock, cleanSymbol, curSymbol, decimals, isStock, isNonStock]);
 
   const currentStatPrice = leftPrice;
   const dayLow = chartData?.regularMarketDayLow ?? (chartData?.timeframe === '1D' ? chartData?.minPrice : null) ?? stock?.low ?? null;
@@ -305,7 +407,11 @@ function StockDetailModal({ visible, stock, onClose }) {
   const fiftyTwoHigh = metrics?.['52WeekHigh'] ?? metrics?.fiftyTwoWeekHigh ?? chartData?.fiftyTwoWeekHigh ?? null;
   const fiftyTwoRangePos = getRangePosition(currentStatPrice, fiftyTwoLow, fiftyTwoHigh);
 
-  const prevCloseVal = (chartData?.timeframe === '1D' ? chartData?.previousClose : null) ?? stock?.previousClose ?? chartData?.previousClose ?? null;
+  const prevCloseVal =
+    persistentPrevClose ??
+    (typeof chartData?.previousClose === 'number' && chartData.previousClose > 0 ? chartData.previousClose : null) ??
+    (typeof stock?.previousClose === 'number' && stock.previousClose > 0 ? stock.previousClose : null) ??
+    null;
   const prevCloseStr = prevCloseVal !== null && prevCloseVal !== undefined && !isNaN(prevCloseVal) && prevCloseVal > 0
     ? formatStatPrice(prevCloseVal, curSymbol, decimals, cleanSymbol)
     : '-';
@@ -392,9 +498,14 @@ function StockDetailModal({ visible, stock, onClose }) {
     const heldShares = pos ? Number(pos.shares) || 0 : 0;
     if (heldShares <= 0) return { hasPosition: false, heldShares: 0 };
     const avgCost = pos ? Number(pos.avgCost) || 0 : 0;
+    const totalCost = pos ? (pos.totalCost ?? heldShares * avgCost) : heldShares * avgCost;
     const currentValuationPrice = marketStatus.isOpen ? leftPrice : outOfHoursPriceVal;
     const positionTotalValue = heldShares * currentValuationPrice;
-    const posReturnPercent = avgCost > 0 ? ((currentValuationPrice - avgCost) / avgCost) * 100 : 0;
+    const gainLoss = positionTotalValue - totalCost;
+    const posReturnPercent =
+      totalCost > 0
+        ? (gainLoss / totalCost) * 100
+        : (avgCost > 0 ? ((currentValuationPrice - avgCost) / avgCost) * 100 : 0);
     return {
       hasPosition: true,
       heldShares,
@@ -404,7 +515,15 @@ function StockDetailModal({ visible, stock, onClose }) {
       isPosReturnPositive: posReturnPercent >= 0,
       posReturnColor: posReturnPercent >= 0 ? '#00D084' : '#FF4D4F',
     };
-  }, [isStockPaperTradingAllowed, cleanSymbol, activePortfolioId, getPosition, marketStatus.isOpen, leftPrice, outOfHoursPriceVal]);
+  }, [
+    isStockPaperTradingAllowed,
+    cleanSymbol,
+    activePortfolioId,
+    getPosition,
+    marketStatus.isOpen,
+    leftPrice,
+    outOfHoursPriceVal,
+  ]);
 
   if (!stock) return null;
 
@@ -499,20 +618,16 @@ function StockDetailModal({ visible, stock, onClose }) {
 
               {/* 2 & 3. Interactive Price Header & Chart Area (Isolated Scrub Rendering) */}
               <StockDetailChartSection
-                stock={{
-                  ...stock,
-                  symbol: cleanSymbol,
-                  currency: curSymbol,
-                  decimals,
-                }}
+                stock={chartSectionStock}
                 chartData={chartData}
                 liveWsPrice={liveWsPrice}
                 latestExtendedPrice={latestExtendedPriceRef.current}
-                marketStatus={marketStatus}
+                marketStatus={effectiveMarketStatus}
                 activeDisplayedTimeframe={activeDisplayedTimeframe}
                 isInitialStockLoading={isInitialStockLoading}
                 isTimeframeLoading={isTimeframeLoading}
-                onOpenCalendar={handleOpenCalendar}
+                onOpenCalendar={isNonStock ? undefined : handleOpenCalendar}
+                isNonStock={isNonStock}
               />
 
               {/* 4. Timeframe Selector Pills */}
@@ -791,10 +906,12 @@ function StockDetailModal({ visible, stock, onClose }) {
             </View>
           </SafeAreaView>
 
-          <MarketCalendarModal
-            visible={calendarVisible}
-            onClose={() => setCalendarVisible(false)}
-          />
+          {!isNonStock && (
+            <MarketCalendarModal
+              visible={calendarVisible}
+              onClose={() => setCalendarVisible(false)}
+            />
+          )}
 
           <AddToWatchlistModal
             visible={watchlistModalVisible}

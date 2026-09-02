@@ -234,7 +234,7 @@ const ScrubOverlay = React.memo(function ScrubOverlay({
   );
 });
 
-export default function StockInteractiveChart({
+function StockInteractiveChart({
   points = [],
   sparkline = [],
   timeframe = '1D',
@@ -611,3 +611,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+export default React.memo(StockInteractiveChart);
+

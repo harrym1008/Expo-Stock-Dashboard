@@ -6,47 +6,6 @@ import { persistentLruCache } from './persistentLruCache';
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
 export const finnhubRestService = {
-  async fetchQuote(symbol, apiKey) {
-    if (!symbol || !apiKey) return null;
-    const cleanSymbol = symbol.trim().toUpperCase();
-
-    return finnhubRateLimiter.schedule(async () => {
-      try {
-        console.log(`[Finnhub REST] 🌐 Fetching quote for: ${cleanSymbol}`);
-        const res = await fetch(
-          `${FINNHUB_BASE_URL}/quote?symbol=${encodeURIComponent(cleanSymbol)}&token=${encodeURIComponent(apiKey)}`
-        );
-
-        if (!res.ok) {
-          if (res.status === 429) {
-            console.warn(`[Finnhub REST] ⚠️ 429 Rate limit reached for quote: ${cleanSymbol}`);
-          }
-          return null;
-        }
-
-        const data = await res.json();
-        if (!data || (data.c === 0 && data.pc === 0)) {
-          return null;
-        }
-
-        return {
-          symbol: cleanSymbol,
-          price: data.c,
-          change: data.d,
-          changePercent: data.dp,
-          high: data.h,
-          low: data.l,
-          open: data.o,
-          previousClose: data.pc,
-          timestamp: data.t ? data.t * 1000 : Date.now(),
-        };
-      } catch (err) {
-        console.warn(`[Finnhub REST] Failed to fetch quote for ${cleanSymbol}:`, err.message || err);
-        return null;
-      }
-    });
-  },
-
   async fetchCompanyProfile(symbol, apiKey) {
     if (!symbol || !apiKey) return null;
     const cleanSymbol = symbol.trim().toUpperCase();
@@ -99,7 +58,7 @@ export const finnhubRestService = {
         await storageService.setCachedProfile(cleanSymbol, profile);
         return profile;
       } catch (err) {
-        console.warn(`[Finnhub REST] Failed to fetch profile for ${cleanSymbol}:`, err.message || err);
+        console.log(`[Finnhub REST] Failed to fetch profile for ${cleanSymbol}:`, err.message || err);
         return null;
       }
     });
@@ -129,7 +88,7 @@ export const finnhubRestService = {
             type: item.type,
           }));
       } catch (err) {
-        console.warn(`[Finnhub REST] Search error for query "${query}":`, err.message || err);
+        console.log(`[Finnhub REST] Search error for query "${query}":`, err.message || err);
         return [];
       }
     });
@@ -149,7 +108,7 @@ export const finnhubRestService = {
         const data = await res.json();
         return data;
       } catch (err) {
-        console.warn('[Finnhub REST] Failed to fetch market holidays:', err.message || err);
+        console.log('[Finnhub REST] Failed to fetch market holidays:', err.message || err);
         return null;
       }
     });
@@ -179,7 +138,7 @@ export const finnhubRestService = {
 
         if (!res.ok) {
           if (res.status === 429) {
-            console.warn(`[Finnhub REST] ⚠️ 429 Rate limit for metrics: ${cleanSymbol}`);
+            console.log(`[Finnhub REST] ⚠️ 429 Rate limit for metrics: ${cleanSymbol}`);
           }
           return null;
         }
@@ -201,7 +160,7 @@ export const finnhubRestService = {
         await persistentLruCache.setJson(cacheKey, metrics, ONE_HOUR_MS);
         return metrics;
       } catch (err) {
-        console.warn(`[Finnhub REST] Failed to fetch metrics for ${cleanSymbol}:`, err.message || err);
+        console.log(`[Finnhub REST] Failed to fetch metrics for ${cleanSymbol}:`, err.message || err);
         return null;
       }
     });
@@ -266,7 +225,7 @@ export const finnhubRestService = {
 
         return articles;
       } catch (err) {
-        console.warn(`[Finnhub REST] Failed to fetch news for ${cleanSymbol}:`, err.message || err);
+        console.log(`[Finnhub REST] Failed to fetch news for ${cleanSymbol}:`, err.message || err);
         return [];
       }
     });
@@ -296,7 +255,7 @@ export const finnhubRestService = {
 
         if (!res.ok) {
           if (res.status === 429) {
-            console.warn(`[Finnhub REST] ⚠️ 429 Rate limit reached for market news`);
+            console.log(`[Finnhub REST] ⚠️ 429 Rate limit reached for market news`);
           }
           return [];
         }
@@ -331,7 +290,7 @@ export const finnhubRestService = {
 
         return articles;
       } catch (err) {
-        console.warn('[Finnhub REST] Failed to fetch market news:', err.message || err);
+        console.log('[Finnhub REST] Failed to fetch market news:', err.message || err);
         return [];
       }
     });

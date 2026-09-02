@@ -25,7 +25,7 @@ export default function OrderExecutedModal({
 }) {
   const { theme, isDark } = useTheme();
   const { executeOrder } = usePortfolio();
-  const { injectLivePrice } = useMarketData();
+  const { injectLivePrice, fetchQuote } = useMarketData();
 
   const [isLoading, setIsLoading] = useState(true);
   const [executionResult, setExecutionResult] = useState(null);
@@ -68,6 +68,10 @@ export default function OrderExecutedModal({
             shares: orderParams.shares,
             price: fillPrice,
           });
+
+          if (fetchQuote && sym) {
+            fetchQuote(sym);
+          }
 
           if (isMounted) {
             setExecutionResult(result);

@@ -24,8 +24,8 @@ export default function SearchScreen() {
     (item) => {
       setSelectedStock(item);
       setActiveModalSymbol(item.symbol);
+      fetchQuote(item.symbol);
       if (hasValidKey) {
-        fetchQuote(item.symbol);
         fetchProfile(item.symbol);
       }
     },

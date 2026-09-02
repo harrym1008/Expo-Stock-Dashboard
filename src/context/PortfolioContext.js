@@ -27,7 +27,13 @@ export function PortfolioProvider({ children }) {
   const [portfolios, setPortfolios] = useState(defaultPortfolios);
   const [activePortfolioId, setActivePortfolioIdState] = useState('portfolio-1');
   const hasLoadedFromStorage = useRef(false);
-  const { setPortfolioSymbols } = useMarketData();
+  const {
+    setPortfolioSymbols,
+    fetchQuote,
+    fetchProfile,
+    marketStatus,
+    hasValidKey,
+  } = useMarketData();
 
   // 1. Load portfolios from AsyncStorage on mount
   useEffect(() => {
@@ -81,6 +87,37 @@ export function PortfolioProvider({ children }) {
       setPortfolioSymbols(allUniqueSymbols);
     }
   }, [allUniqueSymbols, setPortfolioSymbols]);
+
+  // 4. Auto-refresh portfolio stock quotes every 3 minutes (matching watchlists rate)
+  const [portfolioRefreshTrigger, setPortfolioRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    const THREE_MINUTES_MS = 3 * 60 * 1000;
+    const timer = setInterval(() => {
+      setPortfolioRefreshTrigger((prev) => prev + 1);
+    }, THREE_MINUTES_MS);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Download live quotes and company profiles for all portfolio positions
+  useEffect(() => {
+    if (!allUniqueSymbols || allUniqueSymbols.length === 0 || !fetchQuote) return;
+
+    for (const sym of allUniqueSymbols) {
+      fetchQuote(sym);
+      if (hasValidKey && fetchProfile) {
+        fetchProfile(sym);
+      }
+    }
+  }, [
+    allUniqueSymbols,
+    marketStatus?.session,
+    portfolioRefreshTrigger,
+    fetchQuote,
+    fetchProfile,
+    hasValidKey,
+  ]);
 
   const setActivePortfolioId = useCallback((id) => {
     setActivePortfolioIdState(id);
@@ -292,9 +329,13 @@ export function PortfolioProvider({ children }) {
         );
       });
 
+      if (fetchQuote && cleanSym) {
+        fetchQuote(cleanSym);
+      }
+
       return executionSummary;
     },
-    [activePortfolioId]
+    [activePortfolioId, fetchQuote]
   );
 
   const value = useMemo(

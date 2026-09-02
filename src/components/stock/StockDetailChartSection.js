@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import AppText from '../common/AppText';
@@ -6,7 +6,7 @@ import StockInteractiveChart, { formatCandleDate } from './StockInteractiveChart
 import { useTheme } from '../../context/ThemeContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import { layoutStyles } from '../../styles';
-import { getDecimals, getCurrency } from '../../utils/securityUtils';
+import { getDecimals, getCurrency, isNonStockSecurity } from '../../utils/securityUtils';
 
 const TIMEFRAME_SUFFIXES = {
   '1H': 'last hour',
@@ -18,6 +18,114 @@ const TIMEFRAME_SUFFIXES = {
   'ALL': 'since start',
 };
 
+const CHART_UPDATE_THROTTLE_MS = 10000;
+
+/**
+ * Throttles incoming live WebSocket price updates so that each chart updates
+ * at a maximum of once every 10 seconds, and does not update if the price has not changed.
+ */
+function useThrottledChartPrice(liveWsPrice, chartKey) {
+  const isPos = (n) => typeof n === 'number' && !isNaN(n) && n > 0;
+  const validLivePrice = isPos(liveWsPrice) ? liveWsPrice : null;
+
+  const [chartPrice, setChartPrice] = useState(validLivePrice);
+
+  const throttleRef = useRef({
+    lastUpdateTime: 0,
+    lastAppliedPrice: validLivePrice,
+    pendingPrice: null,
+    timer: null,
+    activeChartKey: chartKey,
+  });
+
+  // When chartKey (stock symbol or timeframe) changes, immediately reset and display fresh for the new chart
+  useEffect(() => {
+    if (throttleRef.current.timer) {
+      clearTimeout(throttleRef.current.timer);
+      throttleRef.current.timer = null;
+    }
+    throttleRef.current.activeChartKey = chartKey;
+    throttleRef.current.lastUpdateTime = Date.now();
+    throttleRef.current.lastAppliedPrice = validLivePrice;
+    throttleRef.current.pendingPrice = null;
+    setChartPrice(validLivePrice);
+  }, [chartKey]);
+
+  // When liveWsPrice changes
+  useEffect(() => {
+    if (!validLivePrice) return;
+
+    const state = throttleRef.current;
+
+    // Initial price assignment if not set
+    if (state.lastAppliedPrice == null) {
+      state.lastAppliedPrice = validLivePrice;
+      state.lastUpdateTime = Date.now();
+      state.pendingPrice = null;
+      setChartPrice(validLivePrice);
+      return;
+    }
+
+    // Do not update if the price has not changed
+    if (Math.abs(validLivePrice - state.lastAppliedPrice) < 0.000001) {
+      // If a pending update was waiting but current price reverted back to last applied,
+      // cancel the pending update
+      state.pendingPrice = null;
+      return;
+    }
+
+    const now = Date.now();
+    const elapsed = now - state.lastUpdateTime;
+
+    if (elapsed >= CHART_UPDATE_THROTTLE_MS) {
+      // 10+ seconds have passed: update immediately
+      if (state.timer) {
+        clearTimeout(state.timer);
+        state.timer = null;
+      }
+      state.lastUpdateTime = now;
+      state.lastAppliedPrice = validLivePrice;
+      state.pendingPrice = null;
+      setChartPrice(validLivePrice);
+    } else {
+      // Less than 10 seconds: throttle and schedule trailing update
+      state.pendingPrice = validLivePrice;
+      if (!state.timer) {
+        const remaining = CHART_UPDATE_THROTTLE_MS - elapsed;
+        state.timer = setTimeout(() => {
+          state.timer = null;
+          const target = state.pendingPrice;
+          if (
+            typeof target === 'number' &&
+            !isNaN(target) &&
+            target > 0 &&
+            Math.abs(target - state.lastAppliedPrice) >= 0.000001
+          ) {
+            state.lastUpdateTime = Date.now();
+            state.lastAppliedPrice = target;
+            state.pendingPrice = null;
+            setChartPrice(target);
+          } else {
+            state.pendingPrice = null;
+          }
+        }, remaining);
+      }
+    }
+  }, [validLivePrice]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (throttleRef.current.timer) {
+        clearTimeout(throttleRef.current.timer);
+        throttleRef.current.timer = null;
+      }
+    };
+  }, []);
+
+  return chartPrice;
+}
+
 function StockDetailChartSection({
   stock,
   chartData,
@@ -28,9 +136,19 @@ function StockDetailChartSection({
   isInitialStockLoading = false,
   isTimeframeLoading = false,
   onOpenCalendar,
+  isNonStock: isNonStockProp,
 }) {
   const { theme } = useTheme();
   const [scrubData, setScrubData] = useState(null);
+
+  const isNonStock = Boolean(
+    isNonStockProp ||
+    stock?.isNonStock ||
+    stock?.isStock === false ||
+    (stock?.symbol && isNonStockSecurity(stock.symbol))
+  );
+
+  const isMarketOpen = isNonStock ? true : Boolean(marketStatus?.isOpen);
 
   const handleScrub = useCallback((curr, prev) => {
     setScrubData(curr ? { current: curr, prev } : null);
@@ -40,11 +158,20 @@ function StockDetailChartSection({
     setScrubData(null);
   }, []);
 
-  const regularClosePrice =
-    chartData?.regularMarketPrice || stock?.regularMarketPrice || stock?.price || chartData?.currentPrice || 0;
+  const isPos = (n) => typeof n === 'number' && !isNaN(n) && n > 0;
 
-  const leftPrice = marketStatus?.isOpen
-    ? (liveWsPrice ?? stock?.price ?? chartData?.currentPrice ?? regularClosePrice)
+  const regularClosePrice =
+    (isPos(chartData?.regularMarketPrice) ? chartData.regularMarketPrice : null) ??
+    (isPos(stock?.regularMarketPrice) ? stock.regularMarketPrice : null) ??
+    (isPos(stock?.price) ? stock.price : null) ??
+    (isPos(chartData?.currentPrice) ? chartData.currentPrice : 0);
+
+  const chartKey = `${stock?.symbol || ''}_${activeDisplayedTimeframe}`;
+  const chartWsPrice = useThrottledChartPrice(liveWsPrice, chartKey);
+  const effectiveWsPrice = isPos(chartWsPrice) ? chartWsPrice : null;
+
+  const leftPrice = isMarketOpen
+    ? (effectiveWsPrice ?? (isPos(stock?.price) ? stock.price : null) ?? (isPos(chartData?.currentPrice) ? chartData.currentPrice : null) ?? regularClosePrice)
     : regularClosePrice;
 
   const curSymbol = stock?.currency !== undefined ? stock.currency : getCurrency(stock?.symbol, '$');
@@ -81,37 +208,56 @@ function StockDetailChartSection({
 
   const timeframeSuffix =
     activeDisplayedTimeframe === '1D'
-      ? marketStatus?.suffix
+      ? (isNonStock ? 'today' : marketStatus?.suffix)
       : TIMEFRAME_SUFFIXES[activeDisplayedTimeframe] || 'since start';
 
+  const isPreMarket = marketStatus?.isPreMarket;
+  const targetChartExtPrice = isPreMarket
+    ? (isPos(chartData?.preMarketPrice) && Math.abs(chartData.preMarketPrice - regularClosePrice) > 0.000001 ? chartData.preMarketPrice : null) ??
+      (isPos(chartData?.postMarketPrice) && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.000001 ? chartData.postMarketPrice : null)
+    : (isPos(chartData?.postMarketPrice) && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.000001 ? chartData.postMarketPrice : null) ??
+      (isPos(chartData?.preMarketPrice) && Math.abs(chartData.preMarketPrice - regularClosePrice) > 0.000001 ? chartData.preMarketPrice : null);
+
+  const targetStockExtPrice = isPreMarket
+    ? (isPos(stock?.preMarketPrice) ? stock.preMarketPrice : null) ??
+      (isPos(stock?.postMarketPrice) ? stock.postMarketPrice : null)
+    : (isPos(stock?.postMarketPrice) ? stock.postMarketPrice : null) ??
+      (isPos(stock?.preMarketPrice) ? stock.preMarketPrice : null);
+
   const outOfHoursPriceVal =
-    liveWsPrice ??
-    latestExtendedPrice ??
-    (chartData?.postMarketPrice && Math.abs(chartData.postMarketPrice - regularClosePrice) > 0.000001 ? chartData.postMarketPrice : null) ??
-    (typeof stock?.postMarketPrice === 'number' ? stock.postMarketPrice : null) ??
+    effectiveWsPrice ??
+    (isPos(latestExtendedPrice) ? latestExtendedPrice : null) ??
+    targetChartExtPrice ??
+    targetStockExtPrice ??
     regularClosePrice;
 
-  const outOfHoursChangeVal = outOfHoursPriceVal - regularClosePrice;
+  const outOfHoursChangeVal = isPos(outOfHoursPriceVal) && isPos(regularClosePrice)
+    ? outOfHoursPriceVal - regularClosePrice
+    : 0;
   const outOfHoursChangePercentVal =
-    regularClosePrice !== 0 ? (outOfHoursChangeVal / regularClosePrice) * 100 : 0;
+    isPos(regularClosePrice) ? (outOfHoursChangeVal / regularClosePrice) * 100 : 0;
 
   const isOutOfHoursPositive = outOfHoursChangeVal >= 0;
   const outOfHoursTrendColor = isOutOfHoursPositive ? '#00D084' : '#FF4D4F';
 
-  const afterHoursPriceStr = outOfHoursPriceVal.toLocaleString(undefined, {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
+  const afterHoursPriceStr = isPos(outOfHoursPriceVal)
+    ? outOfHoursPriceVal.toLocaleString(undefined, {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      })
+    : '-';
 
-  const afterHoursChangeStr = `${isOutOfHoursPositive ? '+' : '-'}${curSymbol}${Math.abs(
-    outOfHoursChangeVal
-  ).toLocaleString(undefined, {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  })} (${Math.abs(outOfHoursChangePercentVal).toFixed(2)}%) since close`;
+  const afterHoursChangeStr = isPos(outOfHoursPriceVal) && isPos(regularClosePrice)
+    ? `${isOutOfHoursPositive ? '+' : '-'}${curSymbol}${Math.abs(
+        outOfHoursChangeVal
+      ).toLocaleString(undefined, {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      })} (${Math.abs(outOfHoursChangePercentVal).toFixed(2)}%) since close`
+    : '-';
 
   const baseSparklineData = chartData?.sparkline || stock?.sparkline || [];
-  const activeEndPrice = marketStatus?.isOpen ? leftPrice : outOfHoursPriceVal;
+  const activeEndPrice = isMarketOpen ? leftPrice : outOfHoursPriceVal;
 
   const sparklineData = useMemo(() => {
     return typeof activeEndPrice === 'number' && baseSparklineData.length > 0
@@ -150,7 +296,7 @@ function StockDetailChartSection({
         {/* Left: Official Regular Session Price (or Scrubbed Candle Price) */}
         <View
           style={
-            marketStatus?.isOpen
+            isNonStock || isMarketOpen
               ? styles.mainPriceColOpen
               : styles.mainPriceColClosed
           }
@@ -158,8 +304,9 @@ function StockDetailChartSection({
           <AppText
             style={[
               styles.mainPriceText,
-              !marketStatus?.isOpen && !scrubData && { color: theme.textSecondary },
+              !isMarketOpen && !scrubData && { color: theme.textSecondary },
             ]}
+            adjustsFontSizeToFit={true} numberOfLines={1}
           >
             {curSymbol}
             {displayedMainPrice.toLocaleString(undefined, {
@@ -204,40 +351,42 @@ function StockDetailChartSection({
         </View>
 
         {/* Right: Extended Session or Market Open Indicator (Tap to open Market Calendar) */}
-        <TouchableOpacity
-          style={
-            marketStatus?.isOpen
-              ? styles.afterHoursColOpen
-              : styles.afterHoursColClosed
-          }
-          onPress={onOpenCalendar}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="View US Market Calendar & Holidays"
-        >
-          {marketStatus?.isOpen ? (
-            <View style={styles.marketOpenBadgeContainer}>
-              <AppText bold style={[styles.afterHoursLabel, { color: marketStatus?.color }]}>
-                {marketStatus?.label}
-              </AppText>
-            </View>
-          ) : (
-            <>
-              <AppText style={styles.afterHoursPriceText}>
-                {curSymbol}{afterHoursPriceStr}
-              </AppText>
-              <AppText
-                numberOfLines={1}
-                style={[styles.afterHoursChangeText, { color: outOfHoursTrendColor }]}
-              >
-                {afterHoursChangeStr}
-              </AppText>
-              <AppText italic bold style={[styles.afterHoursLabel, { color: marketStatus?.color }]}>
-                {marketStatus?.label}
-              </AppText>
-            </>
-          )}
-        </TouchableOpacity>
+        {!isNonStock && (
+          <TouchableOpacity
+            style={
+              marketStatus?.isOpen
+                ? styles.afterHoursColOpen
+                : styles.afterHoursColClosed
+            }
+            onPress={onOpenCalendar}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="View US Market Calendar"
+          >
+            {marketStatus?.isOpen ? (
+              <View style={styles.marketOpenBadgeContainer}>
+                <AppText bold style={[styles.afterHoursLabel, { color: marketStatus?.color }]}>
+                  {marketStatus?.label}
+                </AppText>
+              </View>
+            ) : (
+              <>
+                <AppText style={styles.afterHoursPriceText}>
+                  {curSymbol}{afterHoursPriceStr}
+                </AppText>
+                <AppText
+                  numberOfLines={1}
+                  style={[styles.afterHoursChangeText, { color: outOfHoursTrendColor }]}
+                >
+                  {afterHoursChangeStr}
+                </AppText>
+                <AppText italic bold style={[styles.afterHoursLabel, { color: marketStatus?.color }]}>
+                  {marketStatus?.label}
+                </AppText>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Interactive SVG Chart Area */}

@@ -176,15 +176,7 @@
             "displaySymbol": "SMI",
             "yahooSymbol": "^SSMI",
             "decimals": 1,
-            "currency": "CHF "
-        },
-        {
-            "finnhubSymbol": "OANDA:CHINAH_HKD",
-            "displayName": "Hang Seng China Enterprises",
-            "displaySymbol": "CHINA H",
-            "yahooSymbol": "^HSCE",
-            "decimals": 1,
-            "currency": "HK$"
+            "currency": "Fr. "
         },
         {
             "finnhubSymbol": "OANDA:CN50_USD",
@@ -236,8 +228,8 @@
         },
         {
             "finnhubSymbol": "OANDA:JP225Y_JPY",
-            "displayName": "Nikkei 225 (JPY)",
-            "displaySymbol": "JP225Y",
+            "displayName": "Nikkei 225",
+            "displaySymbol": "NK225",
             "yahooSymbol": "^N225",
             "decimals": 1,
             "currency": "¥"
@@ -257,14 +249,6 @@
             "yahooSymbol": "^AEX",
             "decimals": 1,
             "currency": "€"
-        },
-        {
-            "finnhubSymbol": "OANDA:SG30_SGD",
-            "displayName": "Straits Times Index",
-            "displaySymbol": "SG30",
-            "yahooSymbol": "^STI",
-            "decimals": 1,
-            "currency": "S$"
         },
         {
             "finnhubSymbol": "OANDA:SPX500_USD",
