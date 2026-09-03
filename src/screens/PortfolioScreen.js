@@ -369,31 +369,37 @@ export default function PortfolioScreen() {
         )}
 
         {/* Create portfolio modal */}
-        <CreatePortfolioModal
-          visible={createModalVisible}
-          initialTitle={`Portfolio ${portfolios.length + 1}`}
-          defaultCash={10000}
-          onSubmit={handleCreatePortfolioSubmit}
-          onCancel={() => setCreateModalVisible(false)}
-        />
+        {createModalVisible && (
+          <CreatePortfolioModal
+            visible={createModalVisible}
+            initialTitle={`Portfolio ${portfolios.length + 1}`}
+            defaultCash={10000}
+            onSubmit={handleCreatePortfolioSubmit}
+            onCancel={() => setCreateModalVisible(false)}
+          />
+        )}
 
         {/* Rename portfolio modal */}
-        <TextInputModal
-          visible={renameModalVisible}
-          title="Rename Portfolio"
-          placeholder="Enter portfolio name"
-          initialValue={renameInitialValue}
-          submitLabel="Save"
-          onSubmit={handleRenamePortfolioSubmit}
-          onCancel={() => setRenameModalVisible(false)}
-        />
+        {renameModalVisible && (
+          <TextInputModal
+            visible={renameModalVisible}
+            title="Rename Portfolio"
+            placeholder="Enter portfolio name"
+            initialValue={renameInitialValue}
+            submitLabel="Save"
+            onSubmit={handleRenamePortfolioSubmit}
+            onCancel={() => setRenameModalVisible(false)}
+          />
+        )}
 
         {/* Stock Detail Modal when pressing a stock position */}
-        <StockDetailModal
-          visible={Boolean(selectedStock)}
-          stock={modalStock}
-          onClose={handleCloseStockDetail}
-        />
+        {Boolean(selectedStock) && (
+          <StockDetailModal
+            visible={Boolean(selectedStock)}
+            stock={modalStock}
+            onClose={handleCloseStockDetail}
+          />
+        )}
       </View>
     </ScreenContainer>
   );

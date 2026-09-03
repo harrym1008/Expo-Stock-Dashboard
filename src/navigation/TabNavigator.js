@@ -48,7 +48,10 @@ export default function TabNavigator() {
   return (
     <Tab.Navigator
       initialRouteName="Home"
+      detachInactiveScreens={false}
       screenOptions={({ route }) => ({
+        // Freeze inactive tabs to pause background re-renders from live data
+        freezeOnBlur: true,
         // Hide per-screen headers; icons + labels come from TabIcon + tabBarLabelStyle
         headerShown: false,
         tabBarIcon: ({ focused, color }) => (

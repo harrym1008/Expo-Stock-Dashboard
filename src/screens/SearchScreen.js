@@ -58,11 +58,13 @@ export default function SearchScreen() {
         <StockSearchView onSelectStock={handleOpenStockDetail} />
 
         {/* Slide up modal for when a security is selected */}
-        <StockDetailModal
-          visible={Boolean(selectedStock)}
-          stock={modalStock}
-          onClose={handleCloseStockDetail}
-        />
+        {Boolean(selectedStock) && (
+          <StockDetailModal
+            visible={Boolean(selectedStock)}
+            stock={modalStock}
+            onClose={handleCloseStockDetail}
+          />
+        )}
       </View>
     </ScreenContainer>
   );

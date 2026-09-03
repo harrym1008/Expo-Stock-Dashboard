@@ -1,3 +1,4 @@
+import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -7,7 +8,7 @@ import AppText from '../common/AppText';
 import CompanyLogo from '../common/CompanyLogo';
 
 // Single search-result row: logo and symbol/name left, chevron right
-export default function SearchResultItem({ item, onPress }) {
+function SearchResultItem({ item, onPress }) {
   const { theme } = useTheme();
 
   // Fall back gracefully when display fields are missing
@@ -80,3 +81,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
+export default React.memo(SearchResultItem);

@@ -15,7 +15,7 @@ import StockInteractiveChart from './StockInteractiveChart';
 import OrderExecutedModal from './OrderExecutedModal';
 
 // Modal for entering a paper trade order (buy or sell) for a stock (cannot trade non-stock securities)
-export default function StockOrderModal({
+function StockOrderModalInner({
   visible,
   onClose,
   stock,
@@ -62,11 +62,7 @@ export default function StockOrderModal({
   const liveWsPrice =
     wsQuote?.isLiveWs && typeof wsQuote?.price === 'number' ? wsQuote.price : null;
   const currentPrice =
-    liveWsPrice ?? stock?.price ?? wsQuote?.price ?? null;
-  
-  if (!currentPrice) {
-    return null;
-  }
+    liveWsPrice ?? stock?.price ?? wsQuote?.price ?? 0;
 
   const initialCash = selectedPortfolioObj?.cash ?? 10000.0;
   const positionObj = getPosition(selectedPortfolioId, cleanSymbol);
@@ -206,6 +202,10 @@ export default function StockOrderModal({
     setPendingOrderParams(null);
     onClose();
   };
+
+  if (!currentPrice || currentPrice <= 0) {
+    return null;
+  }
 
   // Return the populated order modal
   return (
@@ -731,3 +731,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
+
+export default function StockOrderModal({
+  visible,
+  onClose,
+  stock,
+  mode,
+}) {
+  if (!visible) return null;
+  return (
+    <StockOrderModalInner
+      visible={visible}
+      onClose={onClose}
+      stock={stock}
+      mode={mode}
+    />
+  );
+}

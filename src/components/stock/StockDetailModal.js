@@ -86,7 +86,7 @@ const LastUpdatedFreshness = React.memo(function LastUpdatedFreshness({ timestam
 });
 
 // Full stock detail sheet: header, chart, timeframe, stats, about, news, paper trade
-function StockDetailModal({ visible, stock, onClose }) {
+function StockDetailModalInner({ visible, stock, onClose }) {
   const { theme, isDark } = useTheme();
   const {
     quotes,
@@ -928,7 +928,7 @@ function StockDetailModal({ visible, stock, onClose }) {
           </SafeAreaView>
 
           {/* Market calendar modal */}
-          {!isNonStock && (
+          {!isNonStock && calendarVisible && (
             <MarketCalendarModal
               visible={calendarVisible}
               onClose={() => setCalendarVisible(false)}
@@ -936,23 +936,25 @@ function StockDetailModal({ visible, stock, onClose }) {
           )}
 
           {/* Add to watchlist modal */}
-          <AddToWatchlistModal
-            visible={watchlistModalVisible}
-            stock={{
-              ...stock,
-              symbol: cleanSymbol,
-              displaySymbol: cleanSymbol,
-              name: companyName,
-              displayName: companyName,
-              currency: curSymbol,
-              decimals,
-              isStock,
-            }}
-            onClose={() => setWatchlistModalVisible(false)}
-          />
+          {watchlistModalVisible && (
+            <AddToWatchlistModal
+              visible={watchlistModalVisible}
+              stock={{
+                ...stock,
+                symbol: cleanSymbol,
+                displaySymbol: cleanSymbol,
+                name: companyName,
+                displayName: companyName,
+                currency: curSymbol,
+                decimals,
+                isStock,
+              }}
+              onClose={() => setWatchlistModalVisible(false)}
+            />
+          )}
 
           {/* Stock order modal */}
-          {isStockPaperTradingAllowed && (
+          {isStockPaperTradingAllowed && orderModalVisible && (
             <StockOrderModal
               visible={orderModalVisible}
               stock={{
@@ -1224,5 +1226,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
+
+function StockDetailModal({ visible, stock, onClose }) {
+  if (!visible && !stock) return null;
+  return <StockDetailModalInner visible={visible} stock={stock} onClose={onClose} />;
+}
 
 export default React.memo(StockDetailModal);

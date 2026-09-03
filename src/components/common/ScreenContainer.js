@@ -24,9 +24,13 @@ export default function ScreenContainer({
     <View style={styles.content}>
       {/* Header: title left, action buttons right */}
       <View style={[styles.header, { borderBottomColor: theme.borderSubtle }]}>
-        <AppText bold style={styles.title}>
-          {title}
-        </AppText>
+        {typeof title === 'string' ? (
+          <AppText bold style={styles.title}>
+            {title}
+          </AppText>
+        ) : (
+          title
+        )}
 
         <View style={styles.headerActions}>
           {showEditButton && (
@@ -62,10 +66,12 @@ export default function ScreenContainer({
       {/* Scrollable content area */}
       <View style={layoutStyles.flex1}>{children}</View>
 
-      <SettingsModal
-        visible={settingsVisible}
-        onClose={() => setSettingsVisible(false)}
-      />
+      {showSettingsButton && settingsVisible && (
+        <SettingsModal
+          visible={settingsVisible}
+          onClose={() => setSettingsVisible(false)}
+        />
+      )}
     </View>
   );
 

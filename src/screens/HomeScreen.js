@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DraggableFlatList from 'react-native-draggable-flatlist';
 
@@ -309,7 +309,15 @@ export default function HomeScreen() {
 
   return (
     <ScreenContainer
-      title="Home"
+      title={
+        <Image
+          source={require('../../assets/logos/TextLogo.png')}
+          style={styles.headerLogo}
+          resizeMode="contain"
+          accessibilityRole="header"
+          accessibilityLabel="EXPOStock Home"
+        />
+      }
       showSettingsButton={true}
       showEditButton={true}
       isEditMode={isEditMode}
@@ -378,29 +386,35 @@ export default function HomeScreen() {
         )}
 
         {/* Search Stock modal, shows when the plus button is pressed */}
-        <SearchStockModal
-          visible={searchStockModalVisible}
-          watchlistTitle={activeWatchlist?.title || ''}
-          onSelectStock={handleSelectStockToAdd}
-          onClose={() => setSearchStockModalVisible(false)}
-        />
+        {searchStockModalVisible && (
+          <SearchStockModal
+            visible={searchStockModalVisible}
+            watchlistTitle={activeWatchlist?.title || ''}
+            onSelectStock={handleSelectStockToAdd}
+            onClose={() => setSearchStockModalVisible(false)}
+          />
+        )}
 
         {/* Stock Detail modal */}
-        <StockDetailModal
-          visible={!!selectedStock}
-          stock={formattedSelectedStock}
-          onClose={handleCloseStockDetail}
-        />
+        {Boolean(selectedStock) && (
+          <StockDetailModal
+            visible={Boolean(selectedStock)}
+            stock={formattedSelectedStock}
+            onClose={handleCloseStockDetail}
+          />
+        )}
 
         {/* Text input when adding/renaming a watchlist */}
-        <TextInputModal
-          visible={inputModalVisible}
-          title={inputModalTitle}
-          placeholder="Enter watchlist name"
-          initialValue={inputModalInitialValue}
-          onSubmit={handleInputModalSubmit}
-          onCancel={handleInputModalCancel}
-        />
+        {inputModalVisible && (
+          <TextInputModal
+            visible={inputModalVisible}
+            title={inputModalTitle}
+            placeholder="Enter watchlist name"
+            initialValue={inputModalInitialValue}
+            onSubmit={handleInputModalSubmit}
+            onCancel={handleInputModalCancel}
+          />
+        )}
       </View>
     </ScreenContainer>
   );
@@ -437,5 +451,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#a42729',
     opacity: 0.75,
+  },
+  headerLogo: {
+    width: 116,
+    height: 31,
   },
 });

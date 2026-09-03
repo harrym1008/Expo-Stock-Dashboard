@@ -68,11 +68,11 @@ export default function StockSearchView({
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
-    }, 150);
+    }, 50);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Only search finnhub after the user has stopped typing for a second and query isnt empty
+  // Search Finnhub after the user has stopped typing for 350ms and query isn't empty
   useEffect(() => {
     const trimmedQuery = searchQuery.trim();
     let isCurrentSearch = true;
@@ -117,7 +117,7 @@ export default function StockSearchView({
 
       setRemoteResults(normalisedResults);
       setRemoteSearchStatus(normalisedResults.length > 0 ? 'success' : 'empty');
-    }, 1000);
+    }, 350);
 
     return () => {
       isCurrentSearch = false;
@@ -192,11 +192,13 @@ export default function StockSearchView({
 
   
   useEffect(() => {
+    const trimmed = debouncedQuery.trim();
+    if (!trimmed) return; // Don't fire 40 concurrent SQLite queries on initial tab mount
     const timer = setTimeout(() => {
       logoService.preloadLogos(filteredResults);
-    }, 300);
+    }, 500);
     return () => clearTimeout(timer);
-  }, [filteredResults]);
+  }, [filteredResults, debouncedQuery]);
 
   const handleClearSearch = useCallback(() => {
     setSearchQuery('');
@@ -324,11 +326,13 @@ export default function StockSearchView({
       />
 
       {/* Grouped Non-Stock Securities slide-up modal */}
-      <NonStockSecuritiesModal
-        visible={nonStockModalVisible}
-        onSelectStock={onSelectStock}
-        onClose={() => setNonStockModalVisible(false)}
-      />
+      {nonStockModalVisible && (
+        <NonStockSecuritiesModal
+          visible={nonStockModalVisible}
+          onSelectStock={onSelectStock}
+          onClose={() => setNonStockModalVisible(false)}
+        />
+      )}
     </View>
   );
 }

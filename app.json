@@ -4,17 +4,15 @@
     "slug": "Expo-Stock-Dashboard",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logos/Logo640x640.png",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#07090C",
+        "foregroundImage": "./assets/logos/Logo640x640.png"
       },
       "package": "com.hpmm1.ExpoStockDashboard"
     },
@@ -29,7 +27,7 @@
       "expo-splash-screen"
     ],
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/logos/Logo640x640.png"
     },
     "extra": {
       "expo-navigation-bar": {

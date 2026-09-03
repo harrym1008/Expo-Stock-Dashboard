@@ -32,7 +32,7 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
   const decimals = getDecimals(item?.symbol, item?.price, item?.decimals);
 
   return (
-    <Animated.View layout={LinearTransition.duration(200)}>
+    <Animated.View layout={isEditMode ? LinearTransition.duration(200) : undefined}>
       <TouchableOpacity
         style={stockItemStyles.itemContainer}
         onPress={handlePress}
@@ -60,7 +60,7 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
 
         {/* Left: Logo & Company Info */}
         <Animated.View
-          layout={LinearTransition.duration(200)}
+          layout={isEditMode ? LinearTransition.duration(200) : undefined}
           style={styles.leftSection}
         >
           <CompanyLogo
