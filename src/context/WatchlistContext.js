@@ -259,7 +259,7 @@ export function WatchlistProvider({ children }) {
     );
   }, [watchlists, activeWatchlistId]);
 
-  // Memoize the context value to avoid unnecessary re-renders
+  // Memoise the context value to avoid unnecessary re-renders
   const value = useMemo(
     () => ({
       watchlists,

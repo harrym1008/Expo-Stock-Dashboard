@@ -1,58 +1,40 @@
-// Persistent LRU cache backed by SQLite; stores JSON + resized logo data URIs
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SQLite from 'expo-sqlite';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-const MAX_CACHE_BYTES = 50 * 1024 * 1024; // 50MB hard cap on cache contents
-const CACHE_MAX_MB = MAX_CACHE_BYTES / (1024 * 1024);
-const DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30-day default expiry
-const LOGO_SIZE = 128; // logos resized down to this square for small footprint
+const MAX_CACHE_MB = 50;      // 50 MB hard cap on cache contents
+const MAX_CACHE_BYTES = MAX_CACHE_MB * 1024 * 1024;
+const DEFAULT_TTL_MS = 5 * 24 * 60 * 60 * 1000; // 5-day default expiry
+const LOGO_SIZE = 128;    // Resize logos to 128x128 pixels inside cache
 const DATABASE_NAME = 'stock_cache.db';
 
-// UTF-8 byte size of a string/value (needed to enforce the 50MB cap)
+
+// Get the true byte size of a value to be pushed into the cache
 export function getByteSize(value) {
   if (value == null) return 0;
-  const str = typeof value === 'string' ? value : JSON.stringify(value);
-  if (!str) return 0;
-
-  // Count bytes by UTF-8 code-unit width (1/2/3/4 per code point)
-  let bytes = 0;
-  const len = str.length;
-  for (let i = 0; i < len; i++) {
-    const code = str.charCodeAt(i);
-    if (code <= 0x7f) {
-      bytes += 1;
-    } else if (code <= 0x7ff) {
-      bytes += 2;
-    } else if (code >= 0xd800 && code <= 0xdbff) {
-      // High surrogate: pairs with a low surrogate => 4-byte astral char
-      bytes += 4;
-      i++;
-    } else {
-      bytes += 3;
-    }
-  }
-  return bytes;
+  
+  const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
+  return new TextEncoder().encode(stringValue).length;
 }
 
-// Singleton SQLite-backed LRU cache (evict least-recently-accessed over cap)
+
+// Singleton SQLite-backed LRU cache
 class PersistentLruCache {
   constructor() {
     this.db = null;
     this.dbPromise = null;
-    // Serializes writes so concurrent setItem() calls queue in order
     this.writePromise = Promise.resolve();
   }
 
-  // Chain an async write onto the write queue (never runs concurrently)
+  // Chain an async write onto the write queue
   enqueueWrite(operation) {
     const next = this.writePromise.then(operation, operation);
     this.writePromise = next.catch(() => {});
     return next;
   }
 
-  // Bump a key's last-accessed time (best-effort, fire-and-forget)
-  touch(key, timestamp) {
+  // Bump a key's last-accessed time
+  overwriteLastAccessed(key, timestamp) {
     if (!this.db) return;
     this.db
       .runAsync('UPDATE cache_entries SET last_accessed = ? WHERE key = ?', timestamp, key)
@@ -63,9 +45,10 @@ class PersistentLruCache {
     if (this.db) return this.db;
     if (this.dbPromise) return this.dbPromise;
 
-    // Open DB once; create table + LRU index, purge already-expired rows
+    // Load DB once
     this.dbPromise = (async () => {
       const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
+      // Create table ONLY if it doesnt exist
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS cache_entries (
           key TEXT PRIMARY KEY NOT NULL,
@@ -80,6 +63,7 @@ class PersistentLruCache {
           ON cache_entries (last_accessed);
       `);
 
+      // Clear out expired rows
       await db.runAsync(
         'DELETE FROM cache_entries WHERE created_at + ttl_ms <= ?',
         Date.now()
@@ -92,16 +76,16 @@ class PersistentLruCache {
     return this.dbPromise;
   }
 
+  // Sums cached bytes (drives the eviction logic below)
   async getTotalBytes(db) {
-    // Sum cached bytes (drives the eviction logic below)
     const row = await db.getFirstAsync(
       'SELECT COALESCE(SUM(size_bytes), 0) AS total_bytes FROM cache_entries'
     );
     return row?.total_bytes || 0;
   }
 
+  // Drop oldest entries until room exists for requiredBytes within cap
   async evictToFit(db, requiredBytes) {
-    // Drop oldest entries until room exists for requiredBytes within cap
     let totalBytes = await this.getTotalBytes(db);
     while (totalBytes + requiredBytes > MAX_CACHE_BYTES) {
       const oldest = await db.getFirstAsync(
@@ -114,21 +98,21 @@ class PersistentLruCache {
     }
   }
 
+  // Fetch and validate 
   async getItem(key, isJson = true) {
-    // Fetch + validate one entry; refresh last_accessed, purge expired/corrupt
     const db = await this.init();
     const item = await db.getFirstAsync(
       'SELECT value, created_at, ttl_ms, type FROM cache_entries WHERE key = ?',
       key
     );
-    if (!item) return null;
+    if (!item) return null;   // Not found in the cache
 
     const expectedType = isJson ? 'json' : 'logo';
-    if (item.type !== expectedType) return null;
+    if (item.type !== expectedType) return null;   // Bad type
 
     const now = Date.now();
     if (now - item.created_at > (item.ttl_ms || DEFAULT_TTL_MS)) {
-      // Expired: mark for deletion, drop it
+      // The existing entry is expired... remove from the cache and return null
       this.enqueueWrite(() => db.runAsync('DELETE FROM cache_entries WHERE key = ?', key));
       return null;
     }
@@ -136,16 +120,17 @@ class PersistentLruCache {
     if (isJson) {
       try {
         const parsed = JSON.parse(item.value);
-        this.touch(key, now); // mark most-recently-used
+        this.overwriteLastAccessed(key, now);    // Mark as recently used
         return parsed;
       } catch (err) {
-        // Corrupt JSON: purge it
+        // JSON has corrupted somehow, remove it from the cache (will just be redownloaded when needed)
         this.enqueueWrite(() => db.runAsync('DELETE FROM cache_entries WHERE key = ?', key));
         return null;
       }
     }
 
-    this.touch(key, now);
+    // Simply return logos as is
+    this.overwriteLastAccessed(key, now);
     return item.value;
   }
 
@@ -157,12 +142,13 @@ class PersistentLruCache {
       if (typeof value !== 'string') return;
 
       const byteSize = getByteSize(value);
-      if (byteSize > MAX_CACHE_BYTES) return; // oversize value: skip
+      if (byteSize > MAX_CACHE_BYTES) return;    // The object itself is too big to fit in the cache (very unlikely at 50MB)
 
-      await db.runAsync('DELETE FROM cache_entries WHERE key = ?', key);
-      await this.evictToFit(db, byteSize); // free space before insert
+      await db.runAsync('DELETE FROM cache_entries WHERE key = ?', key);    // Remove the old entry if it exists
+      await this.evictToFit(db, byteSize);          // Make free space before insert
 
       const now = Date.now();
+      // Insert into the cache table 
       await db.runAsync(
         `INSERT INTO cache_entries
           (key, value, size_bytes, last_accessed, created_at, ttl_ms, type)
@@ -178,29 +164,26 @@ class PersistentLruCache {
     });
   }
 
+  // Convenience wrappers for JSON and logo data
   async getJson(key) {
-    // JSON convenience wrapper
     return this.getItem(key, true);
   }
-
   async setJson(key, data, ttl = DEFAULT_TTL_MS) {
     // JSON convenience wrapper
     return this.setItem(key, data, ttl, true);
   }
-
   async getCachedLogo(symbol) {
-    // Pull cached logo data URI by symbol (key = logo_<SYM>)
     if (!symbol) return null;
     return this.getItem(`logo_${symbol.toUpperCase()}`, false);
   }
-
   async cacheLogoData(symbol, dataUri) {
-    // Store resized logo data URI in cache
     if (!symbol || !dataUri) return false;
     await this.setItem(`logo_${symbol.toUpperCase()}`, dataUri, DEFAULT_TTL_MS, false);
     return true;
   }
 
+
+  // Resizes an image to LOGO_SIZE (128x128) and returns a PNG b64 and URI
   async resizeAndEncodeImage(uri) {
     // Shrink logo to LOGO_SIZE and encode as PNG data URI (small footprint)
     const result = await ImageManipulator.manipulateAsync(
@@ -213,19 +196,20 @@ class PersistentLruCache {
       }
     );
 
-    return result.base64
-      ? { dataUri: `data:image/png;base64,${result.base64}`, uri: result.uri }
-      : null;
+    return result.base64 ? { dataUri: `data:image/png;base64,${result.base64}`, uri: result.uri } : null;
   }
 
+  
+  // Get company logo (either return already cached or download from the URL and resize/encode/store in cache)
   async getOrCacheImage(remoteUrl, symbol) {
-    // Fetch remote logo (download if needed), resize, cache; temp files cleaned up
     if (!remoteUrl || remoteUrl.includes('placehold.co')) return null;
 
+    // Check if its in the cache, return if it is
     const cleanSym = (symbol || '').toUpperCase();
     const existing = await this.getCachedLogo(cleanSym);
     if (existing) return existing;
 
+    // Not in cache.... will have to download the image
     let sourceUri = remoteUrl;
     let temporaryUri = null;
     let resizedUri = null;
@@ -256,8 +240,9 @@ class PersistentLruCache {
     } catch (err) {
       console.warn(`[PersistentLRU] Image download or resize failed for ${symbol}:`, err.message || err);
       return null;
+
     } finally {
-      // Best-effort temp-file cleanup (keep resized image; drop temp)
+      // Delete temporary files
       for (const uri of [temporaryUri, resizedUri]) {
         if (uri && (uri === temporaryUri || uri !== sourceUri)) {
           try {
@@ -268,8 +253,8 @@ class PersistentLruCache {
     }
   }
 
+  // Returns a summary of the cache's contents (size, max size, item count)
   async getCacheStats() {
-    // Report cache size (bytes/MB) + item count
     const db = await this.init();
     const totalBytes = await this.getTotalBytes(db);
     const row = await db.getFirstAsync('SELECT COUNT(*) AS item_count FROM cache_entries');
@@ -277,13 +262,13 @@ class PersistentLruCache {
     return {
       totalBytes,
       totalMB: (totalBytes / (1024 * 1024)).toFixed(2),
-      maxMB: CACHE_MAX_MB,
+      maxMB: MAX_CACHE_MB,
       itemCount: row?.item_count || 0,
     };
   }
 
+  // Clears the entire cache
   async clearAll() {
-    // Wipe entire cache table
     return this.enqueueWrite(async () => {
       const db = await this.init();
       await db.runAsync('DELETE FROM cache_entries');
@@ -291,4 +276,6 @@ class PersistentLruCache {
   }
 }
 
+
+// Global singleton instance of the PersistentLruCache
 export const persistentLruCache = new PersistentLruCache();

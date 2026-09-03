@@ -10,8 +10,6 @@ const STORAGE_KEYS = {
   ACTIVE_PORTFOLIO_ID: '@stock_dashboard_active_portfolio_id',
 };
 
-// 30 Days (1 Month) TTL for company profiles and logos
-const PROFILE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const storageService = {
   // Return stored API key, falling back to env var
@@ -21,22 +19,14 @@ export const storageService = {
       if (storedKey && storedKey.trim()) {
         return storedKey.trim();
       }
-      return (
-        process.env.EXPO_PUBLIC_FINNHUB_API_KEY ||
-        process.env.FINNHUB_API_KEY ||
-        'd4e6g69r01qgp2f78k70d4e6g69r01qgp2f78k7g'
-      );
+      return process.env.EXPO_PUBLIC_FINNHUB_API_KEY || null;
     } catch (e) {
       console.warn('Failed to load API key from storage:', e);
-      return (
-        process.env.EXPO_PUBLIC_FINNHUB_API_KEY ||
-        process.env.FINNHUB_API_KEY ||
-        'd4e6g69r01qgp2f78k70d4e6g69r01qgp2f78k7g'
-      );
+      return process.env.EXPO_PUBLIC_FINNHUB_API_KEY || null;
     }
   },
 
-  // Persist API key (removes entry when blank)
+  // Persist API key or removes the entry when its blank
   async setApiKey(key) {
     try {
       if (key && key.trim()) {
@@ -49,17 +39,17 @@ export const storageService = {
     }
   },
 
-  // --- 50MB Persistent LRU Cache Integration ---
-
+  
   // Fetch cached profile (JSON) from LRU cache
   async getCachedProfile(symbol) {
     if (!symbol) return null;
     return await persistentLruCache.getJson(`profile_${symbol.toUpperCase()}`);
   },
 
-  // Cache profile JSON with 30-day TTL
+  // Cache profile JSON with 7-day TTL
   async setCachedProfile(symbol, profile) {
     if (!symbol || !profile) return;
+    const PROFILE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
     await persistentLruCache.setJson(`profile_${symbol.toUpperCase()}`, profile, PROFILE_TTL_MS);
   },
 
@@ -71,8 +61,7 @@ export const storageService = {
     return await persistentLruCache.clearAll();
   },
 
-  // --- Watchlists Persistence ---
-
+  
   // Load watchlists array (null on missing/corrupt)
   async getStoredWatchlists() {
     try {
@@ -92,7 +81,7 @@ export const storageService = {
     }
   },
 
-  // --- Portfolios Persistence ---
+  
 
   // Load portfolios array (null on missing/corrupt)
   async getStoredPortfolios() {
@@ -141,7 +130,7 @@ export const storageService = {
     }
   },
 
-  // --- Per-Stock Timeframe Memory ---
+  
 
   // Load per-stock timeframe map (empty on missing/corrupt)
   async getStockTimeframes() {
@@ -165,7 +154,7 @@ export const storageService = {
     }
   },
 
-  // --- Simulated Paper Trading ---
+  
 
   // Load paper-trading flag (default false)
   async getPaperTradingEnabled() {

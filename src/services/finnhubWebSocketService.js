@@ -3,10 +3,11 @@ import { getFinnhubSymbol } from '../utils/securityUtils';
 const MAX_TOTAL_BUDGET = 50;
 const WATCHLIST_BUDGET = 45;
 const ACTIVE_VIEW_BUDGET = 5;
-const ROTATION_INTERVAL_MS = 15000; // 15 seconds
-const THROTTLE_INTERVAL_MS = 500;   // 2 Hz update rate
-const MAX_RECONNECT_ATTEMPTS = 5;
 
+const WEBSOCKET_URL = 'wss://ws.finnhub.io';
+
+
+// Manages Finnhub Websocket connection/reconnection, limited subscriptions and rotation at a 2Hz dispatch rate
 class FinnhubWebSocketManager {
   constructor() {
     this.ws = null;
@@ -31,7 +32,7 @@ class FinnhubWebSocketManager {
     this.listeners = new Set();
   }
 
-  // Update API key; reconnect when it changes
+  // Update API key and reconnect to WS upon change
   setApiKey(key) {
     const trimmed = (key || '').trim();
     if (this.apiKey !== trimmed) {
@@ -41,41 +42,44 @@ class FinnhubWebSocketManager {
     }
   }
 
-  // Register a 2Hz batch listener; returns unsubscribe fn
+  // Register a 2Hz batch listener; returns unsubscribe function
   addListener(callback) {
     this.listeners.add(callback);
     return () => this.listeners.delete(callback);
   }
 
-  // Open the WS socket (guarded by key + reconnect cap + existing connection)
+  // Open the WS socket
   connect() {
     if (!this.apiKey) {
       return;
     }
 
-    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.log('[Finnhub WS] ⏸️ Max reconnect attempts reached. Pausing WebSocket until API key or network refreshes.');
+    if (this.reconnectAttempts >= 5) {
+      console.log('[FHub WSkt] Too many reconnect attempts, pausing... check API key.');
       return;
     }
 
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      // Websocket is already open or in the process of opening
       return;
     }
 
     try {
-      console.log('[Finnhub WS] 🔌 Connecting to real-time WebSocket stream...');
-      this.ws = new WebSocket(`wss://ws.finnhub.io?token=${encodeURIComponent(this.apiKey)}`);
+      console.log('[FHub WSkt] Connecting to Finnhub WebSocket stream...');
+      this.ws = new WebSocket(`${WEBSOCKET_URL}?token=${encodeURIComponent(this.apiKey)}`);
 
       this.ws.onopen = () => {
+        // Successful connection: reset state, clear subscriptions, and sync
         this.isConnected = true;
         this.reconnectAttempts = 0;
         this.currentSocketSubscriptions.clear();
-        console.log('[Finnhub WS] ✅ Connected successfully');
+        console.log('[FHub WSkt] Successfully connected to the Finnhub websocket');
         this.syncSubscriptions();
         this.startTimers();
       };
 
       this.ws.onmessage = (event) => {
+        // Handle incoming trade messages and buffer them for 2Hz dispatch
         try {
           const message = JSON.parse(event.data);
           if (message.type === 'trade' && Array.isArray(message.data)) {
@@ -99,17 +103,18 @@ class FinnhubWebSocketManager {
       };
 
       this.ws.onerror = () => {
+        console.log('[FHub WSkt] WebSocket error occurred! ');
         // Socket errors trigger onclose automatically
       };
 
       this.ws.onclose = () => {
         this.isConnected = false;
         this.currentSocketSubscriptions.clear();
-        console.log('[Finnhub WS] 🔌 Disconnected');
+        console.log('[FHub WSkt] Disconnected from WebSocket');
         this.scheduleReconnect();
       };
     } catch (err) {
-      console.log('[Finnhub WS] Connection initialization failed:', err.message || err);
+      console.log('[FHub WSkt] Connection initialisation failed:', err.message || err);
       this.scheduleReconnect();
     }
   }
@@ -120,10 +125,11 @@ class FinnhubWebSocketManager {
     this.reconnectAttempts++;
 
     if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.log('[Finnhub WS] ⏸️ WebSocket reconnect paused (verify your Finnhub token in Settings or .env).');
+      console.log('[FHub WSkt] WebSocket reconnect paused (verify your Finnhub token in Settings or .env).');
       return;
     }
 
+    // Exponential backoff 300 ms -> 450ms -> 675ms up to 20 seconds
     const backoffDelay = Math.min(3000 * Math.pow(1.5, this.reconnectAttempts), 20000);
     this.reconnectTimer = setTimeout(() => {
       if (this.apiKey) {
@@ -132,7 +138,7 @@ class FinnhubWebSocketManager {
     }, backoffDelay);
   }
 
-  // Force a full reconnect: stop timers, close socket, reconnect
+  // Force a full reconnect... stop timers, close socket, reconnect
   reconnect() {
     this.stopTimers();
     if (this.ws) {
@@ -145,12 +151,12 @@ class FinnhubWebSocketManager {
     this.connect();
   }
 
-  // Start the 2Hz flush interval and the 15s rotation interval
+  // Start the 2Hz tick buffer flush interval and the 15s rotation interval
   startTimers() {
     if (!this.throttleTimer) {
       this.throttleTimer = setInterval(() => {
         this.flushTickBuffer();
-      }, THROTTLE_INTERVAL_MS);
+      }, 500);
     }
 
     if (!this.rotationTimer) {
@@ -158,7 +164,7 @@ class FinnhubWebSocketManager {
         if (this.allWatchlistSymbols.size > WATCHLIST_BUDGET) {
           this.rotateWatchlistSubscriptions();
         }
-      }, ROTATION_INTERVAL_MS);
+      }, 15000);
     }
   }
 
@@ -185,12 +191,12 @@ class FinnhubWebSocketManager {
       try {
         listener(updates);
       } catch (e) {
-        console.log('[Finnhub WS] Error in tick listener:', e);
+        console.log('[FHub WSkt] Error in tick listener:', e);
       }
     }
   }
 
-  // --- Subscription Management ---
+  
 
   // Replace the full watchlist symbol set and resync
   setWatchlistSymbols(symbols = []) {
@@ -198,14 +204,14 @@ class FinnhubWebSocketManager {
     this.syncSubscriptions();
   }
 
-  // Set active-view symbols (capped to ACTIVE_VIEW_BUDGET) and resync
+  // Set active-view symbols and resync
   setActiveViewSymbols(symbols = []) {
     const capped = symbols.slice(0, ACTIVE_VIEW_BUDGET).map((s) => getFinnhubSymbol(s));
     this.activeViewSymbols = new Set(capped);
     this.syncSubscriptions();
   }
 
-  // Diff desired vs current socket subscriptions and subscribe/unsubscribe to match
+  // Different desired vs current socket subscriptions... subscribe/unsubscribe to sync them
   syncSubscriptions() {
     if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
@@ -254,7 +260,7 @@ class FinnhubWebSocketManager {
 
     if (added > 0 || removed > 0) {
       console.log(
-        `[Finnhub WS] 📡 Subscriptions synced (+${added}, -${removed}) | Total active: ${this.currentSocketSubscriptions.size}/${MAX_TOTAL_BUDGET} budget`
+        `[FHub WSkt] Subscriptions synced (+${added}, -${removed}), ${this.currentSocketSubscriptions.size} subs active of ${MAX_TOTAL_BUDGET} permitted`
       );
     }
   }
@@ -286,28 +292,28 @@ class FinnhubWebSocketManager {
     }
 
     console.log(
-      `[Finnhub WS] 🔄 15s Rotation: Resubscribed ${newSubset.length} randomized stocks (${this.currentSocketSubscriptions.size}/${MAX_TOTAL_BUDGET})`
+      `[FHub WSkt] 15s subbed symbols rotation, now: ${this.currentSocketSubscriptions.size} subs active of ${MAX_TOTAL_BUDGET} permitted`
     );
   }
 
-  // Fisher-Yates shuffle, take `size` (random watchlist rotation)
+  // Fisher-Yates shuffle then slice to get a random subset
   getRandomSubset(array, size) {
     const shuffled = [...array].sort(() => 0.5 - Math.random());
     return shuffled.slice(0, size);
   }
 
-  // Send a subscribe/unsubscribe message over the live socket
+  // Send a sub/unsub message over the live socket
   sendSocketMessage(type, symbol) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(JSON.stringify({ type, symbol }));
       } catch (err) {
-        console.log(`[Finnhub WS] Failed to send ${type} for ${symbol}:`, err.message || err);
+        console.log(`[FHub WSkt] Failed to send ${type} for ${symbol}:`, err.message || err);
       }
     }
   }
 
-  // Tear down socket, timers, listeners, and buffers
+  // Destroy the socket, timers, and listeners
   destroy() {
     this.stopTimers();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
@@ -319,8 +325,9 @@ class FinnhubWebSocketManager {
     this.listeners.clear();
     this.tickBuffer.clear();
     this.currentSocketSubscriptions.clear();
-    console.log('[Finnhub WS] 🛑 Destroyed all sockets, listeners, and timers');
+    console.log('[FHub WSkt] Destroyed all sockets, listeners, and timers');
   }
 }
 
+// Global singleton instance of the FinnhubWebSocketManager
 export const finnhubWebSocketService = new FinnhubWebSocketManager();

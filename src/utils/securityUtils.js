@@ -154,7 +154,7 @@ export function getGroupedNonStockSecurities() {
   ];
   return categories.map((cat) => {
     const list = nonStockSecuritiesData[cat] || [];
-    // Re-shape entries to match the normalized security shape
+    // Re-shape entries to match the normalised security shape
     const items = list.map((sec) => ({
       ...sec,
       category: cat,

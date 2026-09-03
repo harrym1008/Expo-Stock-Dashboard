@@ -1,10 +1,16 @@
 import { persistentLruCache } from './persistentLruCache';
 
+// Finnhub static CDN base URL for stock logos (kinda naughty since it does not require an API key, but it is a public URL)
 const STATIC_LOGO_BASE = 'https://static9.finnhub.io/file/publicdatany/finnhubimage/stock_logo';
+
+
+// Placeholder image service base URL (placehold.co) for unknown/missing symbols
+const PLACEHOLD_CO_BASE = 'https://placehold.co/128x128/555/FFF.png?text=';
+
 
 class LogoService {
   constructor() {
-    this.memoryCache = new Map(); // Symbol -> data URI
+    this.memoryCache = new Map(); // Maps symbol data to URI
     this.inFlight = new Map();
     this.listeners = new Map();
   }
@@ -12,7 +18,7 @@ class LogoService {
   // Fallback placeholder image URL for unknown/missing symbols
   getPlaceholderUri(symbol) {
     const cleanSym = (symbol || 'ST').trim().toUpperCase();
-    return `https://placehold.co/128x128/555/FFF.png?text=${encodeURIComponent(cleanSym)}`;
+    return `${PLACEHOLD_CO_BASE}${encodeURIComponent(cleanSym)}`;
   }
 
   // Static Finnhub CDN URL for a symbol
@@ -58,24 +64,19 @@ class LogoService {
     }
   }
 
-  /**
-   * Prioritised Logo Retrieval:
-   * 1. If profile URL provided, attempt downloading and caching it first.
-   * 2. Check disk / RAM cache.
-   * 3. Download from standard static Finnhub CDN (https://static9.finnhub.io/.../{sym}.png).
-   * 4. If all fail/404, return placehold.co and do NOT cache it.
-   */
+  
+  // Prioritised Logo Retrieval:   profile URI > disk cache > static CDN > placeholder
   async getLogo(symbol, overrideUrl = null) {
     if (!symbol) return this.getPlaceholderUri(symbol);
     const sym = symbol.trim().toUpperCase();
     const hasProfileUrl = Boolean(overrideUrl && typeof overrideUrl === 'string' && !overrideUrl.includes('placehold.co'));
 
-    // 1. Check RAM Cache (if no fresh profile override URL supplied)
+    // First Check RAM cache
     if (!hasProfileUrl && this.memoryCache.has(sym)) {
       return this.memoryCache.get(sym);
     }
 
-    // 2. Check the persisted single-file cache (if no fresh profile override URL supplied)
+    // Check the LRU cache in persistent storage
     if (!hasProfileUrl) {
       const dataUri = await persistentLruCache.getCachedLogo(sym);
       if (dataUri) {
@@ -85,7 +86,7 @@ class LogoService {
       }
     }
 
-    // 3. Deduplicate in-flight requests
+    // Deduplicate in flight requests for the same symbol (so only one request per symbol is made at a time)
     const inFlightKey = hasProfileUrl ? `${sym}_profile` : sym;
     if (this.inFlight.has(inFlightKey)) {
       return await this.inFlight.get(inFlightKey);
@@ -95,7 +96,7 @@ class LogoService {
       try {
         // Priority 1: Profile URL if supplied
         if (hasProfileUrl) {
-          console.log(`[LogoService] 🥇 Prioritising profile logo for ${sym}: ${overrideUrl}`);
+          console.log(`[Logo Svc] Loading profile logo for ${sym}: ${overrideUrl.slice(0, 40)}...`);
           const profileDataUri = await persistentLruCache.getOrCacheImage(overrideUrl, sym);
           if (profileDataUri) {
             this.memoryCache.set(sym, profileDataUri);
@@ -106,7 +107,7 @@ class LogoService {
 
         // Priority 2: Common static Finnhub CDN URL
         const staticUrl = this.getStaticUrl(sym);
-        console.log(`[LogoService] 🥈 Checking static CDN for ${sym}: ${staticUrl}`);
+        console.log(`[Logo Svc] Checking static CDN for ${sym}: ${staticUrl.slice(0, 40)}...`);
         const staticDataUri = await persistentLruCache.getOrCacheImage(staticUrl, sym);
         if (staticDataUri) {
           this.memoryCache.set(sym, staticDataUri);
@@ -114,7 +115,7 @@ class LogoService {
           return staticDataUri;
         }
 
-        // Priority 3: Fallback to placehold.co (do NOT cache)
+        // Priority 3: Fallback to placehold.co (do not cache)
         return this.getPlaceholderUri(sym);
       } catch (err) {
         return this.getPlaceholderUri(sym);
@@ -127,14 +128,12 @@ class LogoService {
     return await promise;
   }
 
-  /**
-   * Explicitly override with fresh profile URL when fetched from Finnhub API
-   */
+  // Override the logo for a symbol with a custom profile URL
   async overrideLogo(symbol, profileUrl) {
     if (!symbol || !profileUrl || profileUrl.includes('placehold.co')) return null;
     const sym = symbol.trim().toUpperCase();
 
-    console.log(`[LogoService] 👑 Profile logo override for ${sym}: ${profileUrl}`);
+    console.log(`[Logo Svc] Profile logo override for ${sym}: ${profileUrl.slice(0, 40)}...`);
     const dataUri = await persistentLruCache.getOrCacheImage(profileUrl, sym);
     if (dataUri) {
       this.memoryCache.set(sym, dataUri);
@@ -144,7 +143,7 @@ class LogoService {
     return null;
   }
 
-  // Kick off logo fetch for a batch (skips cached/in-flight symbols)
+  // Preload an array of symbols into the cache (non-blocking and async)
   preloadLogos(symbols = []) {
     if (!Array.isArray(symbols) || symbols.length === 0) return;
     for (const item of symbols) {
@@ -158,4 +157,6 @@ class LogoService {
   }
 }
 
+
+// Global singleton instance of the LogoService
 export const logoService = new LogoService();

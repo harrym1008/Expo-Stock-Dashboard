@@ -240,7 +240,7 @@ export default function SettingsModal({ visible, onClose }) {
                   <View style={styles.keyStatusRow}>
                     <Ionicons name="close-circle" size={14} color="#FF4D4F" style={{ marginRight: 5 }} />
                     <AppText bold style={[styles.keyStatusText, { color: '#FF4D4F' }]}>
-                      {keyValidationError || 'Finnhub API key is invalid or unauthorized'}
+                      {keyValidationError || 'Finnhub API key is invalid or unauthorised'}
                     </AppText>
                   </View>
                 ) : null}

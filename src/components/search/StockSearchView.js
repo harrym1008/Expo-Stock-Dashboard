@@ -93,7 +93,7 @@ export default function StockSearchView({
 
       if (!isCurrentSearch) return;
 
-      const normalizedResults = (Array.isArray(results) ? results : [])
+      const normalisedResults = (Array.isArray(results) ? results : [])
         .filter((item) => item?.symbol)
         .map((item) => ({
           symbol: item.symbol.trim().toUpperCase(),
@@ -106,8 +106,8 @@ export default function StockSearchView({
           decimals: 2,
         }));
 
-      setRemoteResults(normalizedResults);
-      setRemoteSearchStatus(normalizedResults.length > 0 ? 'success' : 'empty');
+      setRemoteResults(normalisedResults);
+      setRemoteSearchStatus(normalisedResults.length > 0 ? 'success' : 'empty');
     }, 1000);
 
     return () => {

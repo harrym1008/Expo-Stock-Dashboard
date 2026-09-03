@@ -391,7 +391,7 @@ function StockDetailModal({ visible, stock, onClose }) {
   const profileData = cleanSymbol ? profiles[cleanSymbol] : null;
   const companyName = stock?.displayName || getDisplayName(cleanSymbol) || profileData?.name || stock?.name || cleanSymbol;
 
-  // Normalized stock object for the chart section (symbol/currency/decimals resolved)
+  // Normalised stock object for the chart section (symbol/currency/decimals resolved)
   const chartSectionStock = useMemo(() => ({
     ...stock,
     symbol: cleanSymbol,

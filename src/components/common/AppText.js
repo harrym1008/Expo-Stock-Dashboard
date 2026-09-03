@@ -27,11 +27,11 @@ export default function AppText({
     fontFamily = fonts.italic;
   }
 
-  const { fontWeight, fontStyle, ...sanitizedStyle } = flattened;
-  const textColor = color || sanitizedStyle.color || theme.textPrimary;
+  const { fontWeight, fontStyle, ...sanitisedStyle } = flattened;
+  const textColor = color || sanitisedStyle.color || theme.textPrimary;
 
   return (
-    <Text style={[{fontSize: 14}, sanitizedStyle, {color: textColor, fontFamily}]} {...props}>
+    <Text style={[{fontSise: 14}, sanitisedStyle, {color: textColor, fontFamily}]} {...props}>
       {children}
     </Text>
   );

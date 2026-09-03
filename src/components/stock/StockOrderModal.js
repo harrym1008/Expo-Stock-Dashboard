@@ -128,7 +128,7 @@ export default function StockOrderModal({
     });
   }, [quantityInput, currentPrice]);
 
-  // Sanitize numeric input, limiting decimals to the current unit mode
+  // Sanitise numeric input, limiting decimals to the current unit mode
   const handleInputChange = useCallback((text) => {
     let cleaned = text.replace(/[^0-9.]/g, '');
     const parts = cleaned.split('.');
