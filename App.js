@@ -1,4 +1,4 @@
-// App root: loads fonts, wraps everything in providers + navigation
+// App root... loads fonts, wraps everything in providers and navigation
 import React from 'react';
 import { StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler'; // needs to wrap gesture-driven UI
