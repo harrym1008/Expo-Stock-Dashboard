@@ -1,13 +1,15 @@
 import { StyleSheet } from 'react-native';
 import { spacing, borderRadius } from '../constants/theme';
 
-// Reusable layout primitives (flex/alignment) shared by many components
+
+// Primitive shared layouts
 export const layoutStyles = StyleSheet.create({
   flex1: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center' },
 });
 
-// Slide-up bottom sheet layout: dim backdrop, rounded sheet body, header/content
+
+// Consistent style for all modals
 export const modalStyles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.55)' },
   modalOverlayLight: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.45)' },
@@ -41,7 +43,7 @@ export const modalStyles = StyleSheet.create({
   },
 });
 
-// Centered dialogue card (TextInputModal, CreatePortfolioModal, alerts)
+// Centered dialogue card
 export const dialogueStyles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -88,7 +90,7 @@ export const dialogueStyles = StyleSheet.create({
   submitButtonText: { color: '#FFFFFF' },
 });
 
-// Row layout for stock list items (WatchlistItem, SearchResultItem)
+// Row layout for stock list items
 export const stockItemStyles = StyleSheet.create({
   itemContainer: {
     flexDirection: 'row',
@@ -103,7 +105,7 @@ export const stockItemStyles = StyleSheet.create({
   changeText: { fontSize: 12 },
 });
 
-// Centered empty-state layout (icon + title + subtitle)
+// Centered empty-state layout (icon, title, subtitle)
 export const emptyStateStyles = StyleSheet.create({
   container: {
     paddingVertical: spacing.xxl,
@@ -132,7 +134,7 @@ export const emptyStateStyles = StyleSheet.create({
   },
 });
 
-// News list + card layout (NewsScreen, StockDetailModal)
+// News list and card layout
 export const newsStyles = StyleSheet.create({
   newsList: { gap: spacing.sm + 2 },
   newsCard: {
