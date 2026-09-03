@@ -339,8 +339,6 @@ function StockDetailModal({ visible, stock, onClose }) {
     }
   }, [selectedTimeframe, isTimeframeDisabled]);
 
-  const isPos = (n) => typeof n === 'number' && !isNaN(n) && n > 0;
-
   // Timeframe to display and the live quote for the stock
   const activeDisplayedTimeframe = chartData?.timeframe || selectedTimeframe;
   const liveQuote = cleanSymbol ? (quotes[cleanSymbol] || quotes[stock?.symbol]) : null;

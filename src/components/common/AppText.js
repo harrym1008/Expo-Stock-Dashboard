@@ -31,7 +31,7 @@ export default function AppText({
   const textColor = color || sanitisedStyle.color || theme.textPrimary;
 
   return (
-    <Text style={[{fontSise: 14}, sanitisedStyle, {color: textColor, fontFamily}]} {...props}>
+    <Text style={[{fontSize: 14}, sanitisedStyle, {color: textColor, fontFamily}]} {...props}>
       {children}
     </Text>
   );

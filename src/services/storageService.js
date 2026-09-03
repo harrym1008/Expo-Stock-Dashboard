@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   PAPER_TRADING_ENABLED: '@stock_dashboard_paper_trading_enabled',
   PORTFOLIOS: '@stock_dashboard_portfolios',
   ACTIVE_PORTFOLIO_ID: '@stock_dashboard_active_portfolio_id',
+  THEME: '@stock_dashboard_theme',
 };
 
 
@@ -175,6 +176,27 @@ export const storageService = {
       );
     } catch (e) {
       console.warn('Failed to save paper trading setting:', e);
+    }
+  },
+
+  // --- Theme Persistence ---
+
+  // Load theme preference (default true for dark mode)
+  async getStoredTheme() {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEYS.THEME);
+      return raw !== null ? JSON.parse(raw) : true;
+    } catch (e) {
+      return true;
+    }
+  },
+
+  // Persist theme preference (boolean isDark)
+  async setStoredTheme(isDark) {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.THEME, JSON.stringify(Boolean(isDark)));
+    } catch (e) {
+      console.warn('Failed to save theme setting:', e);
     }
   },
 };

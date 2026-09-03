@@ -46,12 +46,16 @@ function AppContent() {
 
 export default function App() {
   // Load custom TangoSans font family variants on launch
-  useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     'TangoSans': require('./assets/fonts/TangoSans.ttf'),
     'TangoSans-Bold': require('./assets/fonts/TangoSans_Bold.ttf'),
     'TangoSans-Italic': require('./assets/fonts/TangoSans_Italic.ttf'),
     'TangoSans-BoldItalic': require('./assets/fonts/TangoSans_BoldItalic.ttf'),
   });
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

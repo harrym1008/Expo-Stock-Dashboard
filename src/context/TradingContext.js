@@ -1,4 +1,4 @@
-import {createContext, useContext, useState, useEffect, useCallback} from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { storageService } from '../services/storageService';
 
 // Context holding simple on/off paper trading state
@@ -26,20 +26,25 @@ export function TradingProvider({ children }) {
 
 
   // Toggle flag and persist it
-  const togglePaperTrading = useCallback(async () => {
+  const togglePaperTrading = useCallback(() => {
     setIsPaperTradingEnabledState((prev) => {
       const next = !prev;
-      storageService.setPaperTradingEnabled(next);
+      queueMicrotask(() => {
+        storageService.setPaperTradingEnabled(next);
+      });
       return next;
     });
   }, []);
 
-  const value = {
-    isPaperTradingEnabled,
-    setIsPaperTradingEnabled: setPaperTradingEnabled,
-    togglePaperTrading,
-    isLoading,
-  };
+  const value = useMemo(
+    () => ({
+      isPaperTradingEnabled,
+      setIsPaperTradingEnabled: setPaperTradingEnabled,
+      togglePaperTrading,
+      isLoading,
+    }),
+    [isPaperTradingEnabled, setPaperTradingEnabled, togglePaperTrading, isLoading]
+  );
 
   return (
     <TradingContext.Provider value={value}>

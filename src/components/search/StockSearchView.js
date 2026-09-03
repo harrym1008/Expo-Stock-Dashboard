@@ -60,8 +60,17 @@ export default function StockSearchView({
 
   const [nonStockModalVisible, setNonStockModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [remoteResults, setRemoteResults] = useState([]);
   const [remoteSearchStatus, setRemoteSearchStatus] = useState('idle');
+
+  // Debounce local search filtering slightly to keep keystrokes buttery smooth
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Only search finnhub after the user has stopped typing for a second and query isnt empty
   useEffect(() => {
@@ -118,7 +127,7 @@ export default function StockSearchView({
 
   // Filter tickers by symbol or name
   const filteredResults = useMemo(() => {
-    const trimmedQuery = searchQuery.trim();
+    const trimmedQuery = debouncedQuery.trim();
     if (!trimmedQuery) {
       return DEFAULT_TOP_TICKERS;
     }
@@ -179,11 +188,14 @@ export default function StockSearchView({
     });
 
     return results.slice(0, 40);    // Once again limit to max 40 after appending from finnhub
-  }, [searchQuery, remoteResults]);
+  }, [debouncedQuery, remoteResults]);
 
   
   useEffect(() => {
-    logoService.preloadLogos(filteredResults);
+    const timer = setTimeout(() => {
+      logoService.preloadLogos(filteredResults);
+    }, 300);
+    return () => clearTimeout(timer);
   }, [filteredResults]);
 
   const handleClearSearch = useCallback(() => {

@@ -23,6 +23,8 @@ export function PortfolioProvider({ children }) {
   const [portfolios, setPortfolios] = useState(defaultPortfolios);
   const [activePortfolioId, setActivePortfolioIdState] = useState('portfolio-1');
   const hasLoadedFromStorage = useRef(false);
+  const portfoliosRef = useRef(portfolios);
+  portfoliosRef.current = portfolios;
   // Pull market-data helpers needed to refresh portfolio quotes/profiles
   const {
     setPortfolioSymbols,
@@ -215,115 +217,115 @@ export function PortfolioProvider({ children }) {
         throw new Error('Invalid order arguments');
       }
 
+      const targetPortfolio = portfoliosRef.current.find((p) => p.id === targetId);
+      if (!targetPortfolio) {
+        throw new Error('Target portfolio not found');
+      }
+
       const orderCost = numShares * numPrice;
-      let executionSummary = null;
+      const currentCash = targetPortfolio.cash || 0;
+      const currentPositions = Array.isArray(targetPortfolio.positions)
+        ? [...targetPortfolio.positions]
+        : [];
+      const existingPosIndex = currentPositions.findIndex(
+        (pos) => pos.symbol?.toUpperCase() === cleanSym
+      );
+      const existingPos = existingPosIndex >= 0 ? currentPositions[existingPosIndex] : null;
 
-      setPortfolios((prevPortfolios) => {
-        const targetPortfolio = prevPortfolios.find((p) => p.id === targetId);
-        if (!targetPortfolio) return prevPortfolios;
+      let newCash = currentCash;
+      let newPositions = [...currentPositions];
+      let resultantPosition = null;
 
-        const currentCash = targetPortfolio.cash || 0;
-        const currentPositions = Array.isArray(targetPortfolio.positions)
-          ? [...targetPortfolio.positions]
-          : [];
-        const existingPosIndex = currentPositions.findIndex(
-          (pos) => pos.symbol?.toUpperCase() === cleanSym
-        );
-        const existingPos = existingPosIndex >= 0 ? currentPositions[existingPosIndex] : null;
-
-        let newCash = currentCash;
-        let newPositions = [...currentPositions];
-        let resultantPosition = null;
-
-        if (mode === 'BUY') {
-          // Reject... cash can't cover the trade
-          if (currentCash < orderCost) {
-            throw new Error(`Insufficient funds: Required $${orderCost.toFixed(2)}, Available $${currentCash.toFixed(2)}`);
-          }
-
-          newCash = Math.max(0, currentCash - orderCost);
-
-          if (existingPos) {
-            // Add to existing position: blend avg cost across combined shares
-            const oldShares = Number(existingPos.shares) || 0;
-            const oldAvgCost = Number(existingPos.avgCost) || 0;
-            const oldTotalCost = existingPos.totalCost ?? oldShares * oldAvgCost;
-
-            const updatedShares = oldShares + numShares;
-            const updatedTotalCost = oldTotalCost + orderCost;
-            const updatedAvgCost = updatedTotalCost / updatedShares;
-
-            resultantPosition = {
-              ...existingPos,
-              shares: Number(updatedShares.toFixed(4)),
-              avgCost: Number(updatedAvgCost.toFixed(2)),
-              totalCost: Number(updatedTotalCost.toFixed(2)),
-              name: name || existingPos.name || cleanSym,
-            };
-            newPositions[existingPosIndex] = resultantPosition;
-          } else {
-            // Open a new position at the fill price
-            resultantPosition = {
-              id: `pos-${cleanSym}-${Date.now()}`,
-              symbol: cleanSym,
-              name: name || cleanSym,
-              shares: Number(numShares.toFixed(4)),
-              avgCost: Number(numPrice.toFixed(2)),
-              totalCost: Number(orderCost.toFixed(2)),
-            };
-            newPositions.push(resultantPosition);
-          }
-        } else {
-          // SELL
-          const ownedShares = existingPos ? Number(existingPos.shares) || 0 : 0;
-          if (ownedShares < numShares && Math.abs(ownedShares - numShares) > 0.0001) {
-            // Reject... can't sell more shares than owned
-            throw new Error(`Insufficient shares: Owned ${ownedShares}, Attempted to sell ${numShares}`);
-          }
-
-          newCash = currentCash + orderCost;
-          const remainingShares = Math.max(0, ownedShares - numShares);
-
-          if (remainingShares < 0.0001) {
-            // Position fully closed: drop it from the list
-            newPositions = newPositions.filter((_, idx) => idx !== existingPosIndex);
-            resultantPosition = {
-              symbol: cleanSym,
-              name: name || existingPos?.name || cleanSym,
-              shares: 0,
-              avgCost: 0,
-              totalCost: 0,
-            };
-          } else {
-            const avgCost = Number(existingPos.avgCost) || numPrice;
-            const updatedTotalCost = remainingShares * avgCost;
-
-            resultantPosition = {
-              ...existingPos,
-              shares: Number(remainingShares.toFixed(4)),
-              avgCost: Number(avgCost.toFixed(2)),
-              totalCost: Number(updatedTotalCost.toFixed(2)),
-            };
-            newPositions[existingPosIndex] = resultantPosition;
-          }
+      if (mode === 'BUY') {
+        // Reject... cash can't cover the trade
+        if (currentCash < orderCost) {
+          throw new Error(`Insufficient funds: Required $${orderCost.toFixed(2)}, Available $${currentCash.toFixed(2)}`);
         }
 
-        // Return summary of the order ready to be shown in the order receipt modal
-        executionSummary = {
-          success: true,
-          mode,
-          symbol: cleanSym,
-          name: name || cleanSym,
-          shares: numShares,
-          fillPrice: numPrice,
-          orderCost,
-          newPosition: resultantPosition,
-          newCash,
-          portfolioId: targetId,
-          portfolioTitle: targetPortfolio.title,
-        };
+        newCash = Math.max(0, currentCash - orderCost);
 
-        return prevPortfolios.map((p) =>
+        if (existingPos) {
+          // Add to existing position: blend avg cost across combined shares
+          const oldShares = Number(existingPos.shares) || 0;
+          const oldAvgCost = Number(existingPos.avgCost) || 0;
+          const oldTotalCost = existingPos.totalCost ?? oldShares * oldAvgCost;
+
+          const updatedShares = oldShares + numShares;
+          const updatedTotalCost = oldTotalCost + orderCost;
+          const updatedAvgCost = updatedTotalCost / updatedShares;
+
+          resultantPosition = {
+            ...existingPos,
+            shares: Number(updatedShares.toFixed(4)),
+            avgCost: Number(updatedAvgCost.toFixed(2)),
+            totalCost: Number(updatedTotalCost.toFixed(2)),
+            name: name || existingPos.name || cleanSym,
+          };
+          newPositions[existingPosIndex] = resultantPosition;
+        } else {
+          // Open a new position at the fill price
+          resultantPosition = {
+            id: `pos-${cleanSym}-${Date.now()}`,
+            symbol: cleanSym,
+            name: name || cleanSym,
+            shares: Number(numShares.toFixed(4)),
+            avgCost: Number(numPrice.toFixed(2)),
+            totalCost: Number(orderCost.toFixed(2)),
+          };
+          newPositions.push(resultantPosition);
+        }
+      } else {
+        // SELL
+        const ownedShares = existingPos ? Number(existingPos.shares) || 0 : 0;
+        if (ownedShares < numShares && Math.abs(ownedShares - numShares) > 0.0001) {
+          // Reject... can't sell more shares than owned
+          throw new Error(`Insufficient shares: Owned ${ownedShares}, Attempted to sell ${numShares}`);
+        }
+
+        newCash = currentCash + orderCost;
+        const remainingShares = Math.max(0, ownedShares - numShares);
+
+        if (remainingShares < 0.0001) {
+          // Position fully closed: drop it from the list
+          newPositions = newPositions.filter((_, idx) => idx !== existingPosIndex);
+          resultantPosition = {
+            symbol: cleanSym,
+            name: name || existingPos?.name || cleanSym,
+            shares: 0,
+            avgCost: 0,
+            totalCost: 0,
+          };
+        } else {
+          const avgCost = Number(existingPos.avgCost) || numPrice;
+          const updatedTotalCost = remainingShares * avgCost;
+
+          resultantPosition = {
+            ...existingPos,
+            shares: Number(remainingShares.toFixed(4)),
+            avgCost: Number(avgCost.toFixed(2)),
+            totalCost: Number(updatedTotalCost.toFixed(2)),
+          };
+          newPositions[existingPosIndex] = resultantPosition;
+        }
+      }
+
+      // Return summary of the order ready to be shown in the order receipt modal
+      const executionSummary = {
+        success: true,
+        mode,
+        symbol: cleanSym,
+        name: name || cleanSym,
+        shares: numShares,
+        fillPrice: numPrice,
+        orderCost,
+        newPosition: resultantPosition,
+        newCash,
+        portfolioId: targetId,
+        portfolioTitle: targetPortfolio.title,
+      };
+
+      setPortfolios((prevPortfolios) =>
+        prevPortfolios.map((p) =>
           p.id === targetId
             ? {
                 ...p,
@@ -331,8 +333,8 @@ export function PortfolioProvider({ children }) {
                 positions: newPositions,
               }
             : p
-        );
-      });
+        )
+      );
 
       if (fetchQuote && cleanSym) {
         fetchQuote(cleanSym);

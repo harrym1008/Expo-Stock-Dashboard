@@ -22,9 +22,6 @@ export function getMarketSessionStatus(date = new Date()) {
     return acc;
   }, {});
 
-  const year = parseInt(parts.year, 10);
-  const month = parseInt(parts.month, 10);
-  const day = parseInt(parts.day, 10);
   const weekday = parts.weekday; // e.g., 'Mon'
   let hour = parseInt(parts.hour, 10);
   const minute = parseInt(parts.minute, 10);
@@ -32,7 +29,7 @@ export function getMarketSessionStatus(date = new Date()) {
 
   if (hour === 24) hour = 0;
 
-  const dateKey = `${year}-${month}-${day}`;
+  const dateKey = `${parts.year}-${parts.month}-${parts.day}`;
   const isWeekend = weekday === 'Sat' || weekday === 'Sun';
 
   // Total seconds since midnight, for simple numeric range compares

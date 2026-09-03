@@ -235,6 +235,7 @@ export const finnhubRestService = {
     }
 
     // Last-month date window for the news query
+    const now = new Date();
     const oneMonthAgo = new Date(now);
     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
     const fromDate = oneMonthAgo.toISOString().split('T')[0];
@@ -243,7 +244,7 @@ export const finnhubRestService = {
       try {
         console.log(`[FHub REST] Fetching news for: ${cleanSymbol} (${fromDate} forwards)`);
         const res = await fetch(
-          `${FINNHUB_BASE_URL}/company-news?symbol=${encodeURIComponent(cleanSymbol)}&from=${fromDate}&&token=${encodeURIComponent(key)}`
+          `${FINNHUB_BASE_URL}/company-news?symbol=${encodeURIComponent(cleanSymbol)}&from=${fromDate}&token=${encodeURIComponent(key)}`
         );
 
         if (!res.ok) {

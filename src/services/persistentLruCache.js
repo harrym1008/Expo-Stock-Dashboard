@@ -24,6 +24,8 @@ class PersistentLruCache {
     this.db = null;
     this.dbPromise = null;
     this.writePromise = Promise.resolve();
+    this.memoryFallback = new Map();
+    this.isMemoryFallback = false;
   }
 
   // Chain an async write onto the write queue
@@ -42,35 +44,42 @@ class PersistentLruCache {
   }
 
   async init() {
+    if (this.isMemoryFallback) return null;
     if (this.db) return this.db;
     if (this.dbPromise) return this.dbPromise;
 
     // Load DB once
     this.dbPromise = (async () => {
-      const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
-      // Create table ONLY if it doesnt exist
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS cache_entries (
-          key TEXT PRIMARY KEY NOT NULL,
-          value TEXT NOT NULL,
-          size_bytes INTEGER NOT NULL,
-          last_accessed INTEGER NOT NULL,
-          created_at INTEGER NOT NULL,
-          ttl_ms INTEGER NOT NULL,
-          type TEXT NOT NULL
+      try {
+        const db = await SQLite.openDatabaseAsync(DATABASE_NAME);
+        // Create table ONLY if it doesnt exist
+        await db.execAsync(`
+          CREATE TABLE IF NOT EXISTS cache_entries (
+            key TEXT PRIMARY KEY NOT NULL,
+            value TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL,
+            last_accessed INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            ttl_ms INTEGER NOT NULL,
+            type TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS cache_entries_lru
+            ON cache_entries (last_accessed);
+        `);
+
+        // Clear out expired rows
+        await db.runAsync(
+          'DELETE FROM cache_entries WHERE created_at + ttl_ms <= ?',
+          Date.now()
         );
-        CREATE INDEX IF NOT EXISTS cache_entries_lru
-          ON cache_entries (last_accessed);
-      `);
 
-      // Clear out expired rows
-      await db.runAsync(
-        'DELETE FROM cache_entries WHERE created_at + ttl_ms <= ?',
-        Date.now()
-      );
-
-      this.db = db;
-      return db;
+        this.db = db;
+        return db;
+      } catch (err) {
+        console.warn('[PersistentLRU] SQLite not available in this environment, using in-memory cache:', err.message || err);
+        this.isMemoryFallback = true;
+        return null;
+      }
     })();
 
     return this.dbPromise;
@@ -101,6 +110,16 @@ class PersistentLruCache {
   // Fetch and validate 
   async getItem(key, isJson = true) {
     const db = await this.init();
+    if (this.isMemoryFallback || !db) {
+      const item = this.memoryFallback.get(key);
+      if (!item) return null;
+      if (Date.now() - item.created_at > (item.ttl_ms || DEFAULT_TTL_MS)) {
+        this.memoryFallback.delete(key);
+        return null;
+      }
+      return item.value;
+    }
+
     const item = await db.getFirstAsync(
       'SELECT value, created_at, ttl_ms, type FROM cache_entries WHERE key = ?',
       key
@@ -135,6 +154,17 @@ class PersistentLruCache {
   }
 
   async setItem(key, data, ttl = DEFAULT_TTL_MS, isJson = true) {
+    if (!key || data === undefined || data === null) return;
+    const db = await this.init();
+    if (this.isMemoryFallback || !db) {
+      this.memoryFallback.set(key, {
+        value: data,
+        created_at: Date.now(),
+        ttl_ms: ttl,
+      });
+      return;
+    }
+
     // Insert/replace entry, queueing write so inserts never race
     return this.enqueueWrite(async () => {
       const db = await this.init();
@@ -256,6 +286,15 @@ class PersistentLruCache {
   // Returns a summary of the cache's contents (size, max size, item count)
   async getCacheStats() {
     const db = await this.init();
+    if (this.isMemoryFallback || !db) {
+      return {
+        totalBytes: 0,
+        totalMB: '0.00',
+        maxMB: MAX_CACHE_MB,
+        itemCount: this.memoryFallback.size,
+      };
+    }
+
     const totalBytes = await this.getTotalBytes(db);
     const row = await db.getFirstAsync('SELECT COUNT(*) AS item_count FROM cache_entries');
 
@@ -269,9 +308,13 @@ class PersistentLruCache {
 
   // Clears the entire cache
   async clearAll() {
+    if (this.isMemoryFallback || !this.db) {
+      this.memoryFallback.clear();
+      return;
+    }
     return this.enqueueWrite(async () => {
       const db = await this.init();
-      await db.runAsync('DELETE FROM cache_entries');
+      if (db) await db.runAsync('DELETE FROM cache_entries');
     });
   }
 }

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../components/common/ScreenContainer';
 import AppText from '../components/common/AppText';
 import NewsCard from '../components/common/NewsCard';

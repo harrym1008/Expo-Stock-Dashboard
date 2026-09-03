@@ -1,4 +1,5 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import { storageService } from '../services/storageService';
 
 // Dark theme palette
 export const darkTheme = {
@@ -46,14 +47,35 @@ const ThemeContext = createContext({
 export function ThemeProvider({ children }) {
   const [isDark, setIsDark] = useState(true);
 
-  const toggleTheme = () => {
-    setIsDark((prev) => !prev);
-  };
+  useEffect(() => {
+    let isMounted = true;
+    storageService.getStoredTheme().then((savedIsDark) => {
+      if (isMounted && typeof savedIsDark === 'boolean') {
+        setIsDark(savedIsDark);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setIsDark((prev) => {
+      const next = !prev;
+      storageService.setStoredTheme(next);
+      return next;
+    });
+  }, []);
 
   const theme = isDark ? darkTheme : lightTheme;
 
+  const value = useMemo(
+    () => ({ theme, isDark, toggleTheme }),
+    [theme, isDark, toggleTheme]
+  );
+
   return (
-    <ThemeContext.Provider value={{ theme, isDark, toggleTheme }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

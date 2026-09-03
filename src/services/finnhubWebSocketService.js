@@ -3,6 +3,7 @@ import { getFinnhubSymbol } from '../utils/securityUtils';
 const MAX_TOTAL_BUDGET = 50;
 const WATCHLIST_BUDGET = 45;
 const ACTIVE_VIEW_BUDGET = 5;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 const WEBSOCKET_URL = 'wss://ws.finnhub.io';
 

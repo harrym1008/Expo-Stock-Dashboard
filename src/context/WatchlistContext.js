@@ -184,17 +184,8 @@ export function WatchlistProvider({ children }) {
   );
 
   const deleteStock = useCallback((watchlistId, stockId) => {
-    setWatchlists((prev) =>
-      prev.map((wl) =>
-        wl.id === watchlistId
-          ? {
-              ...wl,
-              items: (wl.items || []).filter((item) => item.id !== stockId),
-            }
-          : wl
-      )
-    );
-  }, []);
+    removeStockFromWatchlist(watchlistId, stockId);
+  }, [removeStockFromWatchlist]);
 
   const reorderStocks = useCallback((watchlistId, reorderedItems) => {
     setWatchlists((prev) =>
