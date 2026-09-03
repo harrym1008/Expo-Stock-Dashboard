@@ -311,7 +311,7 @@ export default function PortfolioScreen() {
                 </AppText>
 
                 {positionsWithLiveMetrics.length === 0 ? (
-                  <View style={[styles.noPositionsContainer]}>
+                  <View style={styles.noPositionsContainer}>
                     <AppText style={[styles.noPositionsText, { color: theme.textSecondary }]}>
                       No open positions in this portfolio yet.
                     </AppText>

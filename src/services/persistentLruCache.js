@@ -277,7 +277,9 @@ class PersistentLruCache {
         if (uri && (uri === temporaryUri || uri !== sourceUri)) {
           try {
             await FileSystem.deleteAsync(uri, { idempotent: true });
-          } catch (e) {}
+          } catch (e) {
+            // Safe to ignore temporary file deletion failures
+          }
         }
       }
     }

@@ -59,7 +59,9 @@ class LogoService {
       callbacks.forEach((cb) => {
         try {
           cb(uri);
-        } catch (e) {}
+        } catch (e) {
+          // Ignore failing callbacks
+        }
       });
     }
   }

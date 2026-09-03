@@ -244,15 +244,17 @@ export default function HomeScreen() {
 
   // Freeze background list items while the StockDetailModal is open to prevent accidental drag/reorder
   const displayItemsRef = useRef([]);
+  const watchedQuotes = selectedStock ? null : quotes;
   const displayItems = useMemo(() => {
     if (selectedStock && displayItemsRef.current.length > 0) {
       return displayItemsRef.current;
     }
+    const currentQuotes = watchedQuotes || {};
     const items = (activeWatchlist?.items || []).map((item) => {
       const sym = item.symbol?.toUpperCase();
       return formatStockQuote(
         item,
-        quotes[sym],
+        currentQuotes[sym],
         profiles[sym],
         sparklines1D[sym],
         marketStatus
@@ -262,7 +264,7 @@ export default function HomeScreen() {
     return items;
   }, [
     activeWatchlist,
-    selectedStock ? null : quotes,
+    watchedQuotes,
     profiles,
     sparklines1D,
     marketStatus,

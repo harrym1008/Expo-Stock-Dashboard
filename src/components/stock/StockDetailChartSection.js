@@ -49,7 +49,7 @@ function useThrottledChartPrice(liveWsPrice, chartKey) {
     throttleRef.current.lastAppliedPrice = validLivePrice;
     throttleRef.current.pendingPrice = null;
     setChartPrice(validLivePrice);
-  }, [chartKey]);
+  }, [chartKey, validLivePrice]);
 
   // Upon websocket price updates
   useEffect(() => {
@@ -113,10 +113,11 @@ function useThrottledChartPrice(liveWsPrice, chartKey) {
 
   // Cleanup timer on unmount
   useEffect(() => {
+    const throttleState = throttleRef.current;
     return () => {
-      if (throttleRef.current.timer) {
-        clearTimeout(throttleRef.current.timer);
-        throttleRef.current.timer = null;
+      if (throttleState.timer) {
+        clearTimeout(throttleState.timer);
+        throttleState.timer = null;
       }
     };
   }, []);
@@ -280,18 +281,19 @@ function StockDetailChartSection({
     targetStockExtPrice ||
     regularClosePrice;
 
-  const baseSparklineData = chartData?.sparkline || stock?.sparkline || [];
   const chartActiveEndPrice = isMarketOpen ? chartLeftPrice : chartOutOfHoursPriceVal;
 
   const chartPeriodChange = chartData?.priceChange ?? stock?.change ?? (chartLeftPrice - baseComparison);
   const isChartPeriodPositive = (chartPeriodChange ?? 0) >= 0;
   const chartTimeframeTrendColor = isChartPeriodPositive ? '#00D084' : '#FF4D4F';
 
+  const rawSparkline = chartData?.sparkline || stock?.sparkline;
   const sparklineData = useMemo(() => {
-    return chartActiveEndPrice > 0 && baseSparklineData.length > 0
-      ? [...baseSparklineData.slice(0, -1), chartActiveEndPrice]
-      : baseSparklineData;
-  }, [baseSparklineData, chartActiveEndPrice]);
+    const base = rawSparkline || [];
+    return chartActiveEndPrice > 0 && base.length > 0
+      ? [...base.slice(0, -1), chartActiveEndPrice]
+      : base;
+  }, [rawSparkline, chartActiveEndPrice]);
 
   // Chart points with the live/extended price overlaying the last point
   const chartPointsWithLiveOverlay = useMemo(() => {

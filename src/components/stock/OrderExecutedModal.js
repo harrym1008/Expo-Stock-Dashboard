@@ -44,7 +44,7 @@ export default function OrderExecutedModal({
       setExecutionResult(null);
       setErrorMessage('');
 
-      async function processTrade() {
+      const processTrade = async () => {
         try {
           const sym = orderParams.symbol;
           // Download the immediate last price to use in the trade
@@ -82,7 +82,7 @@ export default function OrderExecutedModal({
             setIsLoading(false);
           }
         }
-      }
+      };
 
       processTrade();
     }
@@ -90,7 +90,7 @@ export default function OrderExecutedModal({
     return () => {
       isMounted = false;
     };
-  }, [visible, orderParams, executeOrder]);
+  }, [visible, orderParams, executeOrder, fetchQuote, injectLivePrice]);
 
   if (!visible) return null;
 

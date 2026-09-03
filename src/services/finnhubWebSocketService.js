@@ -100,7 +100,9 @@ class FinnhubWebSocketManager {
               }
             }
           }
-        } catch (e) {}
+        } catch (e) {
+          // Ignore malformed trade packets
+        }
       };
 
       this.ws.onerror = () => {
@@ -145,7 +147,9 @@ class FinnhubWebSocketManager {
     if (this.ws) {
       try {
         this.ws.close();
-      } catch (e) {}
+      } catch (e) {
+        // Socket close error can be safely ignored
+      }
       this.ws = null;
     }
     this.currentSocketSubscriptions.clear();
@@ -321,7 +325,9 @@ class FinnhubWebSocketManager {
     if (this.ws) {
       try {
         this.ws.close();
-      } catch (e) {}
+      } catch (e) {
+        // Socket close error can be safely ignored
+      }
     }
     this.listeners.clear();
     this.tickBuffer.clear();

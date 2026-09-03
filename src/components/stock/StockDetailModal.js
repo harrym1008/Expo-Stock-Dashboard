@@ -173,7 +173,7 @@ function StockDetailModalInner({ visible, stock, onClose }) {
       const sym = getDisplaySymbol(stock.symbol);
       setSelectedTimeframe(memoryStockTimeframes[sym] || '1D');
     }
-  }, [stock?.symbol]);
+  }, [stock?.symbol, stock?.previousClose]);
 
   // Fetch live REST quote whenever modal opens or symbol changes
   useEffect(() => {
@@ -183,16 +183,18 @@ function StockDetailModalInner({ visible, stock, onClose }) {
   }, [visible, cleanSymbol, fetchQuote]);
 
   // Switch timeframe, persist choice to storage (skips if unchanged)
-  const handleSelectTimeframe = (tf) => {
-    if (tf === selectedTimeframe) return;
-    setIsTimeframeLoading(true);
-    setSelectedTimeframe(tf);
-    if (stock?.symbol) {
-      const sym = getDisplaySymbol(stock.symbol);
-      memoryStockTimeframes[sym] = tf;
-      storageService.setStockTimeframe(sym, tf);
-    }
-  };
+  const handleSelectTimeframe = useCallback((tf) => {
+    setSelectedTimeframe((prevTf) => {
+      if (tf === prevTf) return prevTf;
+      setIsTimeframeLoading(true);
+      if (stock?.symbol) {
+        const sym = getDisplaySymbol(stock.symbol);
+        memoryStockTimeframes[sym] = tf;
+        storageService.setStockTimeframe(sym, tf);
+      }
+      return tf;
+    });
+  }, [stock?.symbol]);
 
   // Open the market calendar modal only for stocks
   const handleOpenCalendar = useCallback(() => {
@@ -237,7 +239,7 @@ function StockDetailModalInner({ visible, stock, onClose }) {
     return () => {
       isMounted = false;
     };
-  }, [visible, stock?.symbol, selectedTimeframe, marketStatus.session, fetchHistoricalChart]);
+  }, [visible, stock?.symbol, selectedTimeframe, marketStatus.session, marketStatus?.isPreMarket, fetchHistoricalChart]);
 
 
   // Persist the previous close price for the stock if available, to avoid flickering when switching timeframes or re-rendering
@@ -337,7 +339,7 @@ function StockDetailModalInner({ visible, stock, onClose }) {
     if (isTimeframeDisabled(selectedTimeframe)) {
       handleSelectTimeframe('1D');
     }
-  }, [selectedTimeframe, isTimeframeDisabled]);
+  }, [selectedTimeframe, isTimeframeDisabled, handleSelectTimeframe]);
 
   // Timeframe to display and the live quote for the stock
   const activeDisplayedTimeframe = chartData?.timeframe || selectedTimeframe;
