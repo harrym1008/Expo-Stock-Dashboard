@@ -155,6 +155,9 @@ function StockDetailModalInner({ visible, stock, onClose }) {
     () => (stock?.previousClose > 0 ? stock.previousClose : null)
   );
 
+  const stockRef = useRef(stock);
+  stockRef.current = stock;
+
   // Reset state when the stock symbol changes or modal opens
   useEffect(() => {
     if (!visible) return;
@@ -166,13 +169,15 @@ function StockDetailModalInner({ visible, stock, onClose }) {
     setIsDescExpanded(false);
     setIsInitialStockLoading(true);
     setIsTimeframeLoading(false);
+    const initialPrevClose = stockRef.current?.previousClose;
     setPersistentPrevClose(
-      stock?.previousClose > 0 ? stock.previousClose : null
+      initialPrevClose > 0 ? initialPrevClose : null
     );
 
     if (cleanSymbol) {
       setSelectedTimeframe(memoryStockTimeframes[cleanSymbol] || '1D');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cleanSymbol, visible]);
 
   // Fetch live REST quote whenever modal opens or symbol changes
