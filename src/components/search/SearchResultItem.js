@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -8,12 +8,20 @@ import AppText from '../common/AppText';
 import CompanyLogo from '../common/CompanyLogo';
 
 // Single search-result row: logo and symbol/name left, chevron right
-function SearchResultItem({ item, onPress }) {
+function SearchResultItem({ item, onPress, onSelectStock }) {
   const { theme } = useTheme();
 
   // Fall back gracefully when display fields are missing
   const displaySymbol = item?.displaySymbol || item?.symbol || '';
   const displayName = item?.displayName || item?.name || displaySymbol;
+
+  const handlePress = useCallback(() => {
+    if (onSelectStock) {
+      onSelectStock(item);
+    } else if (onPress) {
+      onPress(item);
+    }
+  }, [onSelectStock, onPress, item]);
 
   return (
     <TouchableOpacity
@@ -24,7 +32,7 @@ function SearchResultItem({ item, onPress }) {
           borderBottomColor: theme.borderSubtle,
         },
       ]}
-      onPress={onPress}
+      onPress={handlePress}
       activeOpacity={0.65}
       accessibilityRole="button"
       accessibilityLabel={`Select ${displaySymbol}, ${displayName}`}
@@ -60,6 +68,22 @@ function SearchResultItem({ item, onPress }) {
   );
 }
 
+function areEqual(prevProps, nextProps) {
+  if (prevProps.onSelectStock !== nextProps.onSelectStock) return false;
+  if (prevProps.onPress !== nextProps.onPress) return false;
+  const prev = prevProps.item;
+  const next = nextProps.item;
+  if (prev === next) return true;
+  if (!prev || !next) return false;
+  return (
+    prev.symbol === next.symbol &&
+    prev.displaySymbol === next.displaySymbol &&
+    prev.name === next.name &&
+    prev.displayName === next.displayName &&
+    prev.logo === next.logo
+  );
+}
+
 const styles = StyleSheet.create({
   leftSection: {
     flexDirection: 'row',
@@ -82,4 +106,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default React.memo(SearchResultItem);
+export default React.memo(SearchResultItem, areEqual);

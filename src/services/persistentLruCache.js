@@ -1,20 +1,17 @@
-import * as FileSystem from 'expo-file-system/legacy';
 import * as SQLite from 'expo-sqlite';
-import * as ImageManipulator from 'expo-image-manipulator';
 
 const MAX_CACHE_MB = 50;      // 50 MB hard cap on cache contents
 const MAX_CACHE_BYTES = MAX_CACHE_MB * 1024 * 1024;
 const DEFAULT_TTL_MS = 5 * 24 * 60 * 60 * 1000; // 5-day default expiry
-const LOGO_SIZE = 128;    // Resize logos to 128x128 pixels inside cache
 const DATABASE_NAME = 'stock_cache.db';
+const LAST_ACCESSED_THROTTLE_MS = 60 * 60 * 1000; // Throttle DB last-accessed updates to once per hour
 
 
-// Get the true byte size of a value to be pushed into the cache
+// Fast estimate of byte size without allocating large Uint8Array memory buffers
 export function getByteSize(value) {
   if (value == null) return 0;
-  
   const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
-  return new TextEncoder().encode(stringValue).length;
+  return stringValue.length;
 }
 
 
@@ -121,7 +118,7 @@ class PersistentLruCache {
     }
 
     const item = await db.getFirstAsync(
-      'SELECT value, created_at, ttl_ms, type FROM cache_entries WHERE key = ?',
+      'SELECT value, created_at, ttl_ms, type, last_accessed FROM cache_entries WHERE key = ?',
       key
     );
     if (!item) return null;   // Not found in the cache
@@ -136,20 +133,23 @@ class PersistentLruCache {
       return null;
     }
 
+    // Only update last_accessed if older than the throttle window (avoids high-frequency SQLite write contention)
+    if (now - (item.last_accessed || 0) > LAST_ACCESSED_THROTTLE_MS) {
+      this.overwriteLastAccessed(key, now);
+    }
+
     if (isJson) {
       try {
         const parsed = JSON.parse(item.value);
-        this.overwriteLastAccessed(key, now);    // Mark as recently used
         return parsed;
       } catch (err) {
-        // JSON has corrupted somehow, remove it from the cache (will just be redownloaded when needed)
+        // JSON has corrupted somehow, remove it from the cache
         this.enqueueWrite(() => db.runAsync('DELETE FROM cache_entries WHERE key = ?', key));
         return null;
       }
     }
 
-    // Simply return logos as is
-    this.overwriteLastAccessed(key, now);
+    // Return logo or raw string
     return item.value;
   }
 
@@ -172,13 +172,12 @@ class PersistentLruCache {
       if (typeof value !== 'string') return;
 
       const byteSize = getByteSize(value);
-      if (byteSize > MAX_CACHE_BYTES) return;    // The object itself is too big to fit in the cache (very unlikely at 50MB)
+      if (byteSize > MAX_CACHE_BYTES) return;
 
-      await db.runAsync('DELETE FROM cache_entries WHERE key = ?', key);    // Remove the old entry if it exists
-      await this.evictToFit(db, byteSize);          // Make free space before insert
+      await db.runAsync('DELETE FROM cache_entries WHERE key = ?', key);
+      await this.evictToFit(db, byteSize);
 
       const now = Date.now();
-      // Insert into the cache table 
       await db.runAsync(
         `INSERT INTO cache_entries
           (key, value, size_bytes, last_accessed, created_at, ttl_ms, type)
@@ -199,7 +198,6 @@ class PersistentLruCache {
     return this.getItem(key, true);
   }
   async setJson(key, data, ttl = DEFAULT_TTL_MS) {
-    // JSON convenience wrapper
     return this.setItem(key, data, ttl, true);
   }
   async getCachedLogo(symbol) {
@@ -212,77 +210,9 @@ class PersistentLruCache {
     return true;
   }
 
-
-  // Resizes an image to LOGO_SIZE (128x128) and returns a PNG b64 and URI
-  async resizeAndEncodeImage(uri) {
-    // Shrink logo to LOGO_SIZE and encode as PNG data URI (small footprint)
-    const result = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: LOGO_SIZE, height: LOGO_SIZE } }],
-      {
-        base64: true,
-        compress: 0.5,
-        format: ImageManipulator.SaveFormat.PNG,
-      }
-    );
-
-    return result.base64 ? { dataUri: `data:image/png;base64,${result.base64}`, uri: result.uri } : null;
-  }
-
-  
-  // Get company logo (either return already cached or download from the URL and resize/encode/store in cache)
-  async getOrCacheImage(remoteUrl, symbol) {
-    if (!remoteUrl || remoteUrl.includes('placehold.co')) return null;
-
-    // Check if its in the cache, return if it is
-    const cleanSym = (symbol || '').toUpperCase();
-    const existing = await this.getCachedLogo(cleanSym);
-    if (existing) return existing;
-
-    // Not in cache.... will have to download the image
-    let sourceUri = remoteUrl;
-    let temporaryUri = null;
-    let resizedUri = null;
-
-    try {
-      if (!remoteUrl.startsWith('data:image/')) {
-        // Local file: just verify it exists
-        if (remoteUrl.startsWith('file://') || remoteUrl.startsWith('/')) {
-          const info = await FileSystem.getInfoAsync(remoteUrl);
-          if (!info.exists) return null;
-        } else {
-          // Remote: download to cache dir under a symbol-derived temp name
-          const safeSym = cleanSym.replace(/[^a-zA-Z0-9_-]/g, '_');
-          const temporaryName = `logo_${safeSym.toLowerCase()}_${Date.now()}.png`;
-          temporaryUri = `${FileSystem.cacheDirectory || FileSystem.documentDirectory || ''}${temporaryName}`;
-          const downloadResult = await FileSystem.downloadAsync(remoteUrl, temporaryUri);
-          if (downloadResult.status !== 200) return null;
-          sourceUri = temporaryUri;
-        }
-      }
-
-      const resized = await this.resizeAndEncodeImage(sourceUri);
-      if (!resized) return null;
-      resizedUri = resized.uri;
-
-      await this.cacheLogoData(cleanSym, resized.dataUri);
-      return resized.dataUri;
-    } catch (err) {
-      console.warn(`[PersistentLRU] Image download or resize failed for ${symbol}:`, err.message || err);
-      return null;
-
-    } finally {
-      // Delete temporary files
-      for (const uri of [temporaryUri, resizedUri]) {
-        if (uri && (uri === temporaryUri || uri !== sourceUri)) {
-          try {
-            await FileSystem.deleteAsync(uri, { idempotent: true });
-          } catch (e) {
-            // Safe to ignore temporary file deletion failures
-          }
-        }
-      }
-    }
+  // Lightweight logo resolver stub for backward compatibility (logos are managed natively via URLs)
+  async getOrCacheImage(remoteUrl) {
+    return remoteUrl || null;
   }
 
   // Returns a summary of the cache's contents (size, max size, item count)

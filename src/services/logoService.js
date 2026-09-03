@@ -1,17 +1,13 @@
-import { persistentLruCache } from './persistentLruCache';
-
-// Finnhub static CDN base URL for stock logos (kinda naughty since it does not require an API key, but it is a public URL)
+// Finnhub static CDN base URL for stock logos (public static asset CDN)
 const STATIC_LOGO_BASE = 'https://static9.finnhub.io/file/publicdatany/finnhubimage/stock_logo';
-
 
 // Placeholder image service base URL (placehold.co) for unknown/missing symbols
 const PLACEHOLD_CO_BASE = 'https://placehold.co/128x128/555/FFF.png?text=';
 
-
 class LogoService {
   constructor() {
-    this.memoryCache = new Map(); // Maps symbol data to URI
-    this.inFlight = new Map();
+    this.memoryCache = new Map(); // Maps symbol to URI string
+    this.failedSymbols = new Set(); // Symbols that 404'd or errored on CDN
     this.listeners = new Map();
   }
 
@@ -26,10 +22,11 @@ class LogoService {
     return `${STATIC_LOGO_BASE}/${symbol.trim().toUpperCase()}.png`;
   }
 
-  // Read logo from the in-memory (RAM) cache only
+  // Read logo from in-memory cache
   getCachedLogo(symbol) {
     if (!symbol) return null;
-    return this.memoryCache.get(symbol.trim().toUpperCase()) || null;
+    const sym = symbol.trim().toUpperCase();
+    return this.memoryCache.get(sym) || null;
   }
 
   // Register a per-symbol callback; returns an unsubscribe function
@@ -51,7 +48,7 @@ class LogoService {
     };
   }
 
-  // Push a freshly-fetched logo to all subscribers for a symbol
+  // Push a freshly-fetched or overridden logo to all subscribers for a symbol
   notify(symbol, uri) {
     const sym = (symbol || '').trim().toUpperCase();
     const callbacks = this.listeners.get(sym);
@@ -66,68 +63,46 @@ class LogoService {
     }
   }
 
-  
-  // Prioritised Logo Retrieval:   profile URI > disk cache > static CDN > placeholder
-  async getLogo(symbol, overrideUrl = null) {
+  // Mark a symbol's CDN logo as missing/failed so it immediately falls back to placeholder
+  markFailed(symbol) {
+    if (!symbol) return;
+    const sym = symbol.trim().toUpperCase();
+    this.failedSymbols.add(sym);
+    const placeholder = this.getPlaceholderUri(sym);
+    this.memoryCache.set(sym, placeholder);
+    this.notify(sym, placeholder);
+  }
+
+  // Synchronously resolve best URI for a symbol (for initial state)
+  resolveLogoUri(symbol, overrideUrl = null) {
     if (!symbol) return this.getPlaceholderUri(symbol);
     const sym = symbol.trim().toUpperCase();
-    const hasProfileUrl = Boolean(overrideUrl && typeof overrideUrl === 'string' && !overrideUrl.includes('placehold.co'));
 
-    // First Check RAM cache
-    if (!hasProfileUrl && this.memoryCache.has(sym)) {
+    // Priority 1: Custom override / profile URL
+    if (overrideUrl && typeof overrideUrl === 'string' && !overrideUrl.includes('placehold.co')) {
+      return overrideUrl;
+    }
+
+    // Priority 2: Memory cache
+    if (this.memoryCache.has(sym)) {
       return this.memoryCache.get(sym);
     }
 
-    // Check the LRU cache in persistent storage
-    if (!hasProfileUrl) {
-      const dataUri = await persistentLruCache.getCachedLogo(sym);
-      if (dataUri) {
-        this.memoryCache.set(sym, dataUri);
-        this.notify(sym, dataUri);
-        return dataUri;
-      }
+    // Priority 3: If previously failed, return placeholder
+    if (this.failedSymbols.has(sym)) {
+      return this.getPlaceholderUri(sym);
     }
 
-    // Deduplicate in flight requests for the same symbol (so only one request per symbol is made at a time)
-    const inFlightKey = hasProfileUrl ? `${sym}_profile` : sym;
-    if (this.inFlight.has(inFlightKey)) {
-      return await this.inFlight.get(inFlightKey);
-    }
+    // Priority 4: Static CDN URL (React Native Image will natively download and cache)
+    const staticUrl = this.getStaticUrl(sym);
+    this.memoryCache.set(sym, staticUrl);
+    return staticUrl;
+  }
 
-    const promise = (async () => {
-      try {
-        // Priority 1: Profile URL if supplied
-        if (hasProfileUrl) {
-          console.log(`[Logo Svc] Loading profile logo for ${sym}: ${overrideUrl.slice(0, 40)}...`);
-          const profileDataUri = await persistentLruCache.getOrCacheImage(overrideUrl, sym);
-          if (profileDataUri) {
-            this.memoryCache.set(sym, profileDataUri);
-            this.notify(sym, profileDataUri);
-            return profileDataUri;
-          }
-        }
-
-        // Priority 2: Common static Finnhub CDN URL
-        const staticUrl = this.getStaticUrl(sym);
-        console.log(`[Logo Svc] Checking static CDN for ${sym}: ${staticUrl.slice(0, 40)}...`);
-        const staticDataUri = await persistentLruCache.getOrCacheImage(staticUrl, sym);
-        if (staticDataUri) {
-          this.memoryCache.set(sym, staticDataUri);
-          this.notify(sym, staticDataUri);
-          return staticDataUri;
-        }
-
-        // Priority 3: Fallback to placehold.co (do not cache)
-        return this.getPlaceholderUri(sym);
-      } catch (err) {
-        return this.getPlaceholderUri(sym);
-      } finally {
-        this.inFlight.delete(inFlightKey);
-      }
-    })();
-
-    this.inFlight.set(inFlightKey, promise);
-    return await promise;
+  // Prioritised Logo Retrieval: returns Promise for backward compatibility
+  async getLogo(symbol, overrideUrl = null) {
+    const uri = this.resolveLogoUri(symbol, overrideUrl);
+    return uri;
   }
 
   // Override the logo for a symbol with a custom profile URL
@@ -135,30 +110,22 @@ class LogoService {
     if (!symbol || !profileUrl || profileUrl.includes('placehold.co')) return null;
     const sym = symbol.trim().toUpperCase();
 
-    console.log(`[Logo Svc] Profile logo override for ${sym}: ${profileUrl.slice(0, 40)}...`);
-    const dataUri = await persistentLruCache.getOrCacheImage(profileUrl, sym);
-    if (dataUri) {
-      this.memoryCache.set(sym, dataUri);
-      this.notify(sym, dataUri);
-      return dataUri;
-    }
-    return null;
+    this.memoryCache.set(sym, profileUrl);
+    this.failedSymbols.delete(sym);
+    this.notify(sym, profileUrl);
+    return profileUrl;
   }
 
-  // Preload an array of symbols into the cache (non-blocking and async)
+  // Preload logos (delegated to native Image caching where helpful, non-blocking)
   preloadLogos(symbols = []) {
     if (!Array.isArray(symbols) || symbols.length === 0) return;
     for (const item of symbols) {
       const sym = typeof item === 'string' ? item : item?.symbol;
       if (!sym) continue;
-      const upper = sym.trim().toUpperCase();
-      if (!this.memoryCache.has(upper) && !this.inFlight.has(upper)) {
-        this.getLogo(upper);
-      }
+      this.resolveLogoUri(sym);
     }
   }
 }
-
 
 // Global singleton instance of the LogoService
 export const logoService = new LogoService();

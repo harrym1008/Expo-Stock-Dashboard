@@ -1,52 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import { View, StyleSheet, Image } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { borderRadius } from '../../constants/theme';
 import { logoService } from '../../services/logoService';
 
-// Just a rounded logo image which gets its URI from the logo service 
-export default function CompanyLogo({
+// A rounded logo image component with direct URL resolution and native image caching
+function CompanyLogo({
   symbol,
   size = 32,
   style,
   logoUri: customLogoUri = null,
 }) {
   const { theme } = useTheme();
-  // Seed the image URI from custom prop, cache, or placeholder
-  const [imageUri, setImageUri] = useState(() => {
-    if (customLogoUri) return customLogoUri;
-    return (
-      logoService.getCachedLogo(symbol) ||
-      logoService.getPlaceholderUri(symbol)
-    );
-  });
 
+  // Instantly resolve URI from custom prop, memory cache, or static CDN
+  const [imageUri, setImageUri] = useState(() =>
+    logoService.resolveLogoUri(symbol, customLogoUri)
+  );
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     if (!symbol) return;
     setHasError(false);
 
-    // 1. Initial cached check
-    const cached = logoService.getCachedLogo(symbol);
-    if (cached) {
-      setImageUri(cached);
-    } else if (customLogoUri) {
-      setImageUri(customLogoUri);
-    }
+    // Initial resolution
+    const resolved = logoService.resolveLogoUri(symbol, customLogoUri);
+    setImageUri(resolved);
 
-    // 2. Subscribe to async cache/download resolution
+    // Listen for custom overrides or fallback notifications
     const unsubscribe = logoService.subscribe(symbol, (newUri) => {
       if (newUri) {
         setImageUri(newUri);
-        setHasError(false);
-      }
-    });
-
-    // 3. Trigger download & caching from static CDN or custom URL
-    logoService.getLogo(symbol, customLogoUri).then((resolvedUri) => {
-      if (resolvedUri) {
-        setImageUri(resolvedUri);
       }
     });
 
@@ -55,7 +39,13 @@ export default function CompanyLogo({
     };
   }, [symbol, customLogoUri]);
 
-  // Use placeholder if errored or no URI yet
+  const handleError = useCallback(() => {
+    setHasError(true);
+    if (symbol) {
+      logoService.markFailed(symbol);
+    }
+  }, [symbol]);
+
   const placeholder = logoService.getPlaceholderUri(symbol);
   const displayUri = hasError || !imageUri ? placeholder : imageUri;
 
@@ -76,7 +66,7 @@ export default function CompanyLogo({
         source={{ uri: displayUri }}
         style={styles.image}
         resizeMode="cover"
-        onError={() => setHasError(true)}
+        onError={handleError}
       />
     </View>
   );
@@ -93,3 +83,5 @@ const styles = StyleSheet.create({
     height: '100%',
   },
 });
+
+export default memo(CompanyLogo);

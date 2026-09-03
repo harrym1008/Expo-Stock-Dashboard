@@ -1,29 +1,34 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, Keyboard, ActivityIndicator} from 'react-native';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import { View, StyleSheet, FlatList, TextInput, TouchableOpacity, Keyboard, ActivityIndicator, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AppText from '../common/AppText';
 import SearchResultItem from './SearchResultItem';
 import NonStockSecuritiesModal from './NonStockSecuritiesModal';
 import searchTickersData from '../../constants/searchTickers.json';
 import { getAllNonStockSecurities } from '../../utils/securityUtils';
-import { logoService } from '../../services/logoService';
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
 import { finnhubRestService } from '../../services/finnhubRestService';
 import { spacing, borderRadius, fonts } from '../../constants/theme';
 import { layoutStyles, emptyStateStyles } from '../../styles';
 
-// load all locally stored stock tickers from the JSON file
-const ALL_STOCK_TICKERS = Object.entries(searchTickersData).map(([symbol, item]) => ({
-  symbol: symbol.toUpperCase(),
-  displaySymbol: symbol.toUpperCase(),
-  name: item?.name || symbol,
-  displayName: item?.name || symbol,
-  marketCap: typeof item?.marketCap === 'number' ? item.marketCap : 0,
-  isStock: true,
-  decimals: 2,
-  currency: '$',
-}));
+// Load all locally stored stock tickers from the JSON file
+const ALL_STOCK_TICKERS = Object.entries(searchTickersData).map(([symbol, item]) => {
+  const sym = symbol.toUpperCase();
+  const name = item?.name || symbol;
+  return {
+    symbol: sym,
+    displaySymbol: sym,
+    name,
+    displayName: name,
+    symLower: sym.toLowerCase(),
+    nameLower: name.toLowerCase(),
+    marketCap: typeof item?.marketCap === 'number' ? item.marketCap : 0,
+    isStock: true,
+    decimals: 2,
+    currency: '$',
+  };
+});
 
 // Load all non-security tickers
 const ALL_NON_STOCK_TICKERS = getAllNonStockSecurities().map((item) => ({
@@ -31,6 +36,8 @@ const ALL_NON_STOCK_TICKERS = getAllNonStockSecurities().map((item) => ({
   displaySymbol: item.displaySymbol,
   name: item.displayName,
   displayName: item.displayName,
+  symLower: item.displaySymbol.toLowerCase(),
+  nameLower: item.displayName.toLowerCase(),
   marketCap: 0,
   isStock: false,
   category: item.category,
@@ -41,7 +48,7 @@ const ALL_NON_STOCK_TICKERS = getAllNonStockSecurities().map((item) => ({
 }));
 
 // Merge all into one list for local search (prioritise non-stock securities first, then stocks)
-const ALL_TICKERS = [...ALL_STOCK_TICKERS, ...ALL_NON_STOCK_TICKERS];
+const ALL_TICKERS = [...ALL_NON_STOCK_TICKERS, ...ALL_STOCK_TICKERS];
 
 // By default show the top 40 stocks by market cap when search bar is empty (non securities not included)
 const DEFAULT_TOP_TICKERS = [...ALL_STOCK_TICKERS]
@@ -49,14 +56,14 @@ const DEFAULT_TOP_TICKERS = [...ALL_STOCK_TICKERS]
   .slice(0, 40);
 
 // Search screen using the local list of tickers and also using Finnhub for a further more detailed search
-export default function StockSearchView({
+function StockSearchView({
   onSelectStock,
   autoFocus = false,
   placeholder = 'Search by ticker, security or name...',
   containerStyle,
 }) {
   const { theme } = useTheme();
-  const { profiles, apiKey } = useMarketData();
+  const { apiKey } = useMarketData();
 
   const [nonStockModalVisible, setNonStockModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -104,16 +111,22 @@ export default function StockSearchView({
 
       const normalisedResults = (Array.isArray(results) ? results : [])
         .filter((item) => item?.symbol)
-        .map((item) => ({
-          symbol: item.symbol.trim().toUpperCase(),
-          displaySymbol: item.displaySymbol || item.symbol.trim().toUpperCase(),
-          name: item.name || item.displaySymbol || item.symbol,
-          displayName: item.name || item.displaySymbol || item.symbol,
-          marketCap: 0,
-          isStock: true,
-          currency: '$',
-          decimals: 2,
-        }));
+        .map((item) => {
+          const sym = item.symbol.trim().toUpperCase();
+          const name = item.name || item.displaySymbol || item.symbol;
+          return {
+            symbol: sym,
+            displaySymbol: item.displaySymbol || sym,
+            name,
+            displayName: name,
+            symLower: sym.toLowerCase(),
+            nameLower: name.toLowerCase(),
+            marketCap: 0,
+            isStock: true,
+            currency: '$',
+            decimals: 2,
+          };
+        });
 
       setRemoteResults(normalisedResults);
       setRemoteSearchStatus(normalisedResults.length > 0 ? 'success' : 'empty');
@@ -125,7 +138,7 @@ export default function StockSearchView({
     };
   }, [searchQuery, apiKey]);
 
-  // Filter tickers by symbol or name
+  // Filter tickers by symbol or name using precomputed lowercase fields for maximum speed
   const filteredResults = useMemo(() => {
     const trimmedQuery = debouncedQuery.trim();
     if (!trimmedQuery) {
@@ -137,9 +150,7 @@ export default function StockSearchView({
     const matches = [];
     for (let i = 0; i < ALL_TICKERS.length; i++) {
       const item = ALL_TICKERS[i];
-      const sym = item.displaySymbol ? item.displaySymbol.toLowerCase() : item.symbol.toLowerCase();
-      const name = item.displayName ? item.displayName.toLowerCase() : item.name.toLowerCase();
-      if (sym.includes(query) || name.includes(query)) {
+      if (item.symLower.includes(query) || item.nameLower.includes(query)) {
         matches.push(item);
       }
     }
@@ -149,10 +160,10 @@ export default function StockSearchView({
       if (!a.isStock && b.isStock) return -1;
       if (a.isStock && !b.isStock) return 1;
 
-      const aSym = (a.displaySymbol || a.symbol).toLowerCase();
-      const bSym = (b.displaySymbol || b.symbol).toLowerCase();
-      const aName = (a.displayName || a.name).toLowerCase();
-      const bName = (b.displayName || b.name).toLowerCase();
+      const aSym = a.symLower;
+      const bSym = b.symLower;
+      const aName = a.nameLower;
+      const bName = b.nameLower;
 
       // Exact symbol match
       if (aSym === query && bSym !== query) return -1;
@@ -187,23 +198,37 @@ export default function StockSearchView({
       }
     });
 
-    return results.slice(0, 40);    // Once again limit to max 40 after appending from finnhub
+    return results.slice(0, 40);
   }, [debouncedQuery, remoteResults]);
-
-  
-  useEffect(() => {
-    const trimmed = debouncedQuery.trim();
-    if (!trimmed) return; // Don't fire 40 concurrent SQLite queries on initial tab mount
-    const timer = setTimeout(() => {
-      logoService.preloadLogos(filteredResults);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [filteredResults, debouncedQuery]);
 
   const handleClearSearch = useCallback(() => {
     setSearchQuery('');
     Keyboard.dismiss();
   }, []);
+
+  const keyExtractor = useCallback(
+    (item) => item.displaySymbol || item.symbol,
+    []
+  );
+
+  const renderItem = useCallback(
+    ({ item }) => (
+      <SearchResultItem
+        item={item}
+        onSelectStock={onSelectStock}
+      />
+    ),
+    [onSelectStock]
+  );
+
+  const getItemLayout = useCallback(
+    (data, index) => ({
+      length: 64,
+      offset: 64 * index,
+      index,
+    }),
+    []
+  );
 
   const isSearching = searchQuery.trim().length > 0;
   const isRemoteSearchPending = isSearching && remoteSearchStatus === 'pending';
@@ -285,18 +310,13 @@ export default function StockSearchView({
       {/* Search Results List */}
       <FlatList
         data={filteredResults}
-        keyExtractor={(item) => item.displaySymbol || item.symbol}
-        renderItem={({ item }) => (
-          <SearchResultItem
-            item={{
-              ...item,
-              symbol: item.displaySymbol || item.symbol,
-              name: item.displayName || item.name,
-              logo: profiles[item.symbol]?.logo || null,
-            }}
-            onPress={() => onSelectStock && onSelectStock(item)}
-          />
-        )}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        initialNumToRender={14}
+        maxToRenderPerBatch={12}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
+        getItemLayout={getItemLayout}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -336,6 +356,8 @@ export default function StockSearchView({
     </View>
   );
 }
+
+export default memo(StockSearchView);
 
 
 const styles = StyleSheet.create({

@@ -155,8 +155,9 @@ function StockDetailModalInner({ visible, stock, onClose }) {
     () => (stock?.previousClose > 0 ? stock.previousClose : null)
   );
 
-  // Reset state when the stock symbol changes or modal is closed
+  // Reset state when the stock symbol changes or modal opens
   useEffect(() => {
+    if (!visible) return;
     latestExtendedPriceRef.current = null;
     setChartData(null);
     setMetrics(null);
@@ -169,11 +170,10 @@ function StockDetailModalInner({ visible, stock, onClose }) {
       stock?.previousClose > 0 ? stock.previousClose : null
     );
 
-    if (stock?.symbol) {
-      const sym = getDisplaySymbol(stock.symbol);
-      setSelectedTimeframe(memoryStockTimeframes[sym] || '1D');
+    if (cleanSymbol) {
+      setSelectedTimeframe(memoryStockTimeframes[cleanSymbol] || '1D');
     }
-  }, [stock?.symbol, stock?.previousClose]);
+  }, [cleanSymbol, visible]);
 
   // Fetch live REST quote whenever modal opens or symbol changes
   useEffect(() => {
