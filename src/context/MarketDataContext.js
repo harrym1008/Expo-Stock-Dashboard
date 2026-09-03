@@ -45,6 +45,8 @@ const MarketDataContext = createContext(null);
 // MarketDataProvider wraps the app and provides market data state and methods to children components
 export function MarketDataProvider({ children }) {
   const [apiKey, setApiKey] = useState('');
+  const [keyValidationStatus, setKeyValidationStatus] = useState('idle');
+  const [keyValidationError, setKeyValidationError] = useState(null);
   const [quotes, setQuotes] = useState({});
   const [profiles, setProfiles] = useState({});
   const [marketStatus, setMarketStatus] = useState(getMarketSessionStatus());
@@ -79,12 +81,26 @@ export function MarketDataProvider({ children }) {
   }, []);
 
 
-  //  Load stored API key on mount and destroy websocket on unmount
+  // Load stored API key on mount, validate it with NVDA quote, and configure WebSocket
   useEffect(() => {
-    storageService.getApiKey().then((key) => {
-      if (key) {
-        setApiKey(key);
-        finnhubWebSocketService.setApiKey(key);
+    storageService.getApiKey().then(async (key) => {
+      if (key && key.trim()) {
+        const clean = key.trim();
+        setApiKey(clean);
+        setKeyValidationStatus('validating');
+        const validation = await finnhubRestService.validateApiKey(clean);
+        if (validation.valid) {
+          setKeyValidationStatus('valid');
+          setKeyValidationError(null);
+          finnhubWebSocketService.setApiKey(clean);
+        } else {
+          setKeyValidationStatus('invalid');
+          setKeyValidationError(validation.error || 'Invalid API key');
+          finnhubWebSocketService.setApiKey('');
+        }
+      } else {
+        setKeyValidationStatus('invalid');
+        setKeyValidationError('No API key set');
       }
     });
 
@@ -93,12 +109,34 @@ export function MarketDataProvider({ children }) {
     };
   }, []);
 
-  // Update the API key when the user changes it inside the settings
+  // Update and validate API key when user changes it in settings
   const updateApiKey = useCallback(async (newKey) => {
     const cleanKey = (newKey || '').trim();
     setApiKey(cleanKey);
-    await storageService.setApiKey(cleanKey);   // Persist the new key in storage
-    finnhubWebSocketService.setApiKey(cleanKey);
+    await storageService.setApiKey(cleanKey);
+
+    if (!cleanKey) {
+      setKeyValidationStatus('invalid');
+      setKeyValidationError('API key is empty');
+      finnhubWebSocketService.setApiKey('');
+      return { valid: false, error: 'API key is empty' };
+    }
+
+    setKeyValidationStatus('validating');
+    setKeyValidationError(null);
+    const validation = await finnhubRestService.validateApiKey(cleanKey);
+
+    if (validation.valid) {
+      setKeyValidationStatus('valid');
+      setKeyValidationError(null);
+      finnhubWebSocketService.setApiKey(cleanKey);
+      return { valid: true };
+    } else {
+      setKeyValidationStatus('invalid');
+      setKeyValidationError(validation.error || 'Invalid API key');
+      finnhubWebSocketService.setApiKey('');
+      return { valid: false, error: validation.error || 'Invalid API key' };
+    }
   }, []);
 
   // Local cache of US market holidays is only fetched up to 2027
@@ -295,12 +333,14 @@ export function MarketDataProvider({ children }) {
     });
   }, []);
 
-  const hasValidKey = Boolean(apiKey && apiKey.length > 5);
+  const hasValidKey = Boolean(apiKey && keyValidationStatus === 'valid');
 
   const value = useMemo(
     () => ({
       apiKey,
       hasValidKey,
+      keyValidationStatus,
+      keyValidationError,
       updateApiKey,
       quotes,
       profiles,
@@ -320,6 +360,8 @@ export function MarketDataProvider({ children }) {
     [
       apiKey,
       hasValidKey,
+      keyValidationStatus,
+      keyValidationError,
       updateApiKey,
       quotes,
       profiles,

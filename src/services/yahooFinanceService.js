@@ -660,7 +660,7 @@ export const yahooFinanceService = {
           state: profile.state || '',
           country: profile.country || '',
           // Financial statistics fallbacks
-          peRatio: stats.trailingPE?.raw ?? stats.forwardPE?.raw ?? null,
+          peRatio: stats.trailingPE?.raw ?? null,
           forwardPE: stats.forwardPE?.raw ?? null,
           eps: stats.trailingEps?.raw ?? stats.forwardEps?.raw ?? null,
           profitMargin: fin.profitMargins?.raw ? fin.profitMargins.raw * 100 : null,

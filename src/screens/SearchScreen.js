@@ -7,7 +7,7 @@ import { useMarketData } from '../context/MarketDataContext';
 import { layoutStyles } from '../styles';
 import { formatStockQuote } from '../utils/formatters';
 
-// Search screen: search view + detail modal
+// Search screen, uses StockSearchView (shared with the SearchStockModal)
 export default function SearchScreen() {
   const {
     quotes,
@@ -57,7 +57,7 @@ export default function SearchScreen() {
       <View style={layoutStyles.flex1}>
         <StockSearchView onSelectStock={handleOpenStockDetail} />
 
-        {/* Stock Detail Slide-Up Modal */}
+        {/* Slide up modal for when a security is selected */}
         <StockDetailModal
           visible={Boolean(selectedStock)}
           stock={modalStock}

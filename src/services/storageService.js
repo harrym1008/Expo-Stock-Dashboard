@@ -21,10 +21,18 @@ export const storageService = {
       if (storedKey && storedKey.trim()) {
         return storedKey.trim();
       }
-      return process.env.EXPO_PUBLIC_FINNHUB_API_KEY || '';
+      return (
+        process.env.EXPO_PUBLIC_FINNHUB_API_KEY ||
+        process.env.FINNHUB_API_KEY ||
+        'd4e6g69r01qgp2f78k70d4e6g69r01qgp2f78k7g'
+      );
     } catch (e) {
       console.warn('Failed to load API key from storage:', e);
-      return process.env.EXPO_PUBLIC_FINNHUB_API_KEY || '';
+      return (
+        process.env.EXPO_PUBLIC_FINNHUB_API_KEY ||
+        process.env.FINNHUB_API_KEY ||
+        'd4e6g69r01qgp2f78k70d4e6g69r01qgp2f78k7g'
+      );
     }
   },
 

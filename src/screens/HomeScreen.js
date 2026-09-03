@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DraggableFlatList from 'react-native-draggable-flatlist';
+
 import ScreenContainer from '../components/common/ScreenContainer';
 import TabSelector from '../components/common/TabSelector';
 import WatchlistItem from '../components/home/WatchlistItem';
@@ -17,8 +18,11 @@ import { spacing, borderRadius } from '../constants/theme';
 import { layoutStyles, emptyStateStyles } from '../styles';
 import { formatStockQuote } from '../utils/formatters';
 
-// Home screen: editable watchlist grid, sparklines, CRUD, detail/search modals
+
+// Home screen (with watchlists sparklnes CRUD and detail modals)
 export default function HomeScreen() {
+
+  // Mass retrieve theme and market data from context
   const { theme, isDark } = useTheme();
   const {
     quotes,
@@ -31,6 +35,7 @@ export default function HomeScreen() {
     hasValidKey,
   } = useMarketData();
 
+  // Mass retrieve watchlist data and CRUD functions from context
   const {
     watchlists,
     activeWatchlistId,
@@ -57,26 +62,28 @@ export default function HomeScreen() {
   const [inputModalAction, setInputModalAction] = useState(null); // 'add' | 'rename'
   const [renameTargetId, setRenameTargetId] = useState(null);
 
-  // Tracks which symbols' sparklines have been fetched (avoid duplicate fetches)
+  // Tracks which symbols sparklines have been fetched (avoiding duplicate fetches)
   const fetchedSparklinesRef = useRef(new Set());
   const [sparklineRefreshTrigger, setSparklineRefreshTrigger] = useState(0);
 
-  // Auto-refresh sparklines every 3 minutes
+  // Auto-refresh sparklines every 2 minutes
   useEffect(() => {
-    const THREE_MINUTES_MS = 3 * 60 * 1000;
+    const TWO_MINUTES_MS = 2 * 60 * 1000;
     const timer = setInterval(() => {
       fetchedSparklinesRef.current.clear();
       setSparklineRefreshTrigger((prev) => prev + 1);
-    }, THREE_MINUTES_MS);
+    }, TWO_MINUTES_MS);
 
     return () => clearInterval(timer);
   }, []);
 
-  // Drop cached sparklines when the watchlist or market session changes
+  // Delete cached sparklines when the watchlist or market session changes
   useEffect(() => {
     fetchedSparklinesRef.current.clear();
   }, [activeWatchlistId, marketStatus.session]);
 
+
+  // Fetch sparklines, quotes, and profiles for all stocks in the active watchlist
   useEffect(() => {
     if (!activeWatchlist?.items) return;
 
@@ -121,23 +128,23 @@ export default function HomeScreen() {
     }
   }, [activeWatchlistId, marketStatus.session, sparklineRefreshTrigger, hasValidKey, fetchQuote, fetchProfile, fetchHistoricalChart, activeWatchlist?.items]);
 
-  // --- Stock detail modal ---
+  // Stock detail modal
   const handleOpenStockDetail = useCallback((item) => {
     setSelectedStock(item);
     setActiveModalSymbol(item?.symbol);
   }, [setActiveModalSymbol]);
-
   const handleCloseStockDetail = useCallback(() => {
     setSelectedStock(null);
     setActiveModalSymbol(null);
   }, [setActiveModalSymbol]);
 
-  // --- Edit Mode ---
+  // Edit Mode
   const handleToggleEditMode = useCallback(() => {
     setIsEditMode((prev) => !prev);
   }, []);
 
-  // --- Watchlist CRUD ---
+
+  //  Watchlist CRUD (create, rename, update(reorder), delete)
   const handleAddWatchlist = useCallback(() => {
     setInputModalTitle('New Watchlist');
     setInputModalInitialValue('');
@@ -193,7 +200,8 @@ export default function HomeScreen() {
     [reorderWatchlists]
   );
 
-  // --- Stock CRUD ---
+
+  // Stocks CRUD (create, delete, update(reorder)) no rename 
   const handleDeleteStock = useCallback(
     (stockId) => {
       deleteStock(activeWatchlistId, stockId);
@@ -234,8 +242,7 @@ export default function HomeScreen() {
     ]
   );
 
-  // Freeze background list items while the StockDetailModal is open to prevent
-  // WebSocket price ticks from triggering 300ms background DraggableFlatList reconciliations
+  // Freeze background list items while the StockDetailModal is open to prevent accidental drag/reorder
   const displayItemsRef = useRef([]);
   const displayItems = useMemo(() => {
     if (selectedStock && displayItemsRef.current.length > 0) {
@@ -262,7 +269,7 @@ export default function HomeScreen() {
     selectedStock,
   ]);
 
-  // Resolve quote/profile/sparkline for the selected stock
+  // Resolve quote, profile, sparkline for the selected stock
   const selectedSymbol = selectedStock?.symbol?.toUpperCase();
   const selectedQuote = selectedSymbol ? (quotes[selectedSymbol] || quotes[selectedStock?.symbol]) : null;
   const selectedProfile = selectedSymbol ? profiles[selectedSymbol] : null;
@@ -309,7 +316,6 @@ export default function HomeScreen() {
       onEditPress={handleToggleEditMode}
     >
       <View style={layoutStyles.flex1}>
-        {/* Watchlist Horizontal Drag Selector with Gradient Fades */}
         <TabSelector
           tabs={watchlists}
           activeTabId={activeWatchlistId}
@@ -322,7 +328,7 @@ export default function HomeScreen() {
           itemTypeLabel="Watchlist"
         />
 
-        {/* Stock Items List (Draggable in edit mode) */}
+
         <DraggableFlatList
           data={displayItems}
           keyExtractor={(item) => item.id || item.symbol}
@@ -362,7 +368,16 @@ export default function HomeScreen() {
           }
         />
 
-        {/* Search Stock to Add Modal */}
+        {/* Anchored footer warning when Finnhub API key is not valid */}
+        {!hasValidKey && (
+          <View style={styles.apiKeyWarningContainer}>
+            <AppText style={styles.apiKeyWarningText}>
+              The Finnhub API key is invalid or empty. Some values may be missing or inaccurate. Live prices will not be available. Please check your API key in Settings.
+            </AppText>
+          </View>
+        )}
+
+        {/* Search Stock modal, shows when the plus button is pressed */}
         <SearchStockModal
           visible={searchStockModalVisible}
           watchlistTitle={activeWatchlist?.title || ''}
@@ -370,14 +385,14 @@ export default function HomeScreen() {
           onClose={() => setSearchStockModalVisible(false)}
         />
 
-        {/* Fullscreen Stock Detail Slide-Up Modal */}
+        {/* Stock Detail modal */}
         <StockDetailModal
           visible={!!selectedStock}
           stock={formattedSelectedStock}
           onClose={handleCloseStockDetail}
         />
 
-        {/* Text Input Modal for Add / Rename */}
+        {/* Text input when adding/renaming a watchlist */}
         <TextInputModal
           visible={inputModalVisible}
           title={inputModalTitle}
@@ -391,7 +406,7 @@ export default function HomeScreen() {
   );
 }
 
-// Home screen layout: list padding, footer, add button
+
 const styles = StyleSheet.create({
   listContent: {
     flexGrow: 1,
@@ -410,5 +425,17 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm + 2,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  apiKeyWarningContainer: {
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  apiKeyWarningText: {
+    fontSize: 10.5,
+    textAlign: 'center',
+    color: '#a42729',
+    opacity: 0.75,
   },
 });

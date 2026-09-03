@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import ScreenContainer from '../components/common/ScreenContainer';
 import TabSelector from '../components/common/TabSelector';
@@ -15,6 +15,8 @@ import { spacing, borderRadius } from '../constants/theme';
 import { layoutStyles } from '../styles';
 import { formatMoney, formatStockQuote } from '../utils/formatters';
 
+
+// Portfolio screen displays user's portfolios, positions, and live metrics
 export default function PortfolioScreen() {
   const { theme, isDark } = useTheme();
   const { isPaperTradingEnabled } = useTrading();
@@ -37,7 +39,6 @@ export default function PortfolioScreen() {
     deletePortfolio,
     reorderPortfolios,
   } = usePortfolio();
-  const { isPaperTradingEnabled } = useTrading();
 
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedStock, setSelectedStock] = useState(null);
@@ -56,6 +57,8 @@ export default function PortfolioScreen() {
     setCreateModalVisible(true);
   }, []);
 
+
+  // Portfolio CRUD 
   const handleCreatePortfolioSubmit = useCallback(
     ({ title, cash }) => {
       createPortfolio({ title, cash });
@@ -122,7 +125,7 @@ export default function PortfolioScreen() {
     }
   }, [setActiveModalSymbol]);
 
-  // Fetch live quotes and profiles for active portfolio positions on mount, tab change & session transition
+  // Fetch live quotes and profiles for active portfolio positions on mount, tab change and session transition
   useEffect(() => {
     if (!activePortfolio?.positions || !fetchQuote) return;
     for (const pos of activePortfolio.positions) {
@@ -177,7 +180,7 @@ export default function PortfolioScreen() {
     });
   }, [activePortfolio, quotes, profiles, marketStatus]);
 
-  // Sum positions + cash for total value; compute return since starting cash
+  // Sum positions and cash for total value
   const portfolioMetrics = useMemo(() => {
     const cash = activePortfolio?.cash || 0;
     const startingCash = activePortfolio?.startingCash || cash || 10000;
@@ -198,7 +201,7 @@ export default function PortfolioScreen() {
     };
   }, [activePortfolio, positionsWithLiveMetrics]);
 
-  // Prefer the live-formatted position; fall back to formatting the raw selected stock
+  // Prefer the live-formatted position but fallback to raw position data
   const modalStock = useMemo(() => {
     if (!selectedStock) return null;
     const sym = selectedStock.symbol?.toUpperCase();
@@ -235,7 +238,7 @@ export default function PortfolioScreen() {
             </AppText>
 
             <AppText style={[styles.emptyDescription, { color: theme.textSecondary }]}>
-              Simulated Paper Trading is currently turned off. Activate it in settings to trade with a simulated portfolio.
+              Simulated Paper Trading is currently turned off. Activate it in Settings to trade with a simulated portfolio.
             </AppText>
           </View>
         ) : (
@@ -257,9 +260,8 @@ export default function PortfolioScreen() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.contentScroll}
             >
-              {/* 1. PORTFOLIO VALUE SECTION: Left (Total Value) & Right (Change Since Start) */}
+              {/* Porfolio value and change heading*/}
               <View style={styles.portfolioValueRow}>
-                {/* Left stats */}
                 <View style={styles.portfolioValueLeft}>
                   <AppText
                     bold
@@ -273,7 +275,6 @@ export default function PortfolioScreen() {
                   </AppText>
                 </View>
 
-                {/* Right stats (Change Since Start) */}
                 <View style={styles.portfolioValueRight}>
                   <AppText
                     bold
@@ -287,7 +288,7 @@ export default function PortfolioScreen() {
                 </View>
               </View>
 
-              {/* 2. FREE CASH SECTION */}
+              {/* Free cash */}
               <View style={styles.freeCashRow}>
                 <AppText
                   bold
@@ -300,7 +301,7 @@ export default function PortfolioScreen() {
                 </AppText>
               </View>
 
-              {/* 3. POSITIONS SECTION */}
+              {/* Stock Positions */}
               <View style={styles.positionsSection}>
                 <AppText
                   bold
@@ -367,7 +368,7 @@ export default function PortfolioScreen() {
           </View>
         )}
 
-        {/* Create Portfolio Modal with Name & Starting Cash ($100 - $1,000,000) */}
+        {/* Create portfolio modal */}
         <CreatePortfolioModal
           visible={createModalVisible}
           initialTitle={`Portfolio ${portfolios.length + 1}`}
@@ -376,7 +377,7 @@ export default function PortfolioScreen() {
           onCancel={() => setCreateModalVisible(false)}
         />
 
-        {/* Rename Portfolio Dialogue Modal */}
+        {/* Rename portfolio modal */}
         <TextInputModal
           visible={renameModalVisible}
           title="Rename Portfolio"
@@ -387,7 +388,7 @@ export default function PortfolioScreen() {
           onCancel={() => setRenameModalVisible(false)}
         />
 
-        {/* Stock Detail Slide-Up Modal */}
+        {/* Stock Detail Modal when pressing a stock position */}
         <StockDetailModal
           visible={Boolean(selectedStock)}
           stock={modalStock}
@@ -398,7 +399,7 @@ export default function PortfolioScreen() {
   );
 }
 
-// Portfolio screen layout: empty state, value rows, positions list
+
 const styles = StyleSheet.create({
   emptyContainer: {
     flex: 1,

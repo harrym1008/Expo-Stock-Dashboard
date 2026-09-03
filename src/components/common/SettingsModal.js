@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import {Modal, View, StyleSheet, TouchableOpacity, Switch, TextInput, ScrollView, Alert, BackHandler, Platform} from 'react-native';
+import {Modal, View, StyleSheet, TouchableOpacity, Switch, TextInput, ScrollView, Alert, BackHandler, Platform, ActivityIndicator} from 'react-native';
 import * as Updates from 'expo-updates';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,10 +15,11 @@ import AppText from './AppText';
 // Slideup settings modal
 export default function SettingsModal({ visible, onClose }) {
   const { theme, isDark, toggleTheme } = useTheme();
-  const { apiKey, updateApiKey } = useMarketData();
+  const { apiKey, updateApiKey, keyValidationStatus, keyValidationError } = useMarketData();
   const { isPaperTradingEnabled, setIsPaperTradingEnabled } = useTrading();
   const [inputKey, setInputKey] = useState('');
   const [isSaved, setIsSaved] = useState(false);
+  const [isValidatingKey, setIsValidatingKey] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [cacheStats, setCacheStats] = useState({ totalMB: '0.00', itemCount: 0 });
 
@@ -36,11 +37,20 @@ export default function SettingsModal({ visible, onClose }) {
     }
   }, [visible, apiKey]);
 
-  // Save the API key to persistent storage
+  // Save the API key to persistent storage with live validation feedback
   const handleSaveKey = async () => {
-    await updateApiKey(inputKey.trim());
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 2500);
+    setIsValidatingKey(true);
+    const res = await updateApiKey(inputKey.trim());
+    setIsValidatingKey(false);
+    if (res?.valid) {
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2500);
+    } else {
+      Alert.alert(
+        'Finnhub Validation Failed',
+        res?.error || 'The Finnhub API key could not be verified. Please check your token and try again.'
+      );
+    }
   };
 
   // Clear the persistent cache and restart the app
@@ -195,14 +205,45 @@ export default function SettingsModal({ visible, onClose }) {
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.saveBtn, { backgroundColor: isSaved ? '#00D084' : theme.primary }]}
+                  style={[
+                    styles.saveBtn,
+                    {
+                      backgroundColor: isSaved ? '#00D084' : theme.primary,
+                      opacity: isValidatingKey ? 0.7 : 1,
+                    },
+                  ]}
                   onPress={handleSaveKey}
+                  disabled={isValidatingKey}
                   activeOpacity={0.8}
                 >
                   <AppText bold style={styles.saveBtnText}>
-                    {isSaved ? 'API Key Saved' : 'Save Key'}
+                    {isValidatingKey ? 'Validating Key...' : isSaved ? 'API Key Saved' : 'Save Key'}
                   </AppText>
                 </TouchableOpacity>
+
+                {/* Key validation status reporting */}
+                {keyValidationStatus === 'validating' || isValidatingKey ? (
+                  <View style={styles.keyStatusRow}>
+                    <ActivityIndicator size="small" color={theme.textSecondary} style={{ marginRight: 6 }} />
+                    <AppText style={[styles.keyStatusText, { color: theme.textSecondary }]}>
+                      Validating Finnhub API key...
+                    </AppText>
+                  </View>
+                ) : keyValidationStatus === 'valid' ? (
+                  <View style={styles.keyStatusRow}>
+                    <Ionicons name="checkmark-circle" size={14} color="#00D084" style={{ marginRight: 5 }} />
+                    <AppText bold style={[styles.keyStatusText, { color: '#00D084' }]}>
+                      Finnhub API key is valid and active
+                    </AppText>
+                  </View>
+                ) : keyValidationStatus === 'invalid' ? (
+                  <View style={styles.keyStatusRow}>
+                    <Ionicons name="close-circle" size={14} color="#FF4D4F" style={{ marginRight: 5 }} />
+                    <AppText bold style={[styles.keyStatusText, { color: '#FF4D4F' }]}>
+                      {keyValidationError || 'Finnhub API key is invalid or unauthorized'}
+                    </AppText>
+                  </View>
+                ) : null}
               </View>
 
 
@@ -336,6 +377,17 @@ const styles = StyleSheet.create({
   },
   clearCacheText: {
     fontSize: 13,
+  },
+  keyStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  keyStatusText: {
+    fontSize: 12,
+    textAlign: 'center',
   },
 });
 

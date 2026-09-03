@@ -1,10 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  StyleSheet,
-  FlatList,
-  ActivityIndicator,
-} from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenContainer from '../components/common/ScreenContainer';
 import AppText from '../components/common/AppText';
@@ -14,7 +9,7 @@ import { useMarketData } from '../context/MarketDataContext';
 import { spacing } from '../constants/theme';
 import { layoutStyles, emptyStateStyles, newsStyles } from '../styles';
 
-// News screen: loads general market news into a scrollable list
+// News screen displays recent market news in a simple scrollable list
 export default function NewsScreen() {
   const { theme, isDark } = useTheme();
   const { fetchMarketNews, apiKey, hasValidKey } = useMarketData();
@@ -22,7 +17,7 @@ export default function NewsScreen() {
   const [news, setNews] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch market news; guard against empty/erroneous responses
+  // Fetch market news from finnhub
   const loadNews = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -60,18 +55,7 @@ export default function NewsScreen() {
             persistentScrollbar={true}
             ListEmptyComponent={
               <View style={[emptyStateStyles.container, styles.emptyState]}>
-                <View
-                  style={[
-                    emptyStateStyles.iconContainer,
-                    { backgroundColor: theme.surfaceSubtle },
-                  ]}
-                >
-                  <Ionicons
-                    name="newspaper-outline"
-                    size={32}
-                    color={theme.textMuted}
-                  />
-                </View>
+
                 <AppText bold style={emptyStateStyles.title}>
                   {!hasValidKey ? 'API Key Required' : 'No Market News Available'}
                 </AppText>
@@ -91,7 +75,6 @@ export default function NewsScreen() {
   );
 }
 
-// News screen layout: list padding, loading, empty states
 const styles = StyleSheet.create({
   listPadding: {
     paddingBottom: spacing.xxl,

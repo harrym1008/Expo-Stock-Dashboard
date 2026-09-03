@@ -6,6 +6,36 @@ import { persistentLruCache } from './persistentLruCache';
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
 export const finnhubRestService = {
+  // Validate an API key via a single lightweight quote call for NVDA
+  async validateApiKey(apiKey) {
+    if (!apiKey || typeof apiKey !== 'string' || !apiKey.trim()) {
+      return { valid: false, error: 'API key is required' };
+    }
+    const cleanKey = apiKey.trim();
+    try {
+      console.log('[Finnhub REST] 🔑 Validating Finnhub API key via NVDA quote call...');
+      const res = await fetch(
+        `${FINNHUB_BASE_URL}/quote?symbol=NVDA&token=${encodeURIComponent(cleanKey)}`
+      );
+
+      if (res.status === 200) {
+        const data = await res.json();
+        if (typeof data?.c === 'number') {
+          return { valid: true };
+        }
+      }
+
+      if (res.status === 401 || res.status === 403) {
+        return { valid: false, error: 'Invalid or unauthorized Finnhub API key (HTTP ' + res.status + ')' };
+      }
+
+      return { valid: false, error: `Finnhub returned HTTP ${res.status}` };
+    } catch (err) {
+      console.log('[Finnhub REST] Failed to validate API key:', err.message || err);
+      return { valid: false, error: err.message || 'Network error during validation' };
+    }
+  },
+
   // Fetch one company profile (cache → Finnhub REST → logo override → cache)
   async fetchCompanyProfile(symbol, apiKey) {
     if (!symbol || !apiKey) return null;

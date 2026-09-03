@@ -421,9 +421,15 @@ function StockDetailModal({ visible, stock, onClose }) {
     ? formatMoney(prevCloseVal, curSymbol, decimals, cleanSymbol)
     : '-';
 
-  const marketCapVal = metrics?.marketCapitalization ?? profileData?.marketCap ?? stock?.marketCap;
+  const rawFinnhubCap = metrics?.marketCapitalization ?? profileData?.marketCap;
+  let marketCapVal = null;
+  if (rawFinnhubCap > 0) {
+    marketCapVal = rawFinnhubCap * 1e6;
+  } else if (stock?.marketCap > 0) {
+    marketCapVal = stock.marketCap > 1e8 ? stock.marketCap : stock.marketCap * 1e6;
+  }
   const marketCapStr = marketCapVal > 0
-    ? formatLargeNum(marketCapVal * 1e6, curSymbol)
+    ? formatLargeNum(marketCapVal, curSymbol)
     : '-';
 
   const volumeVal = chartData?.regularMarketVolume ?? stock?.volume;
@@ -434,7 +440,7 @@ function StockDetailModal({ visible, stock, onClose }) {
   const rawAvgVol = metrics?.['3MonthAverageTradingVolume'] ?? metrics?.avgVolume3M;
   const numAvgVol = Number(rawAvgVol);
   const avgVol3MStr = numAvgVol > 0
-    ? `${numAvgVol.toFixed(2)}M`
+    ? `${(numAvgVol > 1e6 ? numAvgVol / 1e6 : numAvgVol).toFixed(2)}M`
     : '-';
 
   const peTTM = metrics?.peTTM ?? companyDesc?.peRatio;
@@ -454,11 +460,14 @@ function StockDetailModal({ visible, stock, onClose }) {
   const beta = metrics?.beta ?? companyDesc?.beta;
   const betaStr = typeof beta === 'number' ? beta.toFixed(2) : '-';
 
-  const rawDivYield = metrics?.currentDividendYieldTTM;
+  const rawDivYield =
+    metrics?.currentDividendYieldTTM ??
+    metrics?.dividendYieldIndicatedAnnual ??
+    (typeof companyDesc?.dividendYield === 'number' ? companyDesc.dividendYield * 100 : null);
   const numDivYield = rawDivYield != null ? Number(rawDivYield) : null;
   const divYieldStr = numDivYield != null && !isNaN(numDivYield)
     ? `${numDivYield.toFixed(2)}%`
-    : (metrics ? '0.00%' : '-');
+    : (metrics || companyDesc ? '0.00%' : '-');
 
   // Define the grid for the stats section
   const statRows = [
