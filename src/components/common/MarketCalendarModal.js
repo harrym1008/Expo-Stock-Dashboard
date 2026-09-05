@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import {Modal, View, StyleSheet, TouchableOpacity, ScrollView} from 'react-native';
+import {Modal, View, StyleSheet, TouchableOpacity, ScrollView, Animated} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -7,6 +7,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import { getNextUpcomingHolidays } from '../../utils/marketHolidays';
 import { modalStyles } from '../../styles';
+import useSwipeDownToClose from '../../hooks/useSwipeDownToClose';
 import AppText from './AppText';
 
 // Standard US market session
@@ -20,6 +21,7 @@ const STANDARD_SESSIONS = [
 export default function MarketCalendarModal({ visible, onClose }) {
   const { theme, isDark } = useTheme();
   const { marketStatus } = useMarketData();
+  const { panHandlers, animatedStyle } = useSwipeDownToClose({ visible, onClose });
 
   const [nyTimeStr, setNyTimeStr] = useState('');
   const [nyDateStr, setNyDateStr] = useState('');
@@ -30,24 +32,23 @@ export default function MarketCalendarModal({ visible, onClose }) {
     // Update clock every second while modal is visible
     const updateClock = () => {
       const now = new Date();
-      const timeFmt = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/New_York',
-        hour: 'numeric',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true,
-      });
-
-      const dateFmt = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/New_York',
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-
-      setNyTimeStr(timeFmt.format(now));
-      setNyDateStr(dateFmt.format(now));
+      setNyTimeStr(
+        now.toLocaleTimeString('en-US', {
+          timeZone: 'America/New_York',
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      );
+      setNyDateStr(
+        now.toLocaleDateString('en-US', {
+          timeZone: 'America/New_York',
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        })
+      );
     };
 
     updateClock();
@@ -55,13 +56,9 @@ export default function MarketCalendarModal({ visible, onClose }) {
     return () => clearInterval(interval);
   }, [visible]);
 
-  // Next 8 holidays (only when visible)
-  const upcomingHolidays = useMemo(() => {
-    if (!visible) return [];
-    return getNextUpcomingHolidays(8);
-  }, [visible]);
+  // Retrieve upcoming market holidays (NYSE / NASDAQ)
+  const upcomingHolidays = useMemo(() => getNextUpcomingHolidays(8), []);
 
-  // Theme-aware card colors
   const cardBg = isDark ? '#161920' : '#FFFFFF';
   const cardBorder = isDark ? 'rgba(255, 255, 255, 0.08)' : theme.border;
 
@@ -72,7 +69,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={modalStyles.modalOverlay}>
+      <Animated.View style={[modalStyles.modalOverlay, animatedStyle]}>
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
@@ -94,6 +91,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
                 modalStyles.header,
                 { borderBottomColor: theme.borderSubtle },
               ]}
+              {...panHandlers}
             >
               <View>
                 <AppText bold style={styles.title}>
@@ -272,7 +270,7 @@ export default function MarketCalendarModal({ visible, onClose }) {
             </ScrollView>
           </SafeAreaView>
         </View>
-      </View>
+      </Animated.View>
     </Modal>
   );
 }

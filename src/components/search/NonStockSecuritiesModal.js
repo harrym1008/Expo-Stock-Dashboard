@@ -1,9 +1,10 @@
-import {Modal, View, StyleSheet, TouchableOpacity, SectionList} from 'react-native';
+import {Modal, View, StyleSheet, TouchableOpacity, SectionList, Animated} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { spacing } from '../../constants/theme';
 import { modalStyles } from '../../styles';
+import useSwipeDownToClose from '../../hooks/useSwipeDownToClose';
 import AppText from '../common/AppText';
 import SearchResultItem from './SearchResultItem';
 import { getGroupedNonStockSecurities } from '../../utils/securityUtils';
@@ -18,6 +19,7 @@ export default function NonStockSecuritiesModal({
   onClose,
 }) {
   const { theme } = useTheme();
+  const { panHandlers, animatedStyle } = useSwipeDownToClose({ visible, onClose });
 
   if (!visible) return null;
 
@@ -34,7 +36,7 @@ export default function NonStockSecuritiesModal({
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={modalStyles.modalOverlay}>
+      <Animated.View style={[modalStyles.modalOverlay, animatedStyle]}>
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
@@ -58,6 +60,7 @@ export default function NonStockSecuritiesModal({
                 modalStyles.header,
                 { borderBottomColor: theme.borderSubtle },
               ]}
+              {...panHandlers}
             >
               <View style={styles.headerLeft}>
                 <AppText bold style={styles.headerTitle}>
@@ -119,7 +122,7 @@ export default function NonStockSecuritiesModal({
             />
           </SafeAreaView>
         </View>
-      </View>
+      </Animated.View>
     </Modal>
   );
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {FadeInLeft, FadeOutLeft, LinearTransition} from 'react-native-reanimated';
 import { useTheme } from '../../context/ThemeContext';
@@ -15,12 +15,14 @@ import { getCurrency, getDecimals } from '../../utils/securityUtils';
 function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
   const { theme } = useTheme();
 
+  const isLoading = Boolean(item?.isLoading);
+
   // Green/red based on up/down percent
   const isPositive = (item?.changePercent ?? 0) >= 0;
   const trendColor = isPositive ? '#00D084' : '#FF4D4F';
 
   const handlePress = () => {
-    if (onPress) {
+    if (onPress && !isLoading) {
       onPress(item);
     }
   };
@@ -32,13 +34,14 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
   const decimals = getDecimals(item?.symbol, item?.price, item?.decimals);
 
   return (
-    <Animated.View layout={isEditMode ? LinearTransition.duration(200) : undefined}>
+    <Animated.View layout={LinearTransition.duration(200)}>
       <TouchableOpacity
         style={stockItemStyles.itemContainer}
         onPress={handlePress}
         activeOpacity={0.7}
         accessibilityRole="button"
-        disabled={isEditMode}
+        accessibilityLabel={isLoading ? `${displaySymbol}, loading price` : undefined}
+        disabled={isEditMode || isLoading}
       >
         {/* Drag Handle (edit mode only) */}
         {isEditMode && (
@@ -60,7 +63,7 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
 
         {/* Left: Logo & Company Info */}
         <Animated.View
-          layout={isEditMode ? LinearTransition.duration(200) : undefined}
+          layout={LinearTransition.duration(200)}
           style={styles.leftSection}
         >
           <CompanyLogo
@@ -84,27 +87,39 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
 
         {/* Smooth the sparkline in the home screen */}
         <View style={styles.chartSection}>
-          <Sparkline
-            data={item?.sparkline}
-            color={trendColor}
-            strokeWidth={2}
-            smoothing={4}
-          />
+          {!isLoading && item?.sparkline && item.sparkline.length > 1 ? (
+            <Sparkline
+              data={item.sparkline}
+              color={trendColor}
+              strokeWidth={2}
+              smoothing={4}
+            />
+          ) : null}
         </View>
 
         {/* Right: Price & Percent Change */}
         <View style={styles.rightSection}>
-          <AppText style={stockItemStyles.priceText}>
-            {curSymbol}
-            {(item?.price ?? 0).toLocaleString('en-US', {
-              minimumFractionDigits: decimals,
-              maximumFractionDigits: decimals,
-            })}
-          </AppText>
-          <AppText style={[stockItemStyles.changeText, { color: trendColor }]}>
-            {isPositive ? '+' : '-'}
-            {Math.abs(item?.changePercent ?? 0).toFixed(2)}%
-          </AppText>
+          {isLoading ? (
+            <ActivityIndicator
+              size="small"
+              color={theme.textSecondary}
+              style={styles.loadingIndicator}
+            />
+          ) : (
+            <>
+              <AppText style={stockItemStyles.priceText}>
+                {curSymbol}
+                {(item?.price ?? 0).toLocaleString('en-US', {
+                  minimumFractionDigits: decimals,
+                  maximumFractionDigits: decimals,
+                })}
+              </AppText>
+              <AppText style={[stockItemStyles.changeText, { color: trendColor }]}>
+                {isPositive ? '+' : '-'}
+                {Math.abs(item?.changePercent ?? 0).toFixed(2)}%
+              </AppText>
+            </>
+          )}
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -123,6 +138,7 @@ function areEqual(prevProps, nextProps) {
   if (!prevItem || !nextItem) return false;
 
   return (
+    prevItem.isLoading === nextItem.isLoading &&
     prevItem.symbol === nextItem.symbol &&
     prevItem.displaySymbol === nextItem.displaySymbol &&
     prevItem.price === nextItem.price &&
@@ -168,5 +184,8 @@ const styles = StyleSheet.create({
     flex: 1.6,
     alignItems: 'flex-end',
     justifyContent: 'center',
+  },
+  loadingIndicator: {
+    marginRight: spacing.xs,
   },
 });

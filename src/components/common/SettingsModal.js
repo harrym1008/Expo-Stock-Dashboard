@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Modal, View, StyleSheet, TouchableOpacity, Switch, TextInput, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { Modal, View, StyleSheet, TouchableOpacity, Switch, TextInput, ScrollView, Alert, ActivityIndicator, Animated } from 'react-native';
 import * as Updates from 'expo-updates';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { storageService } from '../../services/storageService';
 import { finnhubWebSocketService } from '../../services/finnhubWebSocketService';
 import { spacing, borderRadius } from '../../constants/theme';
 import { modalStyles } from '../../styles';
+import useSwipeDownToClose from '../../hooks/useSwipeDownToClose';
 import AppText from './AppText';
 
 // Slideup settings modal
@@ -17,6 +18,7 @@ export default function SettingsModal({ visible, onClose }) {
   const { theme, isDark, toggleTheme } = useTheme();
   const { apiKey, updateApiKey, keyValidationStatus, keyValidationError } = useMarketData();
   const { isPaperTradingEnabled, setIsPaperTradingEnabled } = useTrading();
+  const { panHandlers, animatedStyle } = useSwipeDownToClose({ visible, onClose });
   const [inputKey, setInputKey] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [isValidatingKey, setIsValidatingKey] = useState(false);
@@ -86,7 +88,7 @@ export default function SettingsModal({ visible, onClose }) {
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={modalStyles.modalOverlayLight}>
+      <Animated.View style={[modalStyles.modalOverlayLight, animatedStyle]}>
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
@@ -108,6 +110,7 @@ export default function SettingsModal({ visible, onClose }) {
                 modalStyles.header,
                 { borderBottomColor: theme.borderSubtle },
               ]}
+              {...panHandlers}
             >
               <AppText bold style={styles.title}>Settings</AppText>
 
@@ -278,7 +281,7 @@ export default function SettingsModal({ visible, onClose }) {
             </ScrollView>
           </SafeAreaView>
         </View>
-      </View>
+      </Animated.View>
     </Modal>
   );
 }

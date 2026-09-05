@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Modal, View, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { Modal, View, StyleSheet, TouchableOpacity, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
@@ -9,6 +9,7 @@ import { yahooFinanceService } from '../../services/yahooFinanceService';
 import { spacing, borderRadius } from '../../constants/theme';
 import { modalStyles, layoutStyles } from '../../styles';
 import { formatMoney, formatShares } from '../../utils/formatters';
+import useSwipeDownToClose from '../../hooks/useSwipeDownToClose';
 import AppText from '../common/AppText';
 
 // Confirms a paper order and shows an 'order receipt' summary of the executed trade
@@ -34,6 +35,8 @@ export default function OrderExecutedModal({
       onClose();
     }
   };
+
+  const { panHandlers, animatedStyle } = useSwipeDownToClose({ visible, onClose: handleDismiss });
 
   // When the modal becomes visible, execute the order and fetch the most recent price
   useEffect(() => {
@@ -122,7 +125,7 @@ export default function OrderExecutedModal({
       transparent={true}
       onRequestClose={handleDismiss}
     >
-      <View style={modalStyles.modalOverlayLight}>
+      <Animated.View style={[modalStyles.modalOverlayLight, animatedStyle]}>
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
@@ -146,6 +149,7 @@ export default function OrderExecutedModal({
                 modalStyles.header,
                 { borderBottomColor: theme.borderSubtle },
               ]}
+              {...panHandlers}
             >
               <AppText bold style={styles.headerTitle}>
                 Order Complete
@@ -250,7 +254,7 @@ export default function OrderExecutedModal({
             )}
           </SafeAreaView>
         </View>
-      </View>
+      </Animated.View>
     </Modal>
   );
 }

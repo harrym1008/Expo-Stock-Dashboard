@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Modal, View, StyleSheet, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { Modal, View, StyleSheet, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import useSwipeDownToClose from '../../hooks/useSwipeDownToClose';
 
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
@@ -24,6 +25,7 @@ function StockOrderModalInner({
   const { theme, isDark } = useTheme();
   const { quotes, fetchHistoricalChart } = useMarketData();
   const { portfolios, activePortfolioId, getPosition } = usePortfolio();
+  const { panHandlers, animatedStyle } = useSwipeDownToClose({ visible: visible && !executedModalVisible, onClose });
 
   const scrollViewRef = useRef(null);
 
@@ -216,7 +218,7 @@ function StockOrderModalInner({
         transparent={true}
         onRequestClose={onClose}
       >
-        <View style={modalStyles.modalOverlayLight}>
+        <Animated.View style={[modalStyles.modalOverlayLight, animatedStyle]}>
           <TouchableOpacity
             style={modalStyles.topBackdropGap}
             activeOpacity={1}
@@ -238,6 +240,7 @@ function StockOrderModalInner({
                   modalStyles.header,
                   { borderBottomColor: theme.borderSubtle },
                 ]}
+                {...panHandlers}
               >
                 <AppText bold style={styles.modalTitle}>
                   Execute Paper Order
@@ -486,7 +489,7 @@ function StockOrderModalInner({
               </KeyboardAvoidingView>
             </SafeAreaView>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Portfolio selection dialogue box */}
         {portfolioPickerVisible && (

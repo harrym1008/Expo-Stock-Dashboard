@@ -1,9 +1,10 @@
-import { Modal, View, StyleSheet, TouchableOpacity } from 'react-native';
+import { Modal, View, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { spacing } from '../../constants/theme';
 import { modalStyles } from '../../styles';
+import useSwipeDownToClose from '../../hooks/useSwipeDownToClose';
 import AppText from '../common/AppText';
 import StockSearchView from '../search/StockSearchView';
 
@@ -15,6 +16,7 @@ export default function SearchStockModal({
   onClose,
 }) {
   const { theme } = useTheme();
+  const { panHandlers, animatedStyle } = useSwipeDownToClose({ visible, onClose });
 
   return (
     <Modal
@@ -23,7 +25,7 @@ export default function SearchStockModal({
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={modalStyles.modalOverlay}>
+      <Animated.View style={[modalStyles.modalOverlay, animatedStyle]}>
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
@@ -47,6 +49,7 @@ export default function SearchStockModal({
                 modalStyles.header,
                 { borderBottomColor: theme.borderSubtle },
               ]}
+              {...panHandlers}
             >
               <View style={styles.headerLeft}>
                 <AppText bold style={styles.headerTitle}>
@@ -75,7 +78,7 @@ export default function SearchStockModal({
             />
           </SafeAreaView>
         </View>
-      </View>
+      </Animated.View>
     </Modal>
   );
 }

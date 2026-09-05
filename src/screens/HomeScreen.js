@@ -17,6 +17,7 @@ import { useWatchlist } from '../context/WatchlistContext';
 import { spacing, borderRadius } from '../constants/theme';
 import { layoutStyles, emptyStateStyles } from '../styles';
 import { formatStockQuote } from '../utils/formatters';
+import { getDisplaySymbol } from '../utils/securityUtils';
 
 
 // Home screen (with watchlists sparklnes CRUD and detail modals)
@@ -52,6 +53,7 @@ export default function HomeScreen() {
 
   const [selectedStock, setSelectedStock] = useState(null);
   const [sparklines1D, setSparklines1D] = useState({});
+  const [settledQuotes, setSettledQuotes] = useState({});
   const [isEditMode, setIsEditMode] = useState(false);
   const [searchStockModalVisible, setSearchStockModalVisible] = useState(false);
 
@@ -82,6 +84,21 @@ export default function HomeScreen() {
     fetchedSparklinesRef.current.clear();
   }, [activeWatchlistId, marketStatus.session]);
 
+  // Safety timeout: stop showing loading spinners after 8s even if network hangs
+  useEffect(() => {
+    if (!activeWatchlist?.items || activeWatchlist.items.length === 0) return;
+    const timer = setTimeout(() => {
+      setSettledQuotes((prev) => {
+        const next = { ...prev };
+        for (const item of activeWatchlist.items) {
+          const sym = item.symbol?.toUpperCase();
+          if (sym) next[sym] = true;
+        }
+        return next;
+      });
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [activeWatchlistId, activeWatchlist?.items]);
 
   // Fetch sparklines, quotes, and profiles for all stocks in the active watchlist
   useEffect(() => {
@@ -119,7 +136,11 @@ export default function HomeScreen() {
       }
 
       // Fetch live quote via Yahoo Finance
-      fetchQuote(sym);
+      fetchQuote(sym)
+        .catch(() => {})
+        .finally(() => {
+          setSettledQuotes((prev) => (prev[sym] ? prev : { ...prev, [sym]: true }));
+        });
 
       // Fetch Finnhub profile if API key is active
       if (hasValidKey) {
@@ -223,7 +244,11 @@ export default function HomeScreen() {
         addStockToWatchlist(activeWatchlistId, stockItem);
         const sym = (stockItem.displaySymbol || stockItem.symbol)?.toUpperCase();
         if (sym) {
-          fetchQuote(sym);
+          fetchQuote(sym)
+            .catch(() => {})
+            .finally(() => {
+              setSettledQuotes((prev) => ({ ...prev, [sym]: true }));
+            });
           if (hasValidKey) {
             fetchProfile(sym);
           }
@@ -252,13 +277,45 @@ export default function HomeScreen() {
     const currentQuotes = watchedQuotes || {};
     const items = (activeWatchlist?.items || []).map((item) => {
       const sym = item.symbol?.toUpperCase();
-      return formatStockQuote(
-        item,
-        currentQuotes[sym],
-        profiles[sym],
-        sparklines1D[sym],
+      const displaySym = (item.displaySymbol || item.symbol)?.toUpperCase();
+      const cleanSym = getDisplaySymbol(item.symbol || item.displaySymbol || '').toUpperCase();
+
+      const liveQuote =
+        currentQuotes[sym] ||
+        currentQuotes[item.symbol] ||
+        (cleanSym ? currentQuotes[cleanSym] : null) ||
+        (displaySym ? currentQuotes[displaySym] : null);
+
+      const y1D =
+        sparklines1D[sym] ||
+        (cleanSym ? sparklines1D[cleanSym] : null) ||
+        (displaySym ? sparklines1D[displaySym] : null);
+
+      const hasUpdated = Boolean(liveQuote || y1D);
+      const isSettled = Boolean(
+        settledQuotes[sym] ||
+        (cleanSym && settledQuotes[cleanSym]) ||
+        (displaySym && settledQuotes[displaySym])
+      );
+      const isLoading = !hasUpdated && !isSettled;
+
+      // Ensure out-of-date cached sparkline from storage is not displayed
+      const rawItem = (!y1D?.sparkline && !liveQuote?.sparkline)
+        ? { ...item, sparkline: [] }
+        : item;
+
+      const formatted = formatStockQuote(
+        rawItem,
+        liveQuote,
+        profiles[sym] || (cleanSym ? profiles[cleanSym] : null) || (displaySym ? profiles[displaySym] : null),
+        y1D,
         marketStatus
       );
+
+      return {
+        ...formatted,
+        isLoading,
+      };
     });
     displayItemsRef.current = items;
     return items;
@@ -267,6 +324,7 @@ export default function HomeScreen() {
     watchedQuotes,
     profiles,
     sparklines1D,
+    settledQuotes,
     marketStatus,
     selectedStock,
   ]);

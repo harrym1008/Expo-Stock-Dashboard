@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { Modal, View, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Linking } from 'react-native';
+import { Modal, View, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Linking, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import useSwipeDownToClose from '../../hooks/useSwipeDownToClose';
 
 import { useTheme } from '../../context/ThemeContext';
 import { useMarketData } from '../../context/MarketDataContext';
@@ -88,6 +89,7 @@ const LastUpdatedFreshness = React.memo(function LastUpdatedFreshness({ timestam
 // Full stock detail sheet: header, chart, timeframe, stats, about, news, paper trade
 function StockDetailModalInner({ visible, stock, onClose }) {
   const { theme, isDark } = useTheme();
+  const { panHandlers, animatedStyle } = useSwipeDownToClose({ visible, onClose });
   const {
     quotes,
     fetchQuote,
@@ -562,7 +564,7 @@ function StockDetailModalInner({ visible, stock, onClose }) {
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={modalStyles.modalOverlayLight}>
+      <Animated.View style={[modalStyles.modalOverlayLight, animatedStyle]}>
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
@@ -579,70 +581,71 @@ function StockDetailModalInner({ visible, stock, onClose }) {
             style={[modalStyles.safeArea, { backgroundColor: theme.background }]}
             edges={['bottom', 'left', 'right']}
           >
+            {/* 1. Header (Outside ScrollView so drag gestures are not intercepted) */}
+            <View style={styles.header} {...panHandlers}>
+              <View style={styles.headerLeft}>
+                <CompanyLogo
+                  symbol={cleanSymbol}
+                  size={46}
+                  logoUri={stock.logo || profileData?.logo}
+                  style={styles.logo}
+                />
+
+                <View style={styles.titleInfo}>
+                  <View style={styles.symbolRow}>
+                    <AppText bold style={styles.symbolText}>
+                      {cleanSymbol}
+                    </AppText>
+                    {exchange && (
+                      <AppText
+                        numberOfLines={1}
+                        style={[styles.exchangeText, { color: theme.textSecondary }]}
+                      >
+                        {' '} - {exchange}
+                      </AppText>
+                    )}
+                  </View>
+                  <AppText
+                    numberOfLines={1}
+                    style={[styles.companyText, { color: theme.textSecondary }]}
+                  >
+                    {companyName}
+                  </AppText>
+                </View>
+              </View>
+
+              <View style={styles.headerActions}>
+                <TouchableOpacity
+                  onPress={() => setWatchlistModalVisible(true)}
+                  style={styles.actionBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={isFavorite ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons
+                    name={isFavorite ? 'star' : 'star-outline'}
+                    size={24}
+                    color={isFavorite ? '#FFD700' : theme.textPrimary}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={onClose}
+                  style={modalStyles.closeBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close Detail Modal"
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="close" size={24} color={theme.textPrimary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
             <ScrollView
               showsVerticalScrollIndicator={false}
               style={layoutStyles.flex1}
               contentContainerStyle={styles.scrollContent}
             >
-              {/* 1. Header */}
-              <View style={styles.header}>
-                <View style={styles.headerLeft}>
-                  <CompanyLogo
-                    symbol={cleanSymbol}
-                    size={46}
-                    logoUri={stock.logo || profileData?.logo}
-                    style={styles.logo}
-                  />
-
-                  <View style={styles.titleInfo}>
-                    <View style={styles.symbolRow}>
-                      <AppText bold style={styles.symbolText}>
-                        {cleanSymbol}
-                      </AppText>
-                      {exchange && (
-                        <AppText
-                          numberOfLines={1}
-                          style={[styles.exchangeText, { color: theme.textSecondary }]}
-                        >
-                          {' '} - {exchange}
-                        </AppText>
-                      )}
-                    </View>
-                    <AppText
-                      numberOfLines={1}
-                      style={[styles.companyText, { color: theme.textSecondary }]}
-                    >
-                      {companyName}
-                    </AppText>
-                  </View>
-                </View>
-
-                <View style={styles.headerActions}>
-                  <TouchableOpacity
-                    onPress={() => setWatchlistModalVisible(true)}
-                    style={styles.actionBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel={isFavorite ? 'Remove from Watchlist' : 'Add to Watchlist'}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Ionicons
-                      name={isFavorite ? 'star' : 'star-outline'}
-                      size={24}
-                      color={isFavorite ? '#FFD700' : theme.textPrimary}
-                    />
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={onClose}
-                    style={modalStyles.closeBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel="Close Detail Modal"
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Ionicons name="close" size={24} color={theme.textPrimary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
 
               {/* 2 & 3. Interactive Price Header & Chart Area (Isolated Scrub Rendering) */}
               <StockDetailChartSection
@@ -979,7 +982,7 @@ function StockDetailModalInner({ visible, stock, onClose }) {
             />
           )}
         </View>
-      </View>
+      </Animated.View>
     </Modal>
   );
 }
@@ -987,14 +990,16 @@ function StockDetailModalInner({ visible, stock, onClose }) {
 const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    paddingTop: spacing.xs,
     paddingBottom: spacing.xxl,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
   headerLeft: {
     flexDirection: 'row',

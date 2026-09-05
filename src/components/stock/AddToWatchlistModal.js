@@ -1,16 +1,18 @@
-import { Modal, View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { Modal, View, StyleSheet, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';
 import { useWatchlist } from '../../context/WatchlistContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import { modalStyles } from '../../styles';
+import useSwipeDownToClose from '../../hooks/useSwipeDownToClose';
 import AppText from '../common/AppText';
 import CompanyLogo from '../common/CompanyLogo';
 
 // Modal to toggle a stock's presence inside each watchlist
 export default function AddToWatchlistModal({ visible, stock, onClose }) {
   const { theme, isDark } = useTheme();
+  const { panHandlers, animatedStyle } = useSwipeDownToClose({ visible, onClose });
   const {
     watchlists,
     isStockInWatchlist,
@@ -33,7 +35,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
       transparent={true}
       onRequestClose={onClose}
     >
-      <View style={modalStyles.modalOverlay}>
+      <Animated.View style={[modalStyles.modalOverlay, animatedStyle]}>
         <TouchableOpacity
           style={modalStyles.topBackdropGap}
           activeOpacity={1}
@@ -57,6 +59,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
                 modalStyles.header,
                 { borderBottomColor: theme.borderSubtle },
               ]}
+              {...panHandlers}
             >
               <View style={styles.headerLeft}>
                 <CompanyLogo
@@ -197,7 +200,7 @@ export default function AddToWatchlistModal({ visible, stock, onClose }) {
             </ScrollView>
           </SafeAreaView>
         </View>
-      </View>
+      </Animated.View>
     </Modal>
   );
 }
