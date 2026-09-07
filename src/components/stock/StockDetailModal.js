@@ -447,7 +447,7 @@ function StockDetailModalInner({ visible, stock, onClose }) {
   const rawAvgVol = metrics?.['3MonthAverageTradingVolume'] ?? metrics?.avgVolume3M;
   const numAvgVol = Number(rawAvgVol);
   const avgVol3MStr = numAvgVol > 0
-    ? `${(numAvgVol > 1e6 ? numAvgVol / 1e6 : numAvgVol).toFixed(2)}M`
+    ? `${(numAvgVol > 1e6 ? numAvgVol / 1e6 : numAvgVol).toFixed(2)}mn`
     : '-';
 
   const peTTM = metrics?.peTTM ?? companyDesc?.peRatio;
