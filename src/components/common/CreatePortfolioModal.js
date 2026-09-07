@@ -169,13 +169,9 @@ export default function CreatePortfolioModal({
           </View>
 
           {/* Error / Range Hint Message */}
-          {errorMessage ? (
+          {errorMessage && (
             <AppText style={styles.errorText}>
               {errorMessage}
-            </AppText>
-          ) : (
-            <AppText style={[styles.hintText, { color: theme.textMuted }]}>
-              Default is $10,000
             </AppText>
           )}
 

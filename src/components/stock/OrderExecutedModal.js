@@ -55,9 +55,22 @@ export default function OrderExecutedModal({
           const fillPrice =
             typeof liveRecentPrice === 'number' && liveRecentPrice > 0
               ? liveRecentPrice
-              : (orderParams.fallbackPrice || 100.0);
+              : (orderParams.fallbackPrice || -1.0);
 
-          if (typeof fillPrice === 'number' && fillPrice > 0 && injectLivePrice) {
+          if (fillPrice <= 0) {
+            setErrorMessage('Failed to retrieve price for the order');
+            setIsLoading(false);
+            return;
+          }
+
+          const newOrderShareCount = orderParams.orderCost / fillPrice;
+          if (newOrderShareCount < 0.0001) {
+            setErrorMessage('Order cost is too small to purchase any shares');
+            setIsLoading(false);
+            return;
+          }
+
+          if (fillPrice > 0 && injectLivePrice) {
             injectLivePrice(sym, fillPrice);  // Also update the market context with this price
           }
 
@@ -172,8 +185,7 @@ export default function OrderExecutedModal({
               </View>
             ) : errorMessage ? (
               <View style={[layoutStyles.flex1, layoutStyles.center, styles.errorContainer]}>
-                <Ionicons name="alert-circle-outline" size={48} color="#FF4D4F" />
-                <AppText bold style={styles.errorTitle}>
+                <AppText bold style={[styles.errorTitle, {color:"#FF4D4F"}]}>
                   Order Failed
                 </AppText>
                 <AppText style={[styles.errorMessage, { color: theme.textSecondary }]}>

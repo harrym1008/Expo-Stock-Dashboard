@@ -194,6 +194,7 @@ function StockOrderModalInner({
       mode,
       shares: Number(orderShares.toFixed(4)),
       fallbackPrice: currentPrice,
+      orderCost: Number(orderCost.toFixed(2)),
     });
     setExecutedModalVisible(true);
   };
