@@ -354,6 +354,7 @@ export default function HomeScreen() {
         <SwipeableStockItem
           itemId={item.id}
           onDelete={handleDeleteStock}
+          isEditMode={isEditMode}
         >
           <WatchlistItem
             item={item}

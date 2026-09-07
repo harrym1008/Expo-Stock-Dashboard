@@ -33,16 +33,21 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
   const curSymbol = item?.currency ?? getCurrency(item?.symbol, '$');
   const decimals = getDecimals(item?.symbol, item?.price, item?.decimals);
 
+  const Container = isEditMode ? View : TouchableOpacity;
+  const containerProps = isEditMode
+    ? { style: stockItemStyles.itemContainer }
+    : {
+        style: stockItemStyles.itemContainer,
+        onPress: handlePress,
+        activeOpacity: 0.3,
+        accessibilityRole: 'button',
+        accessibilityLabel: isLoading ? `${displaySymbol}, loading price` : undefined,
+        disabled: isLoading,
+      };
+
   return (
     <Animated.View layout={LinearTransition.duration(200)}>
-      <TouchableOpacity
-        style={stockItemStyles.itemContainer}
-        onPress={handlePress}
-        activeOpacity={0.7}
-        accessibilityRole="button"
-        accessibilityLabel={isLoading ? `${displaySymbol}, loading price` : undefined}
-        disabled={isEditMode || isLoading}
-      >
+      <Container {...containerProps}>
         {/* Drag Handle (edit mode only) */}
         {isEditMode && (
           <Animated.View
@@ -121,7 +126,7 @@ function WatchlistItem({ item, onPress, isEditMode = false, drag }) {
             </>
           )}
         </View>
-      </TouchableOpacity>
+      </Container>
     </Animated.View>
   );
 }

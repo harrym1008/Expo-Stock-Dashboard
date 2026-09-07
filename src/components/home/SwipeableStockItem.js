@@ -36,8 +36,8 @@ function RightActionButton({ progress, onDelete }) {
   );
 }
 
-// Swipe-to-delete wrapper... left swipe reveals the delete action pane behind the watchlist item
-function SwipeableStockItem({ children, onDelete, itemId }) {
+// Swipe-to-delete wrapper... left swipe reveals the delete action pane behind the watchlist item (only in edit mode)
+function SwipeableStockItem({ children, onDelete, itemId, isEditMode = false }) {
 
   const handleDelete = () => {
     if (onDelete) {
@@ -55,12 +55,17 @@ function SwipeableStockItem({ children, onDelete, itemId }) {
     );
   };
 
+  if (!isEditMode) {
+    return children;
+  }
+
   return (
     <ReanimatedSwipeable
       key={itemId}
       renderRightActions={renderRightActions}
       overshootRight={false}
       rightThreshold={40}
+      enabled={isEditMode}
     >
       {children}
     </ReanimatedSwipeable>

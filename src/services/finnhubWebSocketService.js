@@ -303,8 +303,12 @@ class FinnhubWebSocketManager {
 
   // Fisher-Yates shuffle then slice to get a random subset
   getRandomSubset(array, size) {
-    const shuffled = [...array].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, size);
+    const arr = [...array];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr.slice(0, size);
   }
 
   // Send a sub/unsub message over the live socket

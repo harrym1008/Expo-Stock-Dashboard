@@ -73,8 +73,12 @@ export default function SettingsModal({ visible, onClose }) {
             finnhubWebSocketService.destroy();
             // 2. Wipe the single 50MB persistent LRU cache file
             await storageService.clearCache();
-            // 3. Reload the app
-            await Updates.reloadAsync(); 
+            // 3. Reload the app if possible
+            if (Updates.reloadAsync) {
+              await Updates.reloadAsync().catch(() => {});
+            } else {
+              Alert.alert('Cache Cleared', 'Please restart the application to complete resetting.');
+            }
           },
         },
       ]

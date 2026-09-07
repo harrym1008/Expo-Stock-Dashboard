@@ -48,3 +48,7 @@ AGENTS.md
 CLAUDE.md
 
 *.xcf
+*.py
+*.map.md
+/coverage
+Final_project_submission_guidance.pdf

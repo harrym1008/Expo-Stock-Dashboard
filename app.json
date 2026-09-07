@@ -12,7 +12,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#07090C",
-        "foregroundImage": "./assets/logos/Logo640x640.png"
+        "foregroundImage": "./assets/logos/Logo640x640Transparent.png"
       },
       "package": "com.hpmm1.ExpoStockDashboard"
     },

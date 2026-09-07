@@ -63,14 +63,16 @@ export default function OrderExecutedModal({
             return;
           }
 
-          const newOrderShareCount = orderParams.orderCost / fillPrice;
-          if (newOrderShareCount < 0.0001) {
+          const isCashOrder = Boolean(orderParams.isCashOrder);
+          const roundedShares = isCashOrder
+            ? Math.floor((orderParams.orderCost / fillPrice + Number.EPSILON) * 10000) / 10000
+            : orderParams.shares;
+
+          if (roundedShares < 0.0001) {
             setErrorMessage('Order cost is too small to purchase any shares');
             setIsLoading(false);
             return;
           }
-          // Round new order share count to next lowest 10,000th
-          const roundedShares = Math.floor((newOrderShareCount + Number.EPSILON) * 10000) / 10000;
 
           if (fillPrice > 0 && injectLivePrice) {
             injectLivePrice(sym, fillPrice);  // Also update the market context with this price
