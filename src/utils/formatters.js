@@ -3,6 +3,13 @@ import { getSecurityBySymbol, getDecimals } from './securityUtils';
 
 // Currency string builder
 function applyCurrency(num, cur, dec, locale) {
+  if (num < 0) {
+    // Minus sign comes before the currency symbol
+    return `-${cur}${Math.abs(num).toLocaleString(locale, {
+      minimumFractionDigits: dec,
+      maximumFractionDigits: dec,
+    })}`;
+  }
   return `${cur}${num.toLocaleString(locale, {
     minimumFractionDigits: dec,
     maximumFractionDigits: dec,
