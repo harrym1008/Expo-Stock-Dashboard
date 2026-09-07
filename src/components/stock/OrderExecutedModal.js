@@ -69,6 +69,8 @@ export default function OrderExecutedModal({
             setIsLoading(false);
             return;
           }
+          // Round new order share count to next lowest 10,000th
+          const roundedShares = Math.floor((newOrderShareCount + Number.EPSILON) * 10000) / 10000;
 
           if (fillPrice > 0 && injectLivePrice) {
             injectLivePrice(sym, fillPrice);  // Also update the market context with this price
@@ -80,7 +82,7 @@ export default function OrderExecutedModal({
             symbol: sym,
             name: orderParams.name || sym,
             mode: orderParams.mode || 'BUY',
-            shares: orderParams.shares,
+            shares: roundedShares,
             price: fillPrice,
           });
 
