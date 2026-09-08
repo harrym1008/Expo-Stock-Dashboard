@@ -21,6 +21,7 @@ import CompanyLogo from '../common/CompanyLogo';
 import AddToWatchlistModal from './AddToWatchlistModal';
 import StockOrderModal from './StockOrderModal';
 import NewsCard from '../common/NewsCard';
+import { getBoundaryAlignedTtl } from '../../services/yahoo/yahooChartService';
 
 // Timeframe options and in-memory cache of the user's last selected timeframe for each stock (persisted to storage)
 const TIMEFRAMES = ['1H', '1D', '1W', '3M', '1Y', '5Y', 'ALL'];
@@ -210,12 +211,21 @@ function StockDetailModalInner({ visible, stock, onClose }) {
     }
   }, [isNonStock]);
 
-  // Fetches the historical chart data for symbol or timeframe or market session changes, update the chart and record extended hours price
+  // Fetches the historical chart data for symbol or timeframe, and schedules background download after boundary-aligned TTL
   useEffect(() => {
     let isMounted = true;
-    if (visible && stock?.symbol) {
+    let refreshTimer = null;
+
+    const loadChart = (isBackground = false) => {
+      if (!visible || !stock?.symbol) {
+        setIsInitialStockLoading(false);
+        setIsTimeframeLoading(false);
+        return;
+      }
       const sym = getDisplaySymbol(stock.symbol);
-      setIsTimeframeLoading(true);
+      if (!isBackground) {
+        setIsTimeframeLoading(true);
+      }
       fetchHistoricalChart(sym, selectedTimeframe)
         .then((data) => {
           if (isMounted) {
@@ -228,6 +238,13 @@ function StockDetailModalInner({ visible, stock, onClose }) {
               if (extCandidate > 0 && Math.abs(extCandidate - (data.regularMarketPrice || 0)) > 0.000001) {
                 latestExtendedPriceRef.current = extCandidate;
               }
+              // Schedule next download after the boundary aligned TTL
+              const ttl = getBoundaryAlignedTtl(selectedTimeframe);
+              if (ttl > 0) {
+                refreshTimer = setTimeout(() => {
+                  if (isMounted) loadChart(true);
+                }, ttl);
+              }
             }
             setIsInitialStockLoading(false);
             setIsTimeframeLoading(false);
@@ -239,12 +256,13 @@ function StockDetailModalInner({ visible, stock, onClose }) {
             setIsTimeframeLoading(false);
           }
         });
-    } else {
-      setIsInitialStockLoading(false);
-      setIsTimeframeLoading(false);
-    }
+    };
+
+    loadChart(false);
+
     return () => {
       isMounted = false;
+      if (refreshTimer) clearTimeout(refreshTimer);
     };
   }, [visible, stock?.symbol, selectedTimeframe, marketStatus.session, marketStatus?.isPreMarket, fetchHistoricalChart]);
 

@@ -7,6 +7,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { spacing, borderRadius } from '../../constants/theme';
 import { layoutStyles } from '../../styles';
 import { getDecimals, getCurrency, isNonStockSecurity } from '../../utils/securityUtils';
+import { BOUNDARY_INTERVALS } from '../../services/yahoo/yahooChartService';
 
 // Nice timeframe suffixes to append to the end of the price change text
 const TIMEFRAME_SUFFIXES = {
@@ -188,9 +189,12 @@ function StockDetailChartSection({
     // otherwise compare from the first value in the chart data or sparkline
 
   const displayedMainPrice = scrubData?.current?.price ?? leftPrice;
-  const periodChange = chartData?.priceChange ?? stock?.change ?? (leftPrice - baseComparison);
+  const hasValidBase = typeof baseComparison === 'number' && baseComparison > 0;
+  const periodChange = (hasValidBase && typeof leftPrice === 'number' && leftPrice > 0)
+    ? (leftPrice - baseComparison)
+    : (chartData?.priceChange ?? stock?.change ?? 0);
   const periodChangePercent =
-    baseComparison !== 0
+    hasValidBase
       ? (periodChange / baseComparison) * 100
       : (chartData?.priceChangePercent ?? stock?.changePercent ?? 0);
 
@@ -283,30 +287,72 @@ function StockDetailChartSection({
 
   const chartActiveEndPrice = isMarketOpen ? chartLeftPrice : chartOutOfHoursPriceVal;
 
-  const chartPeriodChange = chartData?.priceChange ?? stock?.change ?? (chartLeftPrice - baseComparison);
+  const chartPeriodChange = (hasValidBase && typeof chartLeftPrice === 'number' && chartLeftPrice > 0)
+    ? (chartLeftPrice - baseComparison)
+    : (chartData?.priceChange ?? stock?.change ?? 0);
   const isChartPeriodPositive = (chartPeriodChange ?? 0) >= 0;
   const chartTimeframeTrendColor = isChartPeriodPositive ? '#00D084' : '#FF4D4F';
 
   const rawSparkline = chartData?.sparkline || stock?.sparkline;
   const sparklineData = useMemo(() => {
-    const base = rawSparkline || [];
-    return chartActiveEndPrice > 0 && base.length > 0
-      ? [...base.slice(0, -1), chartActiveEndPrice]
-      : base;
-  }, [rawSparkline, chartActiveEndPrice]);
+    // Shift the sparkline to the left and append the live price at the end, if available
+    const base = rawSparkline ? [...rawSparkline] : [];
+    if (base.length === 0 || typeof chartActiveEndPrice !== 'number') return base;
 
-  // Chart points with the live/extended price overlaying the last point
+    const intervalMs = BOUNDARY_INTERVALS[activeDisplayedTimeframe] || 60 * 1000;
+    const downloadTime = chartData?.lastUpdated || Date.now();
+    const nextBoundary = Math.ceil((downloadTime + 1) / intervalMs) * intervalMs;
+    const now = Date.now();
+
+    if (now >= nextBoundary) {
+      const intervalsPassed = Math.floor((now - nextBoundary) / intervalMs) + 1;
+      for (let i = 0; i < Math.min(intervalsPassed, 60); i++) {
+        base.push(chartActiveEndPrice);
+      }
+      if (activeDisplayedTimeframe === '1H') {
+        return base.slice(-60);
+      }
+      return base;
+    }
+
+    return [...base.slice(0, -1), chartActiveEndPrice];
+  }, [rawSparkline, chartActiveEndPrice, chartData?.lastUpdated, activeDisplayedTimeframe]);
+
+  // Chart points with the live/extended price overlaying the last point, shifting left on new boundary intervals
   const chartPointsWithLiveOverlay = useMemo(() => {
-    return chartData?.points && chartData.points.length > 0 && typeof chartActiveEndPrice === 'number'
-      ? [
-          ...chartData.points.slice(0, -1),
-          {
-            ...chartData.points[chartData.points.length - 1],
-            price: chartActiveEndPrice,
-          },
-        ]
-      : chartData?.points || [];
-  }, [chartData?.points, chartActiveEndPrice]);
+    if (!chartData?.points || chartData.points.length === 0 || typeof chartActiveEndPrice !== 'number') {
+      return chartData?.points || [];
+    }
+
+    const pts = [...chartData.points];
+    const lastPt = pts[pts.length - 1];
+    const intervalMs = BOUNDARY_INTERVALS[activeDisplayedTimeframe] || 60 * 1000;
+    const lastPtTime = lastPt?.time || chartData?.lastUpdated || Date.now();
+    const nextBoundary = Math.ceil((lastPtTime + 1) / intervalMs) * intervalMs;
+    const now = Date.now();
+
+    if (now >= nextBoundary) {
+      const intervalsPassed = Math.floor((now - nextBoundary) / intervalMs) + 1;
+      for (let i = 0; i < Math.min(intervalsPassed, 60); i++) {
+        pts.push({
+          time: nextBoundary + i * intervalMs,
+          price: chartActiveEndPrice,
+        });
+      }
+      if (activeDisplayedTimeframe === '1H') {
+        return pts.slice(-60);
+      }
+      return pts;
+    }
+
+    return [
+      ...pts.slice(0, -1),
+      {
+        ...lastPt,
+        price: chartActiveEndPrice,
+      },
+    ];
+  }, [chartData?.points, chartData?.lastUpdated, chartActiveEndPrice, activeDisplayedTimeframe]);
 
   // Fade the chart in/out during timeframe switching
   const animatedChartStyle = useAnimatedStyle(() => {
