@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Modal, View, StyleSheet, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, Animated } from 'react-native';
+import { Modal, View, StyleSheet, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, Animated, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import useSwipeDownToClose from '../../hooks/useSwipeDownToClose';
@@ -41,6 +41,31 @@ function StockOrderModalInner({
   const [executedModalVisible, setExecutedModalVisible] = useState(false);
   const [pendingOrderParams, setPendingOrderParams] = useState(null);
   const [validationError, setValidationError] = useState('');
+  const [keyboardPadding, setKeyboardPadding] = useState(0);
+
+  // Track keyboard height on Android to prevent input from being covered
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        if (Platform.OS === 'android') {
+          setKeyboardPadding(e.endCoordinates.height);
+        }
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        if (Platform.OS === 'android') {
+          setKeyboardPadding(0);
+        }
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Make sure the selected portfolio in the portfolio tab is the default when the modal opens (user can change)
   useEffect(() => {
@@ -219,6 +244,7 @@ function StockOrderModalInner({
         animationType="slide"
         transparent={true}
         onRequestClose={onClose}
+        statusBarTranslucent={true}
       >
         <Animated.View style={[modalStyles.modalOverlayLight, animatedStyle]}>
           <TouchableOpacity
@@ -267,7 +293,10 @@ function StockOrderModalInner({
                   ref={scrollViewRef}
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
-                  contentContainerStyle={styles.scrollContainer}
+                  contentContainerStyle={[
+                    styles.scrollContainer,
+                    keyboardPadding > 0 && { paddingBottom: keyboardPadding + spacing.lg },
+                  ]}
                 >
                   {/* Portfolio selector */}
                   <View style={styles.portfolioSection}>
@@ -404,6 +433,11 @@ function StockOrderModalInner({
                           returnKeyType="done"
                           value={quantityInput}
                           onChangeText={handleInputChange}
+                          onFocus={() => {
+                            setTimeout(() => {
+                              scrollViewRef.current?.scrollToEnd({ animated: true });
+                            }, 150);
+                          }}
                         />
                         <AppText bold style={styles.unitText}>
                           {isInputUsdMode ? 'USD' : 'shares'}

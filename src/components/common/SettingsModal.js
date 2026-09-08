@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Modal, View, StyleSheet, TouchableOpacity, Switch, TextInput, ScrollView, Alert, ActivityIndicator, Animated } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { Modal, View, StyleSheet, TouchableOpacity, Switch, TextInput, ScrollView, Alert, ActivityIndicator, Animated, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import * as Updates from 'expo-updates';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,7 @@ import { useTrading } from '../../context/TradingContext';
 import { storageService } from '../../services/storageService';
 import { finnhubWebSocketService } from '../../services/finnhubWebSocketService';
 import { spacing, borderRadius } from '../../constants/theme';
-import { modalStyles } from '../../styles';
+import { modalStyles, layoutStyles } from '../../styles';
 import useSwipeDownToClose from '../../hooks/useSwipeDownToClose';
 import AppText from './AppText';
 
@@ -24,6 +24,32 @@ export default function SettingsModal({ visible, onClose }) {
   const [isValidatingKey, setIsValidatingKey] = useState(false);
   const [showKey, setShowKey] = useState(false);
   const [cacheStats, setCacheStats] = useState({ totalMB: '0.00', itemCount: 0 });
+  const [keyboardPadding, setKeyboardPadding] = useState(0);
+  const scrollViewRef = useRef(null);
+
+  // Track keyboard height on Android to prevent input from being covered
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        if (Platform.OS === 'android') {
+          setKeyboardPadding(e.endCoordinates.height);
+        }
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        if (Platform.OS === 'android') {
+          setKeyboardPadding(0);
+        }
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Pull current cache usage stats from the storage service
   const loadStats = () => {
@@ -91,6 +117,7 @@ export default function SettingsModal({ visible, onClose }) {
       animationType="slide"
       transparent={true}
       onRequestClose={onClose}
+      statusBarTranslucent={true}
     >
       <Animated.View style={[modalStyles.modalOverlayLight, animatedStyle]}>
         <TouchableOpacity
@@ -129,7 +156,19 @@ export default function SettingsModal({ visible, onClose }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={modalStyles.content}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              style={layoutStyles.flex1}
+            >
+              <ScrollView
+                ref={scrollViewRef}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={[
+                  modalStyles.content,
+                  keyboardPadding > 0 && { paddingBottom: keyboardPadding + spacing.lg },
+                ]}
+              >
 
               <AppText bold style={[modalStyles.sectionLabel, { color: theme.textSecondary }]}>
                 APPEARANCE
@@ -197,6 +236,11 @@ export default function SettingsModal({ visible, onClose }) {
                     secureTextEntry={!showKey}
                     autoCapitalize="none"
                     autoCorrect={false}
+                    onFocus={() => {
+                      setTimeout(() => {
+                        scrollViewRef.current?.scrollToEnd({ animated: true });
+                      }, 150);
+                    }}
                   />
                   <TouchableOpacity
                     style={styles.eyeBtn}
@@ -283,6 +327,7 @@ export default function SettingsModal({ visible, onClose }) {
                 </TouchableOpacity>
               </View>
             </ScrollView>
+          </KeyboardAvoidingView>
           </SafeAreaView>
         </View>
       </Animated.View>
