@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { Modal, View, StyleSheet, TouchableOpacity, Switch, TextInput, ScrollView, Alert, ActivityIndicator, Animated, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
-import * as Updates from 'expo-updates';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../context/ThemeContext';

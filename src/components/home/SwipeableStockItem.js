@@ -1,7 +1,6 @@
 import React from 'react';
-import { StyleSheet, TouchableOpacity } from 'react-native';
-import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import Animated, {useAnimatedStyle} from 'react-native-reanimated';
+import { StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { spacing } from '../../constants/theme';
 
@@ -9,15 +8,15 @@ import { spacing } from '../../constants/theme';
 // Right-edge delete button: fades/scales with swipe progress
 function RightActionButton({ progress, onDelete }) {
   // Fade in and scale the icon as the swipe opens
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      opacity: progress.value,
-      transform: [
-        {
-          scale: Math.min(1, Math.max(0.6, progress.value)),
-        },
-      ],
-    };
+  const opacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const scale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.6, 1],
+    extrapolate: 'clamp',
   });
 
   return (
@@ -29,7 +28,7 @@ function RightActionButton({ progress, onDelete }) {
       accessibilityRole="button"
       accessibilityLabel="Delete stock"
     >
-      <Animated.View style={[styles.iconWrapper, animatedStyle]}>
+      <Animated.View style={[styles.iconWrapper, { opacity, transform: [{ scale }] }]}>
         <Ionicons name="trash-outline" size={22} color="#FFFFFF" />
       </Animated.View>
     </TouchableOpacity>
@@ -60,7 +59,7 @@ function SwipeableStockItem({ children, onDelete, itemId, isEditMode = false }) 
   }
 
   return (
-    <ReanimatedSwipeable
+    <Swipeable
       key={itemId}
       renderRightActions={renderRightActions}
       overshootRight={false}
@@ -68,7 +67,7 @@ function SwipeableStockItem({ children, onDelete, itemId, isEditMode = false }) 
       enabled={isEditMode}
     >
       {children}
-    </ReanimatedSwipeable>
+    </Swipeable>
   );
 }
 
