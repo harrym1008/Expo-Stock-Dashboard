@@ -248,11 +248,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     height: '100%',
   },
-  hintText: {
-    fontSize: 12,
-    marginTop: spacing.xs,
-    marginBottom: spacing.lg,
-  },
   errorText: {
     fontSize: 12,
     color: '#FF4D4F',
